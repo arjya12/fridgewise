@@ -225,6 +225,7 @@ export default function SignUpScreen() {
                   agreedToTerms && styles.checkboxChecked,
                 ]}
                 onPress={() => setAgreedToTerms(!agreedToTerms)}
+                testID="terms-checkbox"
               >
                 {agreedToTerms && (
                   <Ionicons name="checkmark" size={12} color="#16A34A" />
@@ -247,6 +248,7 @@ export default function SignUpScreen() {
               style={[styles.button, loading && styles.buttonDisabled]}
               onPress={handleSignUp}
               disabled={loading}
+              testID="signup-button"
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
