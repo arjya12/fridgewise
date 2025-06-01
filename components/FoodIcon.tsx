@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, View, ViewStyle } from "react-native";
-import { SvgXml } from "react-native-svg";
+
 
 // Function to get background color based on food name
 const getFoodIconBackground = (itemName: string): string => {
@@ -219,10 +219,9 @@ export default function FoodIcon({
 
   const iconSvg = getSvgForFood(foodName);
   const backgroundColor = getFoodIconBackground(foodName);
-
   return (
-    <View style={[styles.container, { backgroundColor }, style]}>
-      <SvgXml xml={iconSvg} width={size} height={size} />
+    <View style={[styles.container, { backgroundColor }]}>
+      {iconSvg}
     </View>
   );
 }

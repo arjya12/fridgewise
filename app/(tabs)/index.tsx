@@ -1,6 +1,4 @@
 // app/(tabs)/index.tsx
-import AppHeader from "@/components/AppHeader";
-import EditItemModal from "@/components/EditItemModal";
 import ItemGroupCard from "@/components/ItemGroupCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -13,7 +11,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Dimensions,
-  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -22,7 +19,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -388,8 +385,7 @@ export default function InventoryScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Header */}
-      <AppHeader />
+      
 
       {/* Main content */}
       <ScrollView
@@ -425,11 +421,7 @@ export default function InventoryScreen() {
 
         {/* Urgent alert card */}
         <View style={[styles.card, styles.urgentCard]}>
-          <Image
-            source={require("./../../assets/images/figma/warning_icon.png")}
-            style={styles.cardIcon}
-            resizeMode="contain"
-          />
+          <MaterialIcons name="warning" size={22} color="#FF3B30" style={styles.cardIcon} />
           <View style={styles.cardContent}>
             <EnhancedText style={styles.urgentCardTitle}>
               Urgent: Items Expiring Soon
@@ -442,11 +434,7 @@ export default function InventoryScreen() {
 
         {/* Low stock alert card */}
         <View style={[styles.card, styles.lowStockCard]}>
-          <Image
-            source={require("./../../assets/images/figma/inventory_icon.png")}
-            style={styles.cardIcon}
-            resizeMode="contain"
-          />
+          <MaterialIcons name="inventory" size={22} color="#FF9500" style={styles.cardIcon} />
           <View style={styles.cardContent}>
             <EnhancedText style={styles.lowStockCardTitle}>
               Low Stock Alert
@@ -459,11 +447,7 @@ export default function InventoryScreen() {
 
         {/* Tip card */}
         <View style={[styles.card, styles.tipCard]}>
-          <Image
-            source={require("./../../assets/images/figma/bulb_icon.png")}
-            style={styles.tipCardIcon}
-            resizeMode="contain"
-          />
+          <MaterialIcons name="emoji-objects" size={22} color="#FFCC00" style={styles.tipCardIcon} />
           <EnhancedText style={styles.tipText}>
             Store bananas separately to prevent other fruits from ripening too
             quickly
@@ -478,12 +462,12 @@ export default function InventoryScreen() {
             color="#666666"
             style={styles.expiringIconTop}
           />
-          <NumberText style={styles.expiringCount}>
+          <Text style={styles.expiringCount}>
             {expiringItems.length}
-          </NumberText>
-          <EnhancedText style={styles.expiringTitle}>
+          </Text>
+          <Text style={styles.expiringTitle}>
             Expiring Soon
-          </EnhancedText>
+          </Text>
           <View style={styles.dotContainer}>
             <View style={styles.dot} />
             <View style={[styles.dot, styles.activeDot]} />
@@ -616,26 +600,6 @@ export default function InventoryScreen() {
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
-      {/* Edit Item Modal */}
-      {currentEditItem && (
-        <EditItemModal
-          visible={editModalVisible}
-          onClose={() => setEditModalVisible(false)}
-          itemData={{
-            name: currentEditItem.name,
-            quantity: currentEditItem.quantity,
-            daysUntilExpiry: currentEditItem.daysUntilExpiry,
-            location: currentEditItem.location,
-          }}
-          onUpdate={handleUpdateItem}
-          onDelete={() => {
-            setEditModalVisible(false);
-            if (currentEditItem) {
-              handleDeleteEntry(currentEditItem.id);
-            }
-          }}
-        />
-      )}
     </View>
   );
 }
