@@ -86,13 +86,11 @@ export default function SignUpScreen() {
       >
         {/* Circular Icon */}
         <View style={styles.iconContainer}>
-          <View style={styles.iconInner}>
-            <Ionicons name="leaf" size={28} color="#FFFFFF" />
-          </View>
+          <Ionicons name="nutrition" size={28} color="#FFFFFF" />
         </View>
 
         {/* Title */}
-        <Text style={styles.title}>Shelf & Fridge Tracker</Text>
+        <Text style={styles.title}>FridgeWise</Text>
         <Text style={styles.subtitle}>
           Start your journey to zero food waste
         </Text>
@@ -228,7 +226,7 @@ export default function SignUpScreen() {
                 testID="terms-checkbox"
               >
                 {agreedToTerms && (
-                  <Ionicons name="checkmark" size={12} color="#16A34A" />
+                  <Ionicons name="checkmark" size={12} color="#22C55E" />
                 )}
               </TouchableOpacity>
               <View style={styles.termsTextContainer}>
@@ -287,14 +285,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#16A34A",
+    backgroundColor: "#22C55E",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
-  },
-  iconInner: {
-    justifyContent: "center",
-    alignItems: "center",
   },
   title: {
     fontSize: 24,
@@ -305,7 +299,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: "#16A34A",
+    color: "#22C55E",
     marginBottom: 20,
     textAlign: "center",
   },
@@ -391,7 +385,7 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: {
     backgroundColor: "#F0FDF4",
-    borderColor: "#16A34A",
+    borderColor: "#22C55E",
   },
   termsTextContainer: {
     flex: 1,
@@ -405,11 +399,11 @@ const styles = StyleSheet.create({
   },
   termsLink: {
     fontSize: 14,
-    color: "#16A34A",
+    color: "#22C55E",
     lineHeight: 22,
   },
   button: {
-    backgroundColor: "#16A34A",
+    backgroundColor: "#22C55E",
     borderRadius: 8,
     height: 48,
     justifyContent: "center",
@@ -433,6 +427,6 @@ const styles = StyleSheet.create({
   },
   signInText: {
     fontSize: 14,
-    color: "#16A34A",
+    color: "#22C55E",
   },
 });
