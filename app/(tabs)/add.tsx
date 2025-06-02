@@ -1,4 +1,5 @@
 // app/(tabs)/add.tsx
+import FoodIcon from "@/components/FoodIcon";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
@@ -159,20 +160,30 @@ export default function AddItemScreen() {
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <ThemedText style={styles.label}>Item Name *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor:
-                      colorScheme === "dark" ? "#2A2A2A" : "#F5F5F5",
-                    color: colorScheme === "dark" ? "#FFF" : "#000",
-                  },
-                ]}
-                placeholder="e.g., Milk, Apples, Chicken"
-                placeholderTextColor={colorScheme === "dark" ? "#999" : "#666"}
-                value={name}
-                onChangeText={setName}
-              />
+              <View style={styles.inputWithPreview}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor:
+                        colorScheme === "dark" ? "#2A2A2A" : "#F5F5F5",
+                      color: colorScheme === "dark" ? "#FFF" : "#000",
+                    },
+                    styles.inputWithIcon,
+                  ]}
+                  placeholder="e.g., Milk, Apples, Chicken"
+                  placeholderTextColor={
+                    colorScheme === "dark" ? "#999" : "#666"
+                  }
+                  value={name}
+                  onChangeText={setName}
+                />
+                {name.trim() !== "" && (
+                  <View style={styles.foodIconPreview}>
+                    <FoodIcon foodName={name} size={20} />
+                  </View>
+                )}
+              </View>
             </View>
 
             <View style={styles.row}>
@@ -535,5 +546,20 @@ const styles = StyleSheet.create({
   loadingContainer: {
     justifyContent: "center",
     alignItems: "center",
+  },
+  inputWithPreview: {
+    position: "relative",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  inputWithIcon: {
+    flex: 1,
+    paddingRight: 50, // Make room for the icon
+  },
+  foodIconPreview: {
+    position: "absolute",
+    right: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -1,8 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import SafeText from "./SafeText";
+
+// Utility function to ensure text props are properly handled
+const ensureTextSafety = (text: string | number | undefined): string => {
+  if (text === undefined || text === null) {
+    return "";
+  }
+  return String(text);
+};
 
 /**
  * Custom tab bar component that matches the Figma design
@@ -76,14 +85,17 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({
           }
         };
 
+        // Create the accessibility label safely
+        const accessibilityLabel = `${ensureTextSafety(label)}, tab`;
+
         return (
           <TouchableOpacity
             key={route.key}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityState={isFocused ? { selected: true } : {}}
-            accessibilityLabel={`${label}, tab`}
-            testID={`${label}-tab`}
+            accessibilityLabel={accessibilityLabel}
+            testID={`${ensureTextSafety(label)}-tab`}
             onPress={onPress}
             style={[
               styles.tabButton,
@@ -91,14 +103,14 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({
             ]}
           >
             {renderIcon(route.name, isFocused)}
-            <Text
+            <SafeText
               style={[
                 styles.tabLabel,
                 isFocused ? styles.activeTabLabel : styles.inactiveTabLabel,
               ]}
             >
-              {label}
-            </Text>
+              {ensureTextSafety(label)}
+            </SafeText>
           </TouchableOpacity>
         );
       })}

@@ -12,6 +12,14 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
+// Utility function to ensure text props are properly handled
+const ensureTextSafety = (text: string | number | undefined): string => {
+  if (text === undefined || text === null) {
+    return "";
+  }
+  return String(text);
+};
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({

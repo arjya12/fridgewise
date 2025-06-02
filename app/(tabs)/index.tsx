@@ -19,11 +19,19 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width, height } = Dimensions.get("window");
+
+// Utility function to ensure text props are properly handled
+const ensureTextSafety = (text: string | number | undefined): string => {
+  if (text === undefined || text === null) {
+    return "";
+  }
+  return String(text);
+};
 
 // Use React Native's Text component with enhanced styling to fix rendering issues
 const EnhancedText = ({
@@ -309,7 +317,7 @@ export default function InventoryScreen() {
       const expiryDate = item.expiry_date
         ? new Date(item.expiry_date)
         : new Date();
-    const today = new Date();
+      const today = new Date();
       const diffTime = expiryDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -385,8 +393,6 @@ export default function InventoryScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      
-
       {/* Main content */}
       <ScrollView
         style={styles.scrollView}
@@ -421,7 +427,12 @@ export default function InventoryScreen() {
 
         {/* Urgent alert card */}
         <View style={[styles.card, styles.urgentCard]}>
-          <MaterialIcons name="warning" size={22} color="#FF3B30" style={styles.cardIcon} />
+          <MaterialIcons
+            name="warning"
+            size={22}
+            color="#FF3B30"
+            style={styles.cardIcon}
+          />
           <View style={styles.cardContent}>
             <EnhancedText style={styles.urgentCardTitle}>
               Urgent: Items Expiring Soon
@@ -429,12 +440,17 @@ export default function InventoryScreen() {
             <EnhancedText style={styles.urgentCardSubtitle}>
               {expiringItems.length} items need immediate attention
             </EnhancedText>
+          </View>
         </View>
-      </View>
-      
+
         {/* Low stock alert card */}
         <View style={[styles.card, styles.lowStockCard]}>
-          <MaterialIcons name="inventory" size={22} color="#FF9500" style={styles.cardIcon} />
+          <MaterialIcons
+            name="inventory"
+            size={22}
+            color="#FF9500"
+            style={styles.cardIcon}
+          />
           <View style={styles.cardContent}>
             <EnhancedText style={styles.lowStockCardTitle}>
               Low Stock Alert
@@ -443,16 +459,21 @@ export default function InventoryScreen() {
               {lowStockGroups} groups running low
             </EnhancedText>
           </View>
-      </View>
+        </View>
 
         {/* Tip card */}
         <View style={[styles.card, styles.tipCard]}>
-          <MaterialIcons name="emoji-objects" size={22} color="#FFCC00" style={styles.tipCardIcon} />
+          <MaterialIcons
+            name="emoji-objects"
+            size={22}
+            color="#FFCC00"
+            style={styles.tipCardIcon}
+          />
           <EnhancedText style={styles.tipText}>
             Store bananas separately to prevent other fruits from ripening too
             quickly
           </EnhancedText>
-    </View>
+        </View>
 
         {/* Expiring soon section */}
         <View style={styles.expiringContainer}>
@@ -462,18 +483,14 @@ export default function InventoryScreen() {
             color="#666666"
             style={styles.expiringIconTop}
           />
-          <Text style={styles.expiringCount}>
-            {expiringItems.length}
-          </Text>
-          <Text style={styles.expiringTitle}>
-            Expiring Soon
-          </Text>
+          <Text style={styles.expiringCount}>{expiringItems.length}</Text>
+          <Text style={styles.expiringTitle}>Expiring Soon</Text>
           <View style={styles.dotContainer}>
             <View style={styles.dot} />
             <View style={[styles.dot, styles.activeDot]} />
             <View style={styles.dot} />
           </View>
-      </View>
+        </View>
 
         {/* Location filter */}
         <View style={styles.locationFilterContainer}>
@@ -599,7 +616,6 @@ export default function InventoryScreen() {
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
-
     </View>
   );
 }

@@ -1,4 +1,5 @@
 import EditItemModal from "@/components/EditItemModal";
+import FoodIcon from "@/components/FoodIcon";
 import ItemGroupCard from "@/components/ItemGroupCard";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -13,6 +14,23 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// Helper function to format expiry date text
+const getExpiryStatusText = (dateString: string): string => {
+  const expiryDate = new Date(dateString);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diffTime = expiryDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return "Expired";
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays <= 7) return `${diffDays} days`;
+
+  return `${diffDays} days`;
+};
 
 type ItemEntry = {
   id: string;
@@ -251,49 +269,42 @@ export default function ItemDetailsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top > 0 ? 0 : 16 }]}>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
+          accessibilityLabel="Go back"
         >
-          <Ionicons name="arrow-back" size={24} color="#374151" />
+          <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{itemName}</Text>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() =>
-            router.push({
-              pathname: "/(tabs)/add",
-              params: { edit: "true", id },
-            })
-          }
-        >
-          <Ionicons name="pencil" size={20} color="#374151" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-      >
-        <View style={styles.locationInfo}>
-          <Ionicons
-            name={location === "fridge" ? "snow" : "cube"}
-            size={16}
-            color="#6B7280"
-          />
-          <Text style={styles.locationText}>
-            Stored in {location === "fridge" ? "Fridge" : "Shelf"}
+        <View style={styles.titleContainer}>
+          <View style={styles.titleWithIcon}>
+            <FoodIcon foodName={itemName} size={24} style={styles.foodIcon} />
+            <Text style={styles.title}>{itemName}</Text>
+          </View>
+          <Text style={styles.subtitle}>
+            {location === "fridge" ? "Refrigerator" : "Shelf"} •{" "}
+            {entries.reduce((total, entry) => total + entry.quantity, 0)} total
+            items
           </Text>
         </View>
+      </View>
 
-        <Text style={styles.sectionTitle}>Item Entries</Text>
-
-        {!loading && (
+      {/* Content */}
+      <ScrollView style={styles.content}>
+        {loading ? (
+          <Text style={styles.loadingText}>Loading item details...</Text>
+        ) : (
           <ItemGroupCard
             itemName={itemName}
-            entries={entries}
+            entries={entries.map((entry) => ({
+              ...entry,
+              expiryStatus: entry.expiryDate
+                ? getExpiryStatusText(entry.expiryDate)
+                : undefined,
+            }))}
             onAddMore={handleAddMore}
             onDecrement={handleDecrement}
             onIncrement={handleIncrement}
@@ -301,23 +312,12 @@ export default function ItemDetailsScreen() {
             onEntryOptions={handleEntryOptions}
             onEditEntry={handleEditEntry}
             onDeleteEntry={handleDeleteEntry}
+            initialExpanded={true}
           />
-        )}
-
-        {entries.length === 0 && !loading && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              No entries found for this item.
-            </Text>
-            <TouchableOpacity style={styles.addButton} onPress={handleAddMore}>
-              <Ionicons name="add" size={20} color="white" />
-              <Text style={styles.addButtonText}>Add New Entry</Text>
-            </TouchableOpacity>
-          </View>
         )}
       </ScrollView>
 
-      {/* Edit Item Modal */}
+      {/* Edit Modal */}
       {currentEditItem && (
         <EditItemModal
           visible={editModalVisible}
@@ -334,76 +334,49 @@ export default function ItemDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: "#F9FAFB",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingVertical: 12,
+    backgroundColor: "white",
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
-    backgroundColor: "white",
   },
   backButton: {
     padding: 8,
-    borderRadius: 20,
+    marginRight: 8,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+  titleContainer: {
+    flex: 1,
+  },
+  titleWithIcon: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  foodIcon: {
+    marginRight: 8,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "700",
     color: "#111827",
   },
-  editButton: {
-    padding: 8,
-    borderRadius: 20,
+  subtitle: {
+    fontSize: 14,
+    color: "#6B7280",
   },
   content: {
     flex: 1,
-  },
-  contentContainer: {
     padding: 16,
   },
-  locationInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  locationText: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginLeft: 8,
-  },
-  sectionTitle: {
+  loadingText: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 12,
-  },
-  emptyState: {
-    alignItems: "center",
-    padding: 24,
-    backgroundColor: "#F9FAFB",
-    borderRadius: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
     color: "#6B7280",
-    marginBottom: 16,
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#22C55E",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "white",
-    marginLeft: 8,
+    textAlign: "center",
+    marginTop: 24,
   },
 });

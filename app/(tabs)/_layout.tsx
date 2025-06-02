@@ -1,4 +1,5 @@
 import CustomTabBar from "@/components/CustomTabBar";
+import SafeText from "@/components/SafeText";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 
@@ -6,6 +7,11 @@ import { Tabs } from "expo-router";
  * Tab layout for the main application screens
  */
 export default function TabLayout() {
+  // Wrapper for tab labels to ensure proper text rendering
+  const TabLabel = ({ label }: { label: string }) => (
+    <SafeText>{label}</SafeText>
+  );
+
   return (
     <Tabs
       screenOptions={{
