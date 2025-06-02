@@ -309,7 +309,7 @@ export default function InventoryScreen() {
       const expiryDate = item.expiry_date
         ? new Date(item.expiry_date)
         : new Date();
-      const today = new Date();
+    const today = new Date();
       const diffTime = expiryDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -429,9 +429,9 @@ export default function InventoryScreen() {
             <EnhancedText style={styles.urgentCardSubtitle}>
               {expiringItems.length} items need immediate attention
             </EnhancedText>
-          </View>
         </View>
-
+      </View>
+      
         {/* Low stock alert card */}
         <View style={[styles.card, styles.lowStockCard]}>
           <MaterialIcons name="inventory" size={22} color="#FF9500" style={styles.cardIcon} />
@@ -443,7 +443,7 @@ export default function InventoryScreen() {
               {lowStockGroups} groups running low
             </EnhancedText>
           </View>
-        </View>
+      </View>
 
         {/* Tip card */}
         <View style={[styles.card, styles.tipCard]}>
@@ -452,7 +452,7 @@ export default function InventoryScreen() {
             Store bananas separately to prevent other fruits from ripening too
             quickly
           </EnhancedText>
-        </View>
+    </View>
 
         {/* Expiring soon section */}
         <View style={styles.expiringContainer}>
@@ -473,7 +473,7 @@ export default function InventoryScreen() {
             <View style={[styles.dot, styles.activeDot]} />
             <View style={styles.dot} />
           </View>
-        </View>
+      </View>
 
         {/* Location filter */}
         <View style={styles.locationFilterContainer}>
