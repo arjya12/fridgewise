@@ -1,7 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { Alert } from 'react-native';
+import { Session, User } from '@supabase/supabase-js';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface AuthContextType {
   user: User | null;
@@ -46,7 +45,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw error;
     } catch (error: any) {
-      Alert.alert('Error', error.message);
       throw error;
     }
   };
@@ -71,7 +69,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('id', data.user.id);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message);
       throw error;
     }
   };
@@ -81,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error: any) {
-      Alert.alert('Error', error.message);
       throw error;
     }
   };

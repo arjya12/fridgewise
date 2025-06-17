@@ -10,9 +10,9 @@ export default function SplashScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    // Navigate to sign-in page after 2 seconds
+    // Navigate to welcome page after 2 seconds
     const timer = setTimeout(() => {
-      router.replace('/login');
+      router.replace('/(auth)/welcome');
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -21,7 +21,7 @@ export default function SplashScreen() {
   return (
     <View style={styles.container}>
       <Image
-        source={require('../assets/images/logowithtext.jpg')}
+        source={require('../assets/images/launchpng.png')}
         style={styles.logo}
         resizeMode="contain"
         accessible
