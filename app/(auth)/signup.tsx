@@ -2,7 +2,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from 'expo-blur';
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -134,44 +133,15 @@ export default function SignUpScreen() {
           ref={scrollRef}
         >
           <View style={{ width: '100%', alignItems: 'center' }}>
-            <Animated.View
-              style={[
-                styles.card,
-                {
-                  opacity: formAnim,
-                  transform: [
-                    { translateY: formAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) },
-                    { translateY: keyboardOffset },
-                  ],
-                  width: 340,
-                  maxWidth: '92%',
-                  borderRadius: 28,
-                  padding: 22,
-                  marginTop: 0,
-                  marginBottom: 24,
-                  alignItems: 'flex-start',
-                  backgroundColor: 'rgba(255,255,255,0.92)',
-                  overflow: 'hidden',
-                  borderWidth: 2,
-                  borderColor: 'rgba(25,124,71,0.18)', // semi-transparent green
-                  shadowColor: '#197C47',
-                  shadowOffset: { width: 0, height: 8 },
-                  shadowOpacity: 0.10,
-                  shadowRadius: 32,
-                },
-              ]}
-            >
-              <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-              <View style={{ width: '100%', alignItems: 'center', paddingTop: 8, marginBottom: 0 }}>
-                <Animated.Image
-                  source={require('../../assets/images/launchpng.png')}
-                  style={{ width: 84, height: 84, borderRadius: 12, marginBottom: 2 }}
-                  resizeMode="contain"
-                  accessible
-                  accessibilityLabel="FridgeWise logo"
-                />
-                <Text style={[styles.heading, { fontSize: 18, marginBottom: 18, marginTop: 0, alignSelf: 'center', width: '100%', textAlign: 'center', backgroundColor: 'transparent' }]}>Create your FridgeWise account</Text>
-              </View>
+            <View style={{ width: 340, maxWidth: '92%', alignItems: 'center', marginTop: 48, marginBottom: 24 }}>
+              <Animated.Image
+                source={require('../../assets/images/launchpng.png')}
+                style={{ width: 150, height: 150, borderRadius: 16, marginBottom: 4 }}
+                resizeMode="contain"
+                accessible
+                accessibilityLabel="FridgeWise logo"
+              />
+              <Text style={[styles.heading, { fontSize: 18, marginBottom: 18, marginTop: 0, alignSelf: 'center', width: '100%', textAlign: 'center', backgroundColor: 'transparent' }]}>Create your FridgeWise account</Text>
               <View style={styles.form}>
                 {/* Full Name Field */}
                 <View style={[styles.inputGroup, fullNameFocused && styles.inputGroupFocused, errors.fullName && styles.inputGroupError]}>
@@ -315,18 +285,18 @@ export default function SignUpScreen() {
                     <Text style={styles.buttonText}>Create Account</Text>
                   )}
                 </TouchableOpacity>
+                {/* Login Link */}
+                <View style={{ width: '100%', alignItems: 'center', marginTop: 5 }}>
+                  <Text style={[styles.toggleText, { textAlign: 'center', marginBottom: 2 }]}>Already have an account?</Text>
+                  <TouchableOpacity
+                    onPress={() => router.replace({ pathname: '/(auth)/welcome', params: { login: '1' } })}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.toggleLink, { textAlign: 'center', fontSize: 16, fontWeight: '700', marginTop: 0 }]} accessibilityRole="link">Login</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              {/* Login Link */}
-              <View style={{ width: '100%', alignItems: 'center', marginTop: 5 }}>
-                <Text style={[styles.toggleText, { textAlign: 'center', marginBottom: 2 }]}>Already have an account?</Text>
-                <TouchableOpacity
-                  onPress={() => router.replace({ pathname: '/(auth)/welcome', params: { login: '1' } })}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.toggleLink, { textAlign: 'center', fontSize: 16, fontWeight: '700', marginTop: 0 }]} accessibilityRole="link">Login</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
