@@ -31,7 +31,6 @@ type ItemEntry = {
 type ItemGroupCardProps = {
   itemName: string;
   entries: ItemEntry[];
-  onAddMore: () => void;
   onDecrement: (entryId: string) => void;
   onIncrement: (entryId: string) => void;
   onUseAll: (entryId: string) => void;
@@ -47,7 +46,6 @@ type ItemGroupCardProps = {
 const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
   itemName,
   entries,
-  onAddMore,
   onDecrement,
   onIncrement,
   onUseAll,
@@ -127,20 +125,6 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
         </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.addMoreButton}
-            onPress={onAddMore}
-            accessibilityLabel={`Add more ${itemName}`}
-          >
-            <Ionicons
-              name="add"
-              size={14}
-              color="#22C55E"
-              style={styles.addIcon}
-            />
-            <Text style={styles.addMoreText}>Add More</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.toggleButton}
             onPress={() => setExpanded(!expanded)}
@@ -231,33 +215,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  addMoreButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#22C55E",
-    backgroundColor: "white",
-    marginRight: 8,
-  },
-  addIcon: {
-    marginRight: 4,
-  },
-  addMoreText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#22C55E",
-  },
   toggleButton: {
-    padding: 4,
+    padding: 8,
   },
   entriesContainer: {
-    padding: 12,
-    backgroundColor: "#FFFBEB",
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
 });
 

@@ -1,4 +1,3 @@
-// app/(tabs)/index.tsx
 import ItemGroupCard from "@/components/ItemGroupCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -578,6 +577,7 @@ export default function InventoryScreen() {
             </View>
           ) : itemGroups.length === 0 ? (
             <View style={styles.emptyState}>
+              <Ionicons name="cube-outline" size={48} color="#BBBBBB" />
               <EnhancedText style={styles.emptyStateText}>
                 No items found. Add some items to your inventory!
               </EnhancedText>
@@ -595,7 +595,6 @@ export default function InventoryScreen() {
                     ...entry,
                     expiryStatus: entry.expiryStatus,
                   }))}
-                  onAddMore={() => handleAddMore(group.name)}
                   onDecrement={handleEntryDecrement}
                   onIncrement={handleEntryIncrement}
                   onUseAll={handleEntryUseAll}
@@ -608,7 +607,7 @@ export default function InventoryScreen() {
         </View>
       </ScrollView>
 
-      {/* Add button (floating) */}
+      {/* Add button (floating) - always visible */}
       <TouchableOpacity
         style={styles.floatingButton}
         onPress={() => router.push("/(tabs)/add")}
@@ -828,6 +827,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "500",
   },
+  emptyStateButton: {
+    backgroundColor: "#22C55E",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  emptyStateButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
   floatingButton: {
     position: "absolute",
     width: 56,
@@ -836,8 +850,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#22C55E",
     justifyContent: "center",
     alignItems: "center",
-    bottom: 80,
-    alignSelf: "center",
+    bottom: 30,
+    right: 30,
     elevation: 10,
     shadowColor: "rgba(0,0,0,0.3)",
     shadowOffset: { width: 0, height: 4 },

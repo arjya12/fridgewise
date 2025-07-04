@@ -118,13 +118,7 @@ export default function ItemDetailsScreen() {
     }
   };
 
-  const handleAddMore = () => {
-    router.push({
-      pathname: "/(tabs)/add",
-      params: { itemName },
-    });
-  };
-
+  // Handlers for entries
   const handleDecrement = (entryId: string) => {
     setEntries((prevEntries) =>
       prevEntries.map((entry) => {
@@ -148,31 +142,26 @@ export default function ItemDetailsScreen() {
   };
 
   const handleUseAll = (entryId: string) => {
-    // Show confirmation dialog
+    // Find the entry to be used
+    const entry = entries.find((e) => e.id === entryId);
+    if (!entry) return;
+
+    // Remove the entry
+    setEntries((prevEntries) => prevEntries.filter((e) => e.id !== entryId));
+
+    // Show confirmation
     Alert.alert(
-      "Use All",
-      "Are you sure you want to remove all of this item?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Use All",
-          onPress: () => {
-            setEntries((prevEntries) =>
-              prevEntries.filter((entry) => entry.id !== entryId)
-            );
-          },
-          style: "destructive",
-        },
-      ]
+      "Item Used",
+      `You've used ${entry.quantity} ${
+        entry.quantity > 1 ? "units" : "unit"
+      } of ${itemName}`,
+      [{ text: "OK" }]
     );
   };
 
   const handleEntryOptions = (entryId: string) => {
-    // Show options menu
-    console.log("Entry options pressed for entry ID:", entryId);
+    // This is a placeholder for any additional options menu functionality
+    console.log("Options for entry", entryId);
   };
 
   const handleEditEntry = (entryId: string) => {
@@ -305,7 +294,6 @@ export default function ItemDetailsScreen() {
                 ? getExpiryStatusText(entry.expiryDate)
                 : undefined,
             }))}
-            onAddMore={handleAddMore}
             onDecrement={handleDecrement}
             onIncrement={handleIncrement}
             onUseAll={handleUseAll}

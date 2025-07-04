@@ -4,6 +4,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { FoodItem } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -36,12 +37,81 @@ export default function AddItemScreen() {
   const [initialLoading, setInitialLoading] = useState(isEditing);
   const colorScheme = useColorScheme();
 
+  // State for suggestions
+  const [suggestions, setSuggestions] = useState<FoodItem[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Define styles that need access to colorScheme
+  const dynamicStyles = StyleSheet.create({
+    suggestionsContainer: {
+      backgroundColor: colorScheme === "dark" ? "#1A1A1A" : "#F8F9FA",
+      borderRadius: 8,
+      padding: 12,
+      marginTop: -10,
+      marginBottom: 20,
+    },
+    suggestionsTitle: {
+      fontSize: 12,
+      color: colorScheme === "dark" ? "#888" : "#666",
+      marginBottom: 8,
+      fontWeight: "600",
+    },
+    suggestionItem: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      backgroundColor: colorScheme === "dark" ? "#2A2A2A" : "#FFFFFF",
+      borderRadius: 6,
+      marginBottom: 6,
+    },
+    suggestionName: {
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    suggestionLocation: {
+      fontSize: 12,
+      color: colorScheme === "dark" ? "#888" : "#666",
+    },
+    suggestionQuantity: {
+      fontSize: 12,
+      color: colorScheme === "dark" ? "#888" : "#666",
+    },
+  });
+
   useEffect(() => {
     // Load item data if editing
     if (isEditing) {
       loadItemData();
     }
+
+    // Load existing items for suggestions
+    loadExistingItems();
   }, [isEditing, params.id]);
+
+  const loadExistingItems = async () => {
+    try {
+      const existingItems = await foodItemsService.getItems();
+      setSuggestions(existingItems);
+    } catch (error) {
+      console.error("Failed to load suggestions:", error);
+    }
+  };
+
+  // Update the name input handler to show suggestions
+  const handleNameChange = (text: string) => {
+    setName(text);
+
+    if (text.length > 0) {
+      const filtered = suggestions.filter((item) =>
+        item.name.toLowerCase().includes(text.toLowerCase())
+      );
+      setShowSuggestions(filtered.length > 0);
+    } else {
+      setShowSuggestions(false);
+    }
+  };
 
   const loadItemData = async () => {
     try {
@@ -176,7 +246,7 @@ export default function AddItemScreen() {
                     colorScheme === "dark" ? "#999" : "#666"
                   }
                   value={name}
-                  onChangeText={setName}
+                  onChangeText={handleNameChange}
                 />
                 {name.trim() !== "" && (
                   <View style={styles.foodIconPreview}>
@@ -185,6 +255,46 @@ export default function AddItemScreen() {
                 )}
               </View>
             </View>
+
+            {showSuggestions && (
+              <View style={dynamicStyles.suggestionsContainer}>
+                <ThemedText style={dynamicStyles.suggestionsTitle}>
+                  Add more to existing items:
+                </ThemedText>
+                {suggestions
+                  .filter((item) =>
+                    item.name.toLowerCase().includes(name.toLowerCase())
+                  )
+                  .slice(0, 3)
+                  .map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={dynamicStyles.suggestionItem}
+                      onPress={() => {
+                        // Pre-fill form with existing item data
+                        setName(item.name);
+                        setLocation(item.location as "fridge" | "shelf");
+                        setCategory(item.category || "");
+                        setUnit(item.unit || "");
+                        setShowSuggestions(false);
+                      }}
+                    >
+                      <View style={styles.suggestionContent}>
+                        <FoodIcon foodName={item.name} size={20} />
+                        <ThemedText style={dynamicStyles.suggestionName}>
+                          {item.name}
+                        </ThemedText>
+                        <ThemedText style={dynamicStyles.suggestionLocation}>
+                          ({item.location})
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={dynamicStyles.suggestionQuantity}>
+                        Current: {item.quantity} {item.unit || "pcs"}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            )}
 
             <View style={styles.row}>
               <View style={[styles.inputGroup, styles.halfWidth]}>
@@ -561,5 +671,10 @@ const styles = StyleSheet.create({
     right: 12,
     alignItems: "center",
     justifyContent: "center",
+  },
+  suggestionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 });

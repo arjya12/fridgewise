@@ -57,11 +57,7 @@ export default function DemoScreen() {
     location: string;
   } | null>(null);
 
-  // Handlers for chicken entries
-  const handleChickenAddMore = () => {
-    console.log("Add more chicken");
-  };
-
+  // Handlers for Chicken entries
   const handleChickenDecrement = (entryId: string) => {
     setChickenEntries((prevEntries) =>
       prevEntries.map((entry) => {
@@ -136,11 +132,7 @@ export default function DemoScreen() {
     );
   };
 
-  // Handlers for milk entries
-  const handleMilkAddMore = () => {
-    console.log("Add more milk");
-  };
-
+  // Handlers for Milk entries
   const handleMilkDecrement = (entryId: string) => {
     setMilkEntries((prevEntries) =>
       prevEntries.map((entry) => {
@@ -292,7 +284,6 @@ export default function DemoScreen() {
         <ItemGroupCard
           itemName="Chicken Breast"
           entries={chickenEntries}
-          onAddMore={handleChickenAddMore}
           onDecrement={handleChickenDecrement}
           onIncrement={handleChickenIncrement}
           onUseAll={handleChickenUseAll}
@@ -306,7 +297,6 @@ export default function DemoScreen() {
         <ItemGroupCard
           itemName="Milk"
           entries={milkEntries}
-          onAddMore={handleMilkAddMore}
           onDecrement={handleMilkDecrement}
           onIncrement={handleMilkIncrement}
           onUseAll={handleMilkUseAll}
