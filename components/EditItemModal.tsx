@@ -1,8 +1,10 @@
+import { useSettings } from "@/contexts/SettingsContext";
 import { foodCategoryIcons } from "@/utils/foodCategoryIcons";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
+  Animated,
   Modal,
   Platform,
   ScrollView,
@@ -45,6 +47,9 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   onDelete,
   itemData,
 }) => {
+  const { effectiveTheme: theme } = useSettings();
+  const isDark = theme === "dark";
+
   const [name, setName] = useState(itemData.name);
   const [quantity, setQuantity] = useState(itemData.quantity);
   const [expiryDate, setExpiryDate] = useState(new Date(itemData.expiryDate));
@@ -54,6 +59,21 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+
+  // Animation for dropdown
+  const [dropdownAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    if (showLocationDropdown) {
+      Animated.timing(dropdownAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      dropdownAnim.setValue(0);
+    }
+  }, [showLocationDropdown, dropdownAnim]);
 
   // Update local state when itemData changes
   useEffect(() => {
@@ -106,12 +126,25 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={styles.modalContainer}>
+        <View
+          style={[
+            styles.modalContainer,
+            isDark && { backgroundColor: "#1C1C1E" },
+          ]}
+        >
           {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Edit {name}</Text>
+          <View
+            style={[styles.header, isDark && { borderBottomColor: "#2C2C2E" }]}
+          >
+            <Text style={[styles.title, isDark && { color: "#ECEDEE" }]}>
+              Edit {name}
+            </Text>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color="#374151" />
+              <Ionicons
+                name="close"
+                size={24}
+                color={isDark ? "#9BA1A6" : "#374151"}
+              />
             </TouchableOpacity>
           </View>
 
@@ -183,27 +216,70 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
 
             {/* Location */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Location</Text>
+              <Text style={[styles.label, isDark && { color: "#9BA1A6" }]}>
+                Location
+              </Text>
               <TouchableOpacity
-                style={styles.dropdownButton}
+                style={[
+                  styles.dropdownButton,
+                  isDark && {
+                    backgroundColor: "#2C2C2E",
+                    borderColor: "#3C3C3E",
+                  },
+                ]}
                 onPress={() => setShowLocationDropdown(!showLocationDropdown)}
               >
-                <Text style={styles.dropdownButtonText}>{location}</Text>
+                <Text
+                  style={[
+                    styles.dropdownButtonText,
+                    isDark && { color: "#ECEDEE" },
+                  ]}
+                >
+                  {location}
+                </Text>
                 <Ionicons
                   name={showLocationDropdown ? "chevron-up" : "chevron-down"}
                   size={16}
-                  color="#374151"
+                  color={isDark ? "#9BA1A6" : "#374151"}
                 />
               </TouchableOpacity>
 
               {showLocationDropdown && (
-                <View style={styles.dropdownMenu}>
+                <Animated.View
+                  style={[
+                    styles.dropdownMenu,
+                    isDark && {
+                      backgroundColor: "#1C1C1E",
+                      borderColor: "#3C3C3E",
+                    },
+                    {
+                      opacity: dropdownAnim,
+                      transform: [
+                        {
+                          scale: dropdownAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.95, 1],
+                          }),
+                        },
+                      ],
+                      position: "absolute",
+                      top: 52,
+                      left: 0,
+                      right: 0,
+                      zIndex: 1000,
+                    },
+                  ]}
+                >
                   {locationOptions.map((option) => (
                     <TouchableOpacity
                       key={option}
                       style={[
                         styles.dropdownItem,
-                        location === option && styles.dropdownItemSelected,
+                        location === option &&
+                          (isDark
+                            ? { backgroundColor: "#2C2C2E" }
+                            : styles.dropdownItemSelected),
+                        isDark && { borderBottomColor: "#3C3C3E" },
                       ]}
                       onPress={() => {
                         setLocation(option);
@@ -213,15 +289,18 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
                       <Text
                         style={[
                           styles.dropdownItemText,
+                          isDark && { color: "#ECEDEE" },
                           location === option &&
-                            styles.dropdownItemTextSelected,
+                            (isDark
+                              ? { fontWeight: "600", color: "#22C55E" }
+                              : styles.dropdownItemTextSelected),
                         ]}
                       >
                         {option}
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </Animated.View>
               )}
             </View>
 

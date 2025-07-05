@@ -1,9 +1,11 @@
+import { ThemedText } from "@/components/ThemedText";
+import { useSettings } from "@/contexts/SettingsContext";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
+  Animated,
   Modal,
   StyleSheet,
-  Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -30,6 +32,34 @@ const ActionMenu: React.FC<ActionMenuProps> = ({
   onDelete,
   position,
 }) => {
+  const { effectiveTheme: theme } = useSettings();
+  const isDark = theme === "dark";
+
+  // Animation for menu appearance
+  const [scaleAnim] = React.useState(new Animated.Value(0.9));
+  const [opacityAnim] = React.useState(new Animated.Value(0));
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Reset animation values when menu is closed
+      scaleAnim.setValue(0.9);
+      opacityAnim.setValue(0);
+    }
+  }, [visible, scaleAnim, opacityAnim]);
+
   if (!visible) return null;
 
   return (
@@ -41,19 +71,26 @@ const ActionMenu: React.FC<ActionMenuProps> = ({
     >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.overlay}>
-          <View
+          <Animated.View
             style={[
               styles.menuContainer,
               {
                 position: "absolute",
                 top: position.y,
                 left: position.x,
+                transform: [{ scale: scaleAnim }],
+                opacity: opacityAnim,
+                backgroundColor: isDark ? "#1C1C1E" : "white",
+                borderColor: isDark ? "#2C2C2E" : "rgba(0,0,0,0.1)",
               },
             ]}
           >
             {/* Edit option */}
             <TouchableOpacity
-              style={styles.menuItem}
+              style={[
+                styles.menuItem,
+                isDark && { borderBottomColor: "#2C2C2E" },
+              ]}
               onPress={() => {
                 onClose();
                 onEdit();
@@ -65,12 +102,16 @@ const ActionMenu: React.FC<ActionMenuProps> = ({
                 color="#0066FF"
                 style={styles.menuIcon}
               />
-              <Text style={styles.menuText}>Edit Item</Text>
+              <ThemedText style={styles.menuText}>Edit Item</ThemedText>
             </TouchableOpacity>
 
             {/* Delete option */}
             <TouchableOpacity
-              style={[styles.menuItem, styles.deleteMenuItem]}
+              style={[
+                styles.menuItem,
+                styles.deleteMenuItem,
+                isDark && { backgroundColor: "#2A1414" },
+              ]}
               onPress={() => {
                 onClose();
                 onDelete();
@@ -82,9 +123,9 @@ const ActionMenu: React.FC<ActionMenuProps> = ({
                 color="#DC2626"
                 style={styles.menuIcon}
               />
-              <Text style={styles.deleteMenuText}>Delete Item</Text>
+              <ThemedText style={styles.deleteMenuText}>Delete Item</ThemedText>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </View>
       </TouchableWithoutFeedback>
     </Modal>
@@ -98,7 +139,6 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     width: 160,
-    backgroundColor: "white",
     borderRadius: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -107,7 +147,6 @@ const styles = StyleSheet.create({
     elevation: 4,
     overflow: "visible",
     borderWidth: 0.5,
-    borderColor: "rgba(0,0,0,0.1)",
   },
   menuItem: {
     flexDirection: "row",

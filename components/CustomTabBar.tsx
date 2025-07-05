@@ -38,7 +38,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({
       case "index":
         iconName = isFocused ? "home" : "home-outline";
         break;
-      case "stats":
+      case "settings":
         iconName = isFocused ? "settings" : "settings-outline";
         break;
       case "menu":
@@ -250,23 +250,24 @@ const styles = StyleSheet.create({
   addButton: {
     width: 56,
     height: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 10,
-    marginBottom: 10, // Lift it up slightly from the bottom
-  },
-  addButtonInner: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    borderRadius: 28,
     backgroundColor: "#22C55E",
-    alignItems: "center",
     justifyContent: "center",
-    shadowColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    marginBottom: 24, // Lift it up a bit
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  addButtonInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#22C55E",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 

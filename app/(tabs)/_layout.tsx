@@ -18,6 +18,7 @@ export default function TabLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
+          tabBarShowLabel: true,
         }}
         tabBar={(props) => <CustomTabBar {...props} />}
       >
@@ -25,8 +26,8 @@ export default function TabLayout() {
           name="index"
           options={{
             title: "Home",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="home-outline" color={color} size={24} />
             ),
           }}
         />
@@ -34,31 +35,20 @@ export default function TabLayout() {
         <Tabs.Screen
           name="add"
           options={{
-            title: "Add Item",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="add-circle" size={size} color={color} />
+            title: "Add",
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="add-outline" color={color} size={24} />
             ),
-            tabBarButton: () => null, // Hide this tab button as we have a custom center button
+            href: null, // This makes the tab not navigable directly
           }}
         />
 
         <Tabs.Screen
-          name="item-details"
-          options={{
-            title: "Item Details",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="information-circle" size={size} color={color} />
-            ),
-            tabBarButton: () => null, // Hide this tab button
-          }}
-        />
-
-        <Tabs.Screen
-          name="stats"
+          name="settings"
           options={{
             title: "Settings",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="settings" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="settings-outline" color={color} size={24} />
             ),
           }}
         />
@@ -67,9 +57,15 @@ export default function TabLayout() {
           name="menu"
           options={{
             title: "Menu",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="menu" size={size} color={color} />
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="menu-outline" color={color} size={24} />
             ),
+          }}
+        />
+        <Tabs.Screen
+          name="item-details"
+          options={{
+            href: null, // This makes the tab not show in the tab bar
           }}
         />
       </Tabs>
