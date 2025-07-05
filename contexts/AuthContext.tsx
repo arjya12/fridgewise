@@ -1,6 +1,7 @@
-import { supabase } from '@/lib/supabase';
-import { Session, User } from '@supabase/supabase-js';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from "@/lib/supabase";
+import { Session, User } from "@supabase/supabase-js";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { Alert } from "react-native";
 
 interface AuthContextType {
   user: User | null;
@@ -27,10 +28,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Listen for auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-    });
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+      }
+    );
 
     return () => {
       authListener.subscription.unsubscribe();
@@ -45,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw error;
     } catch (error: any) {
+      Alert.alert("Error", error.message);
       throw error;
     }
   };
@@ -58,17 +62,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: { full_name: fullName },
         },
       });
-      
+
       if (error) throw error;
-      
+
       if (data?.user && fullName) {
         // Update user profile with full name
         await supabase
-          .from('user_profiles')
+          .from("user_profiles")
           .update({ full_name: fullName })
-          .eq('id', data.user.id);
+          .eq("id", data.user.id);
       }
     } catch (error: any) {
+      Alert.alert("Error", error.message);
       throw error;
     }
   };
@@ -78,12 +83,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error: any) {
+      Alert.alert("Error", error.message);
       throw error;
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{ user, session, loading, signIn, signUp, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -92,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

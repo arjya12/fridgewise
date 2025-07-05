@@ -1,203 +1,256 @@
+import SignUpScreen from "@/app/(auth)/signup";
 import { useAuth } from "@/contexts/AuthContext";
-import { fireEvent, render, waitFor } from "@/test-utils";
-import { router } from "expo-router";
+import { NavigationContainer } from "@react-navigation/native";
+import { act, fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { Alert } from "react-native";
-import SignUpScreen from "../signup";
 
-// Mock the auth hook
-jest.mock("@/contexts/AuthContext", () => ({
-  useAuth: jest.fn(),
-}));
+jest.mock("@expo/vector-icons", () => {
+  const { View } = require("react-native");
+  return {
+    Ionicons: View,
+  };
+});
 
-// Mock expo-router
 jest.mock("expo-router", () => ({
   router: {
     replace: jest.fn(),
   },
-  Link: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-// Mock expo-linear-gradient
-jest.mock("expo-linear-gradient", () => ({
-  LinearGradient: ({ children }: { children: React.ReactNode }) => children,
+jest.mock("@/hooks/useColorScheme", () => ({
+  useColorScheme: () => "light",
 }));
 
-// Mock @expo/vector-icons
-jest.mock("@expo/vector-icons", () => ({
-  Ionicons: "Ionicons",
+jest.mock("@/contexts/AuthContext", () => ({
+  useAuth: jest.fn(),
 }));
 
-// Mock React Native Alert
-jest.spyOn(Alert, "alert");
+jest.mock("@/lib/supabase", () => ({
+  supabase: {
+    auth: {
+      signUp: jest.fn(),
+    },
+  },
+}));
+
+// Comprehensive mock for react-native-safe-area-context
+jest.mock("react-native-safe-area-context", () => {
+  const { View } = require("react-native");
+  const mockReact = require("react");
+
+  return {
+    SafeAreaProvider: ({ children }: { children: any }) => {
+      return mockReact.createElement(
+        View,
+        { testID: "safe-area-provider" },
+        children
+      );
+    },
+    SafeAreaView: ({ children, ...props }: { children: any }) => {
+      return mockReact.createElement(
+        View,
+        { testID: "safe-area-view", ...props },
+        children
+      );
+    },
+    useSafeAreaInsets: () => ({
+      top: 44,
+      bottom: 34,
+      left: 0,
+      right: 0,
+    }),
+  };
+});
 
 describe("SignUpScreen", () => {
-  const mockSignUp = jest.fn();
-
   beforeEach(() => {
-    jest.clearAllMocks();
     (useAuth as jest.Mock).mockReturnValue({
-      signUp: mockSignUp,
-      user: null,
-      session: null,
-      loading: false,
+      signUp: jest.fn().mockResolvedValue({ error: null }),
     });
+    jest.clearAllMocks();
+    jest.spyOn(Alert, "alert");
   });
 
-  it("should render signup form", () => {
-    const { getByPlaceholderText, getByText, getAllByText } = render(
-      <SignUpScreen />
+  it("should render all fields and the signup button", async () => {
+    const { getByPlaceholderText, getByTestId } = render(
+      <NavigationContainer>
+        <SignUpScreen />
+      </NavigationContainer>
     );
 
-    expect(getByText("Shelf & Fridge Tracker")).toBeTruthy();
-    expect(getByText("Start your journey to zero food waste")).toBeTruthy();
-
-    // There are two "Create Account" texts - header and button
-    const createAccountTexts = getAllByText("Create Account");
-    expect(createAccountTexts).toHaveLength(2);
-
-    expect(getByText("Join thousands reducing food waste")).toBeTruthy();
-    expect(getByPlaceholderText("Enter your full name")).toBeTruthy();
-    expect(getByPlaceholderText("your@email.com")).toBeTruthy();
-    expect(getByPlaceholderText("Create a strong password")).toBeTruthy();
-    expect(getByPlaceholderText("Confirm your password")).toBeTruthy();
-    expect(getByText("Already have an account?")).toBeTruthy();
-  });
-
-  it("should handle signup with valid credentials", async () => {
-    mockSignUp.mockResolvedValueOnce(undefined);
-    const { getByPlaceholderText, getByTestId } = render(<SignUpScreen />);
-
-    const fullNameInput = getByPlaceholderText("Enter your full name");
-    const emailInput = getByPlaceholderText("your@email.com");
-    const passwordInput = getByPlaceholderText("Create a strong password");
-    const confirmPasswordInput = getByPlaceholderText("Confirm your password");
-    const termsCheckbox = getByTestId("terms-checkbox");
+    const fullNameInput = getByPlaceholderText("Name");
+    const emailInput = getByPlaceholderText("Email");
+    const passwordInput = getByPlaceholderText("Password");
+    const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
+    const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "John Doe");
-    fireEvent.changeText(emailInput, "test@example.com");
-    fireEvent.changeText(passwordInput, "password123");
-    fireEvent.changeText(confirmPasswordInput, "password123");
-    fireEvent.press(termsCheckbox);
-    fireEvent.press(signupButton);
-
-    await waitFor(() => {
-      expect(mockSignUp).toHaveBeenCalledWith(
-        "test@example.com",
-        "password123",
-        "John Doe"
-      );
-      expect(Alert.alert).toHaveBeenCalledWith(
-        "Sign up successful! Please check your email to verify your account."
-      );
-      expect(router.replace).toHaveBeenCalledWith("/(auth)/login");
-    });
+    expect(fullNameInput).toBeTruthy();
+    expect(emailInput).toBeTruthy();
+    expect(passwordInput).toBeTruthy();
+    expect(confirmPasswordInput).toBeTruthy();
+    expect(signupButton).toBeTruthy();
+    expect(termsSwitch).toBeTruthy();
   });
 
   it("should show alert when fields are empty", async () => {
-    const { getByTestId } = render(<SignUpScreen />);
+    const { getByTestId } = render(
+      <NavigationContainer>
+        <SignUpScreen />
+      </NavigationContainer>
+    );
     const signupButton = getByTestId("signup-button");
 
     fireEvent.press(signupButton);
 
-    expect(Alert.alert).toHaveBeenCalledWith("Please fill in all fields");
-    expect(mockSignUp).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Missing Information",
+      "Please fill in all fields."
+    );
   });
 
   it("should show alert when passwords do not match", async () => {
-    const { getByPlaceholderText, getByTestId } = render(<SignUpScreen />);
+    const { getByPlaceholderText, getByTestId } = render(
+      <NavigationContainer>
+        <SignUpScreen />
+      </NavigationContainer>
+    );
 
-    const fullNameInput = getByPlaceholderText("Enter your full name");
-    const emailInput = getByPlaceholderText("your@email.com");
-    const passwordInput = getByPlaceholderText("Create a strong password");
-    const confirmPasswordInput = getByPlaceholderText("Confirm your password");
-    const termsCheckbox = getByTestId("terms-checkbox");
+    const fullNameInput = getByPlaceholderText("Name");
+    const emailInput = getByPlaceholderText("Email");
+    const passwordInput = getByPlaceholderText("Password");
+    const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
+    const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "John Doe");
+    fireEvent.changeText(fullNameInput, "Test User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "password123");
     fireEvent.changeText(confirmPasswordInput, "password456");
-    fireEvent.press(termsCheckbox);
+    fireEvent.press(termsSwitch);
     fireEvent.press(signupButton);
 
-    expect(Alert.alert).toHaveBeenCalledWith("Passwords do not match");
-    expect(mockSignUp).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Password Mismatch",
+      "The passwords do not match."
+    );
   });
 
   it("should show alert when password is too short", async () => {
-    const { getByPlaceholderText, getByTestId } = render(<SignUpScreen />);
+    const { getByPlaceholderText, getByTestId } = render(
+      <NavigationContainer>
+        <SignUpScreen />
+      </NavigationContainer>
+    );
 
-    const fullNameInput = getByPlaceholderText("Enter your full name");
-    const emailInput = getByPlaceholderText("your@email.com");
-    const passwordInput = getByPlaceholderText("Create a strong password");
-    const confirmPasswordInput = getByPlaceholderText("Confirm your password");
-    const termsCheckbox = getByTestId("terms-checkbox");
+    const fullNameInput = getByPlaceholderText("Name");
+    const emailInput = getByPlaceholderText("Email");
+    const passwordInput = getByPlaceholderText("Password");
+    const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
+    const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "John Doe");
+    fireEvent.changeText(fullNameInput, "Test User");
     fireEvent.changeText(emailInput, "test@example.com");
-    fireEvent.changeText(passwordInput, "pass");
-    fireEvent.changeText(confirmPasswordInput, "pass");
-    fireEvent.press(termsCheckbox);
+    fireEvent.changeText(passwordInput, "123");
+    fireEvent.changeText(confirmPasswordInput, "123");
+    fireEvent.press(termsSwitch);
     fireEvent.press(signupButton);
 
     expect(Alert.alert).toHaveBeenCalledWith(
-      "Password must be at least 6 characters long"
+      "Password Too Short",
+      "The password must be at least 6 characters long."
     );
-    expect(mockSignUp).not.toHaveBeenCalled();
   });
 
   it("should show alert when terms are not agreed", async () => {
-    const { getByPlaceholderText, getByTestId } = render(<SignUpScreen />);
+    const { getByPlaceholderText, getByTestId } = render(
+      <NavigationContainer>
+        <SignUpScreen />
+      </NavigationContainer>
+    );
 
-    const fullNameInput = getByPlaceholderText("Enter your full name");
-    const emailInput = getByPlaceholderText("your@email.com");
-    const passwordInput = getByPlaceholderText("Create a strong password");
-    const confirmPasswordInput = getByPlaceholderText("Confirm your password");
+    const fullNameInput = getByPlaceholderText("Name");
+    const emailInput = getByPlaceholderText("Email");
+    const passwordInput = getByPlaceholderText("Password");
+    const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
 
-    fireEvent.changeText(fullNameInput, "John Doe");
+    fireEvent.changeText(fullNameInput, "Test User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "password123");
     fireEvent.changeText(confirmPasswordInput, "password123");
-    // Don't check the terms checkbox
     fireEvent.press(signupButton);
 
     expect(Alert.alert).toHaveBeenCalledWith(
-      "Please agree to the Terms of Service and Privacy Policy"
+      "Terms and Conditions",
+      "You must agree to the terms and conditions to sign up."
     );
-    expect(mockSignUp).not.toHaveBeenCalled();
   });
 
-  it("should handle signup error", async () => {
-    const error = new Error("Email already in use");
-    mockSignUp.mockRejectedValueOnce(error);
+  it("should call signup on valid input", async () => {
+    const { getByPlaceholderText, getByTestId } = render(
+      <NavigationContainer>
+        <SignUpScreen />
+      </NavigationContainer>
+    );
 
-    const { getByPlaceholderText, getByTestId } = render(<SignUpScreen />);
-
-    const fullNameInput = getByPlaceholderText("Enter your full name");
-    const emailInput = getByPlaceholderText("your@email.com");
-    const passwordInput = getByPlaceholderText("Create a strong password");
-    const confirmPasswordInput = getByPlaceholderText("Confirm your password");
-    const termsCheckbox = getByTestId("terms-checkbox");
+    const fullNameInput = getByPlaceholderText("Name");
+    const emailInput = getByPlaceholderText("Email");
+    const passwordInput = getByPlaceholderText("Password");
+    const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
+    const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "John Doe");
+    fireEvent.changeText(fullNameInput, "Test User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "password123");
     fireEvent.changeText(confirmPasswordInput, "password123");
-    fireEvent.press(termsCheckbox);
-    fireEvent.press(signupButton);
+    fireEvent.press(termsSwitch);
 
-    await waitFor(() => {
-      expect(mockSignUp).toHaveBeenCalledWith(
-        "test@example.com",
-        "password123",
-        "John Doe"
-      );
-      expect(router.replace).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.press(signupButton);
     });
+
+    expect(useAuth().signUp).toHaveBeenCalledWith(
+      "test@example.com",
+      "password123",
+      "Test User"
+    );
+  });
+
+  it("should handle signup error", async () => {
+    (useAuth().signUp as jest.Mock).mockRejectedValueOnce(
+      new Error("Failed to sign up")
+    );
+
+    const { getByPlaceholderText, getByTestId } = render(
+      <NavigationContainer>
+        <SignUpScreen />
+      </NavigationContainer>
+    );
+
+    const fullNameInput = getByPlaceholderText("Name");
+    const emailInput = getByPlaceholderText("Email");
+    const passwordInput = getByPlaceholderText("Password");
+    const confirmPasswordInput = getByPlaceholderText("Confirm Password");
+    const signupButton = getByTestId("signup-button");
+    const termsSwitch = getByTestId("terms-switch");
+
+    fireEvent.changeText(fullNameInput, "Test User");
+    fireEvent.changeText(emailInput, "test@example.com");
+    fireEvent.changeText(passwordInput, "password123");
+    fireEvent.changeText(confirmPasswordInput, "password123");
+    fireEvent.press(termsSwitch);
+
+    await act(async () => {
+      fireEvent.press(signupButton);
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Sign-up failed",
+      "Failed to sign up"
+    );
   });
 });

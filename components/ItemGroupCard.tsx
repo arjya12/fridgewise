@@ -26,6 +26,7 @@ type ItemEntry = {
   expiryDate?: string; // ISO date string
   isUseFirst?: boolean;
   expiryStatus?: string;
+  daysUntilExpiry?: number;
 };
 
 type ItemGroupCardProps = {
@@ -34,11 +35,15 @@ type ItemGroupCardProps = {
   onDecrement: (entryId: string) => void;
   onIncrement: (entryId: string) => void;
   onUseAll: (entryId: string) => void;
+  onAddMore: () => void; // Add this line
   onEntryOptions?: (entryId: string) => void;
   onEditEntry?: (entryId: string) => void;
   onDeleteEntry?: (entryId: string) => void;
   initialExpanded?: boolean;
 };
+
+// Status types for expiry indicators
+type ExpiryStatus = "expired" | "today" | "soon" | "fresh" | "none";
 
 /**
  * A component to display a food item with its entries and controls
@@ -49,6 +54,7 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
   onDecrement,
   onIncrement,
   onUseAll,
+  onAddMore, // Add this line
   onEntryOptions,
   onEditEntry,
   onDeleteEntry,
@@ -104,8 +110,110 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
     return undefined; // No urgent expiry badge needed
   };
 
+  // Get expiry status for the status dot
+  const getExpiryStatus = (): ExpiryStatus => {
+    if (entries.length === 0) return "none";
+
+    // Find the earliest expiry date
+    let earliestDays: number | undefined;
+
+    for (const entry of entries) {
+      if (!entry.expiryDate) continue;
+
+      const expiryDate = new Date(entry.expiryDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const diffTime = expiryDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (earliestDays === undefined || diffDays < earliestDays) {
+        earliestDays = diffDays;
+      }
+    }
+
+    if (earliestDays === undefined) return "none";
+
+    if (earliestDays < 0) return "expired";
+    if (earliestDays === 0) return "today";
+    if (earliestDays <= 3) return "soon";
+    return "fresh";
+  };
+
+  // Get the color for the status dot
+  const getStatusDotColor = (): string => {
+    const status = getExpiryStatus();
+
+    switch (status) {
+      case "expired":
+        return "#FF3B30"; // Red
+      case "today":
+        return "#FF9500"; // Orange
+      case "soon":
+        return "#FFCC00"; // Yellow
+      case "fresh":
+        return "#34C759"; // Green
+      default:
+        return "transparent";
+    }
+  };
+
+  // Get the status label for accessibility
+  const getStatusLabel = (): string => {
+    const status = getExpiryStatus();
+
+    switch (status) {
+      case "expired":
+        return "Expired";
+      case "today":
+        return "Expires today";
+      case "soon":
+        return "Expires soon";
+      case "fresh":
+        return "Fresh";
+      default:
+        return "";
+    }
+  };
+
   // Calculate total quantity
   const totalQuantity = entries.reduce((sum, entry) => sum + entry.quantity, 0);
+
+  // Generate visual quantity indicators
+  const renderQuantityIndicator = () => {
+    // Cap the visual representation at 10 for UI clarity
+    const maxVisualQuantity = Math.min(totalQuantity, 10);
+
+    // Calculate how many full blocks to show
+    const fullBlocks = Math.floor(maxVisualQuantity);
+
+    // Calculate if we need a partial block (for quantities with decimals)
+    const partialBlock = maxVisualQuantity - fullBlocks > 0;
+
+    // Calculate the percentage fill for the partial block
+    const partialFillPercent = (maxVisualQuantity - fullBlocks) * 100;
+
+    return (
+      <View style={styles.quantityIndicatorContainer}>
+        {Array.from({ length: fullBlocks }).map((_, index) => (
+          <View
+            key={`block-${index}`}
+            style={styles.quantityBlock}
+            accessibilityLabel={`Quantity block ${index + 1} of ${fullBlocks}`}
+          />
+        ))}
+        {partialBlock && (
+          <View
+            style={[styles.quantityBlock, { width: `${partialFillPercent}%` }]}
+            accessibilityLabel={`Partial quantity block`}
+          />
+        )}
+      </View>
+    );
+  };
+
+  const statusDotColor = getStatusDotColor();
+  const statusLabel = getStatusLabel();
 
   return (
     <View style={styles.container}>
@@ -114,13 +222,22 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
         <View style={styles.itemInfoContainer}>
           <View style={styles.iconContainer}>
             <FoodIcon foodName={itemName} size={24} />
+            {statusDotColor !== "transparent" && (
+              <View
+                style={[styles.statusDot, { backgroundColor: statusDotColor }]}
+                accessibilityLabel={statusLabel}
+              />
+            )}
           </View>
           <View style={styles.itemInfo}>
             <Text style={styles.itemName}>{itemName}</Text>
-            <Text style={styles.entryCount}>
-              {totalQuantity} total • {entries.length}{" "}
-              {entries.length === 1 ? "entry" : "entries"}
-            </Text>
+            <View style={styles.quantityRow}>
+              <Text style={styles.entryCount}>
+                {totalQuantity} total • {entries.length}{" "}
+                {entries.length === 1 ? "entry" : "entries"}
+              </Text>
+              {renderQuantityIndicator()}
+            </View>
           </View>
         </View>
 
@@ -147,9 +264,7 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
               key={entry.id}
               quantity={entry.quantity}
               isUseFirst={entry.isUseFirst}
-              expiryStatus={
-                entry.expiryStatus || formatExpiryStatus(entry.expiryDate)
-              }
+              expiryDate={entry.expiryDate}
               onDecrement={() => onDecrement(entry.id)}
               onIncrement={() => onIncrement(entry.id)}
               onUseAll={() => onUseAll(entry.id)}
@@ -164,6 +279,10 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
               }
             />
           ))}
+          <TouchableOpacity style={styles.addMoreButton} onPress={onAddMore}>
+            <Ionicons name="add-circle-outline" size={22} color="#22C55E" />
+            <Text style={styles.addMoreButtonText}>Add More</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -194,12 +313,25 @@ const styles = StyleSheet.create({
   itemInfoContainer: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
   iconContainer: {
     marginRight: 12,
+    position: "relative",
+  },
+  statusDot: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    bottom: -2,
+    right: -2,
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
   },
   itemInfo: {
     justifyContent: "center",
+    flex: 1,
   },
   itemName: {
     fontSize: 16,
@@ -207,9 +339,29 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginBottom: 2,
   },
+  quantityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   entryCount: {
     fontSize: 14,
     color: "#6B7280",
+  },
+  quantityIndicatorContainer: {
+    flexDirection: "row",
+    height: 6,
+    width: 50,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginLeft: 8,
+  },
+  quantityBlock: {
+    height: "100%",
+    width: "10%", // 10% for each of 10 blocks
+    backgroundColor: "#22C55E",
+    marginRight: 1,
   },
   headerActions: {
     flexDirection: "row",
@@ -221,6 +373,21 @@ const styles = StyleSheet.create({
   entriesContainer: {
     paddingHorizontal: 12,
     paddingBottom: 12,
+  },
+  addMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    marginTop: 8,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 8,
+  },
+  addMoreButtonText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#22C55E",
   },
 });
 

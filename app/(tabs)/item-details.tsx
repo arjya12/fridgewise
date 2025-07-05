@@ -69,48 +69,18 @@ export default function ItemDetailsScreen() {
     try {
       setLoading(true);
       // In a real app, this would fetch from your backend
-      // For now, let's create mock data based on the ID
-      if (typeof id === "string" && id.includes("chicken")) {
-        setItemName("Chicken Breast");
-        setLocation("fridge");
+      // For now, we'll show an empty state since this is a placeholder screen
 
-        // Create sample entries for chicken
-        const mockEntries: ItemEntry[] = [
-          {
-            id: "1",
-            quantity: 3,
-            expiryDate: new Date(Date.now() + 2 * 86400000).toISOString(), // 2 days from now
-            addedDate: new Date().toISOString(),
-            isUseFirst: true,
-          },
-        ];
+      // TODO: Implement actual data loading from your backend/database
+      // const itemData = await fetchItemDetails(id);
+      // setItemName(itemData.name);
+      // setLocation(itemData.location);
+      // setEntries(itemData.entries);
 
-        setEntries(mockEntries);
-      } else {
-        // Default to milk for other IDs
-        setItemName("Milk");
-        setLocation("fridge");
-
-        // Create sample entries
-        const mockEntries: ItemEntry[] = [
-          {
-            id: "1",
-            quantity: 3,
-            expiryDate: new Date(Date.now() + 86400000).toISOString(), // tomorrow
-            addedDate: new Date().toISOString(),
-            isUseFirst: true,
-          },
-          {
-            id: "2",
-            quantity: 1,
-            expiryDate: new Date(Date.now() + 3 * 86400000).toISOString(), // 3 days from now
-            addedDate: new Date().toISOString(),
-            isUseFirst: false,
-          },
-        ];
-
-        setEntries(mockEntries);
-      }
+      // For now, show empty state
+      setItemName("Item");
+      setLocation("fridge");
+      setEntries([]);
     } catch (error: any) {
       Alert.alert("Error", error.message);
     } finally {

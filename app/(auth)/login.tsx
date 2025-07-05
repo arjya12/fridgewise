@@ -1,18 +1,19 @@
 // app/(auth)/login.tsx
+import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -47,55 +48,89 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.modalContainer}>
-      <TouchableOpacity style={styles.closeButton} onPress={() => router.replace('/(auth)/welcome')} accessibilityLabel="Close login">
-        <Ionicons name="close" size={28} color="#197C47" />
-      </TouchableOpacity>
+    <SafeAreaWrapper usePadding edges={["top"]}>
+      <View style={styles.modalContainer}>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => router.replace("/(auth)/welcome")}
+          accessibilityLabel="Close login"
+        >
+          <Ionicons name="close" size={28} color="#197C47" />
+        </TouchableOpacity>
         <View style={styles.card}>
-        <Text style={styles.heading}>Sign in to FridgeWise</Text>
+          <Text style={styles.heading}>Sign in to FridgeWise</Text>
           <View style={styles.form}>
             {/* Email Field */}
-          <View style={[styles.inputGroup, emailFocused && styles.inputGroupFocused]}>
-            <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-              placeholder="Email address"
-                  placeholderTextColor="#737373"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  editable={!loading}
-              accessibilityLabel="Email input"
-              onFocus={() => setEmailFocused(true)}
-              onBlur={() => setEmailFocused(false)}
-                />
-              </View>
+            <View
+              style={[
+                styles.inputGroup,
+                emailFocused && styles.inputGroupFocused,
+              ]}
+            >
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color="#9CA3AF"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Email address"
+                placeholderTextColor="#737373"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!loading}
+                accessibilityLabel="Email input"
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
+              />
+            </View>
             {/* Password Field */}
-          <View style={[styles.inputGroup, passwordFocused && styles.inputGroupFocused]}>
-            <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-              placeholder="Password"
-                  placeholderTextColor="#737373"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  editable={!loading}
-              accessibilityLabel="Password input"
-              onFocus={() => setPasswordFocused(true)}
-              onBlur={() => setPasswordFocused(false)}
+            <View
+              style={[
+                styles.inputGroup,
+                passwordFocused && styles.inputGroupFocused,
+              ]}
+            >
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#9CA3AF"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#737373"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                editable={!loading}
+                accessibilityLabel="Password input"
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+                accessibilityLabel={
+                  showPassword ? "Hide password" : "Show password"
+                }
+              >
+                <Ionicons
+                  name={showPassword ? "eye-outline" : "eye-off-outline"}
+                  size={20}
+                  color="#9CA3AF"
                 />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeIcon}
-              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                >
-              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
+            </View>
             {/* Forgot Password */}
-          <TouchableOpacity style={styles.forgotPassword} accessibilityRole="button">
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              accessibilityRole="button"
+            >
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </TouchableOpacity>
             {/* Sign In Button */}
@@ -103,8 +138,8 @@ export default function LoginScreen() {
               style={[styles.button, loading && styles.buttonDisabled]}
               onPress={handleLogin}
               disabled={loading}
-            accessibilityRole="button"
-            accessibilityLabel="Sign in"
+              accessibilityRole="button"
+              accessibilityLabel="Sign in"
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -114,26 +149,27 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
         </View>
-    </View>
+      </View>
+    </SafeAreaWrapper>
   );
 }
 
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 24, 37, 0.85)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(16, 24, 37, 0.85)",
   },
   closeButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 40,
     right: 24,
     zIndex: 10,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 4,
-    shadowColor: '#197C47',
+    shadowColor: "#197C47",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 8,

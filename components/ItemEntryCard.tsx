@@ -1,4 +1,5 @@
-import { FontAwesome5, Ionicons } from "@expo/vector-icons";
+import { formatExpiry } from "@/utils/formatExpiry";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useRef, useState } from "react";
 import {
   Dimensions,
@@ -12,7 +13,7 @@ import ActionMenu from "./ActionMenu";
 type ItemEntryCardProps = {
   quantity: number;
   isUseFirst?: boolean;
-  expiryStatus?: string;
+  expiryDate?: string;
   onDecrement: () => void;
   onIncrement: () => void;
   onUseAll: () => void;
@@ -27,7 +28,7 @@ type ItemEntryCardProps = {
 const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
   quantity,
   isUseFirst = false,
-  expiryStatus,
+  expiryDate,
   onDecrement,
   onIncrement,
   onUseAll,
@@ -35,6 +36,9 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
   onEditPress,
   onDeletePress,
 }) => {
+  const expiryStatus = formatExpiry(expiryDate);
+  const { color, backgroundColor, borderColor, iconColor } =
+    getExpiryColors(expiryStatus);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const optionsButtonRef = useRef<View>(null);
@@ -85,20 +89,20 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor }]}>
       <View style={styles.topRow}>
         <View style={styles.quantitySection}>
-          <FontAwesome5
-            name="bolt"
-            size={14}
-            color="#F59E0B"
-            style={styles.boltIcon}
-          />
           <Text style={styles.quantityText}>{quantity}</Text>
         </View>
 
         {isUseFirst && (
           <View style={styles.useFirstContainer}>
+            <Ionicons
+              name="alert-circle"
+              size={12}
+              color="#92400E"
+              style={styles.useFirstIcon}
+            />
             <Text style={styles.useFirstText}>Use First</Text>
           </View>
         )}
@@ -106,14 +110,19 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
 
       <View style={styles.bottomRow}>
         {expiryStatus && (
-          <View style={styles.expiryBadge}>
+          <View
+            style={[
+              styles.expiryBadge,
+              { backgroundColor: borderColor, borderColor },
+            ]}
+          >
             <Ionicons
               name="alert-circle"
               size={12}
-              color="#DC2626"
+              color={iconColor}
               style={styles.expiryIcon}
             />
-            <Text style={styles.expiryText}>{expiryStatus}</Text>
+            <Text style={[styles.expiryText, { color }]}>{expiryStatus}</Text>
           </View>
         )}
 
@@ -170,6 +179,39 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
   );
 };
 
+const getExpiryColors = (status: string) => {
+  if (status.includes("Expired")) {
+    return {
+      color: "#991B1B",
+      backgroundColor: "#FEE2E2",
+      borderColor: "#FECACA",
+      iconColor: "#DC2626",
+    };
+  }
+  if (status.includes("Today") || status.includes("Tomorrow")) {
+    return {
+      color: "#9A3412",
+      backgroundColor: "#FFEDD5",
+      borderColor: "#FED7AA",
+      iconColor: "#F97316",
+    };
+  }
+  if (status.includes("days")) {
+    return {
+      color: "#92400E",
+      backgroundColor: "#FEF3C7",
+      borderColor: "#FDE68A",
+      iconColor: "#FBBF24",
+    };
+  }
+  return {
+    color: "#6B7280",
+    backgroundColor: "#F3F4F6",
+    borderColor: "#E5E7EB",
+    iconColor: "#9CA3AF",
+  };
+};
+
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "#FFFBEB",
@@ -192,8 +234,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  boltIcon: {
-    marginRight: 6,
+  useFirstIcon: {
+    marginRight: 4,
   },
   quantityText: {
     fontSize: 20,
@@ -203,8 +245,12 @@ const styles = StyleSheet.create({
   useFirstContainer: {
     backgroundColor: "#FEF3C7",
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FBBF24",
   },
   useFirstText: {
     fontSize: 12,
@@ -219,10 +265,10 @@ const styles = StyleSheet.create({
   expiryBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FEE2E2",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
+    borderWidth: 1,
   },
   expiryIcon: {
     marginRight: 4,
@@ -230,7 +276,6 @@ const styles = StyleSheet.create({
   expiryText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#DC2626",
   },
   controlsContainer: {
     flexDirection: "row",
@@ -256,21 +301,19 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 8,
   },
   controlButtonText: {
-    fontSize: 20,
-    color: "#374151",
-    fontWeight: "400",
-    lineHeight: 20,
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#4B5563",
+    lineHeight: 22,
   },
   useAllButton: {
+    paddingHorizontal: 12,
     height: 36,
-    paddingHorizontal: 16,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#EF4444",
-    backgroundColor: "white",
+    backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 8,
@@ -278,11 +321,12 @@ const styles = StyleSheet.create({
   useAllButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#EF4444",
+    color: "#4B5563",
   },
   optionsButton: {
-    width: 30,
+    width: 36,
     height: 36,
+    borderRadius: 6,
     justifyContent: "center",
     alignItems: "center",
   },

@@ -1,12 +1,7 @@
-import ItemGroupCard from "@/components/ItemGroupCard";
-import { useAuth } from "@/contexts/AuthContext";
-import { useColorScheme } from "@/hooks/useColorScheme";
-import { FoodItem } from "@/lib/supabase";
-import { foodItemsService } from "@/services/foodItems";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -21,6 +16,20 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import AchievementCard from "@/components/AchievementCard";
+import AnimatedCounter from "@/components/AnimatedCounter";
+import AnimatedItemGroupCard from "@/components/AnimatedItemGroupCard";
+import EmptyStateView from "@/components/EmptyStateView";
+import InsightsCarousel from "@/components/InsightsCarousel";
+import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import TipCard from "@/components/TipCard";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSettings } from "@/contexts/SettingsContext";
+import { useTips } from "@/contexts/TipsContext";
+import { useColorScheme } from "@/hooks/useColorScheme";
+import { FoodItem } from "@/lib/supabase";
+import { foodItemsService } from "@/services/foodItems";
 
 const { width, height } = Dimensions.get("window");
 
@@ -101,6 +110,19 @@ type ItemGroup = {
   entries: ItemEntry[];
 };
 
+// Helper function to calculate days until expiry
+const getDaysUntilExpiry = (expiryDate?: string): number | undefined => {
+  if (!expiryDate) return undefined;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const expiry = new Date(expiryDate);
+  return Math.ceil(
+    (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+};
+
 export default function InventoryScreen() {
   const [items, setItems] = useState<FoodItem[]>([]);
   const [itemGroups, setItemGroups] = useState<ItemGroup[]>([]);
@@ -108,9 +130,15 @@ export default function InventoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<"all" | "fridge" | "shelf">("fridge");
   const [searchText, setSearchText] = useState("");
+  const [wastePercentage, setWastePercentage] = useState(15); // Default value, should be calculated from actual data
+  const [mostConsumedCategory, setMostConsumedCategory] = useState("");
+  const [newItemGroups, setNewItemGroups] = useState<Set<string>>(new Set());
+  const prevItemGroupsRef = useRef<ItemGroup[]>([]);
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const { user } = useAuth();
+  const { helpfulTips } = useSettings();
+  const { currentTip } = useTips();
 
   // State for edit modal
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -123,23 +151,72 @@ export default function InventoryScreen() {
     location: "fridge" | "shelf";
   } | null>(null);
 
-  // Calculate counts
-  const fridgeCount = items.filter((item) => item.location === "fridge").length;
-  const shelfCount = items.filter((item) => item.location === "shelf").length;
+  // State for filtered groups and search results
+  const [filteredGroups, setFilteredGroups] = useState<ItemGroup[]>([]);
+  const [hasFilteredResults, setHasFilteredResults] = useState(true);
 
-  // Calculate expiring items
-  const today = new Date();
-  const expiringItems = items.filter((item) => {
-    if (!item.expiry_date) return false;
-    const expiryDate = new Date(item.expiry_date);
-    const daysUntilExpiry = Math.floor(
-      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  const {
+    itemGroups: allItemGroups,
+    expiringItems,
+    lowStockGroups,
+    fridgeCount,
+    shelfCount,
+  } = useMemo(() => {
+    // Group items by name
+    const grouped = items.reduce<{ [key: string]: ItemGroup }>((acc, item) => {
+      if (!acc[item.name]) {
+        acc[item.name] = { name: item.name, entries: [] };
+      }
+
+      const daysUntilExpiry = getDaysUntilExpiry(item.expiry_date);
+      // Show "Use First" only for items expiring in 0-3 days
+      const isUseFirst =
+        daysUntilExpiry !== undefined &&
+        daysUntilExpiry >= 0 &&
+        daysUntilExpiry <= 3;
+
+      acc[item.name].entries.push({
+        id: item.id,
+        quantity: item.quantity,
+        expiryDate: item.expiry_date,
+        isUseFirst, // Apply the new logic here
+        daysUntilExpiry,
+      });
+
+      return acc;
+    }, {});
+
+    // Sort entries within each group
+    Object.values(grouped).forEach((group) => {
+      group.entries.sort(
+        (a, b) => (a.daysUntilExpiry ?? 999) - (b.daysUntilExpiry ?? 999)
+      );
+    });
+
+    const allGroups = Object.values(grouped);
+
+    // Calculate stats
+    const expiring = items.filter((item) => {
+      const days = getDaysUntilExpiry(item.expiry_date);
+      return days !== undefined && days <= 3;
+    });
+
+    const lowStock = allGroups.filter(
+      (group) =>
+        group.entries.reduce((total, entry) => total + entry.quantity, 0) <= 2
     );
-    return daysUntilExpiry <= 3 && daysUntilExpiry >= 0;
-  });
 
-  // Calculate low stock groups (for demo purposes, just count items with quantity <= 2)
-  const lowStockGroups = items.filter((item) => item.quantity <= 2).length;
+    const fridge = items.filter((item) => item.location === "fridge").length;
+    const shelf = items.filter((item) => item.location === "shelf").length;
+
+    return {
+      itemGroups: allGroups,
+      expiringItems: expiring,
+      lowStockGroups: lowStock.length,
+      fridgeCount: fridge,
+      shelfCount: shelf,
+    };
+  }, [items]);
 
   useEffect(() => {
     if (!user) {
@@ -149,93 +226,132 @@ export default function InventoryScreen() {
     loadItems();
   }, [user, filter]);
 
-  // Group items by name whenever items change
+  // Effect to filter items based on search text
   useEffect(() => {
-    const groupedItems: { [key: string]: ItemEntry[] } = {};
+    if (searchText.trim() === "") {
+      setFilteredGroups(allItemGroups);
+      setHasFilteredResults(allItemGroups.length > 0);
+    } else {
+      const filtered = allItemGroups.filter((group) =>
+        group.name.toLowerCase().includes(searchText.toLowerCase())
+      );
+      setFilteredGroups(filtered);
+      setHasFilteredResults(filtered.length > 0);
+    }
+  }, [searchText, allItemGroups]);
 
-    items.forEach((item) => {
-      if (!groupedItems[item.name]) {
-        groupedItems[item.name] = [];
-      }
+  // Effect to filter items based on location filter
+  useEffect(() => {
+    let filtered = [...allItemGroups];
 
-      // Calculate days until expiry for each item
-      let daysUntilExpiry: number | undefined;
-      let isUseFirst = false;
-      let expiryStatus: string | undefined;
-
-      if (item.expiry_date) {
-        const expiryDate = new Date(item.expiry_date);
-        daysUntilExpiry = Math.floor(
-          (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    // Apply location filter
+    if (filter !== "all") {
+      filtered = allItemGroups.filter((group) => {
+        // Check if any entry in the group belongs to the selected location
+        const item = items.find(
+          (item) => item.name === group.name && item.location === filter
         );
-
-        // Set isUseFirst flag for items expiring within 3 days
-        isUseFirst = daysUntilExpiry <= 3 && daysUntilExpiry >= 0;
-
-        // Format expiry status for display
-        if (daysUntilExpiry < 0) {
-          expiryStatus = "Expired";
-        } else if (daysUntilExpiry === 0) {
-          expiryStatus = "Today";
-        } else if (daysUntilExpiry === 1) {
-          expiryStatus = "Tomorrow";
-        } else if (daysUntilExpiry <= 7) {
-          expiryStatus = `${daysUntilExpiry} days`;
-        }
-      }
-
-      groupedItems[item.name].push({
-        id: item.id,
-        quantity: item.quantity,
-        expiryDate: item.expiry_date,
-        isUseFirst: isUseFirst,
-        daysUntilExpiry: daysUntilExpiry,
-        expiryStatus: expiryStatus,
+        return item !== undefined;
       });
-    });
+    }
 
-    // Sort entries within each group by expiry date (earliest first)
-    Object.keys(groupedItems).forEach((name) => {
-      groupedItems[name].sort((a, b) => {
-        if (!a.expiryDate) return 1;
-        if (!b.expiryDate) return -1;
-        return (
-          new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
-        );
-      });
+    // Apply search filter
+    if (searchText.trim() !== "") {
+      filtered = filtered.filter((group) =>
+        group.name.toLowerCase().includes(searchText.toLowerCase())
+      );
+    }
 
-      // Mark only the earliest expiring item as "Use First"
-      if (groupedItems[name].length > 0) {
-        // Reset all to false first
-        groupedItems[name].forEach((entry) => {
-          entry.isUseFirst = false;
-        });
+    setFilteredGroups(filtered);
+    setHasFilteredResults(filtered.length > 0);
+  }, [filter, searchText, allItemGroups, items]);
 
-        // Find the earliest expiring item that is not yet expired
-        const earliestValidEntry = groupedItems[name].find(
-          (entry) =>
-            entry.daysUntilExpiry !== undefined && entry.daysUntilExpiry >= 0
-        );
+  // Clear search handler
+  const handleClearSearch = () => {
+    setSearchText("");
+  };
 
-        if (earliestValidEntry) {
-          earliestValidEntry.isUseFirst = true;
-        }
+  // Track new item groups for animation
+  useEffect(() => {
+    const prevItemNames = new Set(
+      prevItemGroupsRef.current.map((group) => group.name)
+    );
+    const currentItemNames = new Set(allItemGroups.map((group) => group.name));
+
+    // Find new item groups that weren't in the previous render
+    const newItems = new Set<string>();
+    currentItemNames.forEach((name) => {
+      if (!prevItemNames.has(name)) {
+        newItems.add(name);
       }
     });
 
-    const groups: ItemGroup[] = Object.keys(groupedItems).map((name) => ({
-      name,
-      entries: groupedItems[name],
-    }));
+    if (newItems.size > 0) {
+      setNewItemGroups(newItems);
 
-    setItemGroups(groups);
-  }, [items]);
+      // Clear the new items after animation (3 seconds)
+      const timer = setTimeout(() => {
+        setNewItemGroups(new Set());
+      }, 3000);
 
+      return () => clearTimeout(timer);
+    }
+
+    // Update the ref for the next comparison
+    prevItemGroupsRef.current = [...allItemGroups];
+  }, [allItemGroups]);
+
+  // Handle item press in the carousel
+  const handleItemPress = (itemId: string) => {
+    // Find the item group that contains this item
+    const group = allItemGroups.find((g) =>
+      g.entries.some((entry) => entry.id === itemId)
+    );
+
+    if (group) {
+      // Scroll to the item group (this would require additional implementation)
+      // For now, we'll just log it
+      console.log(`Scrolling to item: ${group.name}`);
+
+      // You could also navigate to a details page
+      // router.push({
+      //   pathname: "/(tabs)/item-details",
+      //   params: { id: itemId },
+      // });
+    }
+  };
+
+  // Load usage statistics
+  const loadUsageStats = async () => {
+    try {
+      // Get the current date
+      const today = new Date();
+
+      // Get the date from 7 days ago
+      const lastWeek = new Date();
+      lastWeek.setDate(today.getDate() - 7);
+
+      // For now, we'll use placeholder data since getUsageStats isn't implemented
+      // In a real implementation, you would call the actual service
+      // const stats = await foodItemsService.getUsageStats(lastWeek, today);
+
+      // Update state with the statistics
+      setWastePercentage(15); // Placeholder value
+      setMostConsumedCategory("dairy products"); // Placeholder value
+    } catch (error: any) {
+      console.error("Error loading usage statistics:", error);
+    }
+  };
+
+  // Update the loadItems function to also load usage statistics
   const loadItems = async () => {
     try {
-      const location = filter === "all" ? undefined : filter;
-      const data = await foodItemsService.getItems(location);
+      setLoading(true);
+      const data = await foodItemsService.getItems();
       setItems(data);
+
+      // Also load usage statistics
+      await loadUsageStats();
     } catch (error: any) {
       Alert.alert("Error", error.message);
     } finally {
@@ -304,7 +420,7 @@ export default function InventoryScreen() {
   const handleAddMore = (itemName: string) => {
     router.push({
       pathname: "/(tabs)/add",
-      params: { itemName },
+      params: { name: itemName },
     });
   };
 
@@ -385,210 +501,302 @@ export default function InventoryScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Background gradient */}
-      <LinearGradient
-        colors={["#FFFFFF", "#FAFAFA"]}
-        style={StyleSheet.absoluteFillObject}
-      />
+    <SafeAreaWrapper usePadding edges={["top"]}>
+      <View style={styles.container}>
+        {/* Background gradient */}
+        <LinearGradient
+          colors={["#FFFFFF", "#FAFAFA"]}
+          style={StyleSheet.absoluteFillObject}
+        />
 
-      {/* Main content */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* Status summary */}
-        <EnhancedText style={styles.statusText}>
-          {expiringItems.length} items expiring soon, {lowStockGroups} groups
-          low stock
-        </EnhancedText>
-
-        {/* Search bar */}
-        <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={18}
-            color="#BBBBBB"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search your inventory.."
-            placeholderTextColor="#BBBBBB"
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-        </View>
-
-        {/* Urgent alert card */}
-        <View style={[styles.card, styles.urgentCard]}>
-          <MaterialIcons
-            name="warning"
-            size={22}
-            color="#FF3B30"
-            style={styles.cardIcon}
-          />
-          <View style={styles.cardContent}>
-            <EnhancedText style={styles.urgentCardTitle}>
-              Urgent: Items Expiring Soon
+        {/* Main content */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+        >
+          {/* Status summary with animated counters */}
+          <View style={styles.statusTextContainer}>
+            <AnimatedCounter
+              value={expiringItems.length}
+              style={styles.statusTextHighlight}
+            />
+            <EnhancedText style={styles.statusText}>
+              {" "}
+              items expiring soon,{" "}
             </EnhancedText>
-            <EnhancedText style={styles.urgentCardSubtitle}>
-              {expiringItems.length} items need immediate attention
+            <AnimatedCounter
+              value={lowStockGroups}
+              style={styles.statusTextHighlight}
+            />
+            <EnhancedText style={styles.statusText}>
+              {" "}
+              groups low stock
             </EnhancedText>
           </View>
-        </View>
 
-        {/* Low stock alert card */}
-        <View style={[styles.card, styles.lowStockCard]}>
-          <MaterialIcons
-            name="inventory"
-            size={22}
-            color="#FF9500"
-            style={styles.cardIcon}
-          />
-          <View style={styles.cardContent}>
-            <EnhancedText style={styles.lowStockCardTitle}>
-              Low Stock Alert
-            </EnhancedText>
-            <EnhancedText style={styles.lowStockCardSubtitle}>
-              {lowStockGroups} groups running low
-            </EnhancedText>
+          {/* Search bar */}
+          <View style={styles.searchContainer}>
+            <Ionicons
+              name="search"
+              size={18}
+              color="#BBBBBB"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search your inventory.."
+              placeholderTextColor="#BBBBBB"
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity onPress={handleClearSearch}>
+                <Ionicons name="close-circle" size={18} color="#BBBBBB" />
+              </TouchableOpacity>
+            )}
           </View>
-        </View>
 
-        {/* Tip card */}
-        <View style={[styles.card, styles.tipCard]}>
-          <MaterialIcons
-            name="emoji-objects"
-            size={22}
-            color="#FFCC00"
-            style={styles.tipCardIcon}
-          />
-          <EnhancedText style={styles.tipText}>
-            Store bananas separately to prevent other fruits from ripening too
-            quickly
-          </EnhancedText>
-        </View>
-
-        {/* Expiring soon section */}
-        <View style={styles.expiringContainer}>
-          <MaterialIcons
-            name="bar-chart"
-            size={22}
-            color="#666666"
-            style={styles.expiringIconTop}
-          />
-          <Text style={styles.expiringCount}>{expiringItems.length}</Text>
-          <Text style={styles.expiringTitle}>Expiring Soon</Text>
-          <View style={styles.dotContainer}>
-            <View style={styles.dot} />
-            <View style={[styles.dot, styles.activeDot]} />
-            <View style={styles.dot} />
-          </View>
-        </View>
-
-        {/* Location filter */}
-        <View style={styles.locationFilterContainer}>
-          <Pressable
-            style={[
-              styles.locationButton,
-              filter === "all" && styles.activeLocationButton,
-            ]}
-            onPress={() => setFilter("all")}
-          >
-            <Ionicons
-              name="apps"
-              size={18}
-              color={filter === "all" ? "#333" : "#999"}
-              style={styles.locationIcon}
-            />
-            <EnhancedText
-              style={[
-                styles.locationText,
-                filter === "all" && styles.activeLocationText,
-              ]}
-            >
-              All
-            </EnhancedText>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.locationButton,
-              filter === "fridge" && styles.activeLocationButton,
-            ]}
-            onPress={() => setFilter("fridge")}
-          >
-            <Ionicons
-              name="home"
-              size={18}
-              color={filter === "fridge" ? "#333" : "#999"}
-              style={styles.locationIcon}
-            />
-            <EnhancedText
-              style={[
-                styles.locationText,
-                filter === "fridge" && styles.activeLocationText,
-              ]}
-            >
-              Fridge ({fridgeCount})
-            </EnhancedText>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.locationButton,
-              filter === "shelf" && styles.activeLocationButton,
-            ]}
-            onPress={() => setFilter("shelf")}
-          >
-            <Ionicons
-              name="cube"
-              size={18}
-              color={filter === "shelf" ? "#333" : "#999"}
-              style={styles.locationIcon}
-            />
-            <EnhancedText
-              style={[
-                styles.locationText,
-                filter === "shelf" && styles.activeLocationText,
-              ]}
-            >
-              Shelf ({shelfCount})
-            </EnhancedText>
-          </Pressable>
-        </View>
-
-        {/* Inventory items using ItemGroupCard components */}
-        <View style={styles.inventorySection}>
-          <EnhancedText style={styles.sectionTitle}>
-            Your Inventory
-          </EnhancedText>
-
-          {loading ? (
-            <View style={styles.emptyState}>
-              <EnhancedText style={styles.emptyStateText}>
-                Loading items...
-              </EnhancedText>
-            </View>
-          ) : itemGroups.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="cube-outline" size={48} color="#BBBBBB" />
-              <EnhancedText style={styles.emptyStateText}>
-                No items found. Add some items to your inventory!
-              </EnhancedText>
+          {/* Conditional rendering based on expiring items */}
+          {expiringItems.length > 0 ? (
+            // Urgent alert card with animated counter
+            <View style={[styles.card, styles.urgentCard]}>
+              <MaterialIcons
+                name="warning"
+                size={22}
+                color="#FF3B30"
+                style={styles.cardIcon}
+              />
+              <View style={styles.cardContent}>
+                <EnhancedText style={styles.urgentCardTitle}>
+                  Urgent: Items Expiring Soon
+                </EnhancedText>
+                <View style={styles.cardCountContainer}>
+                  <AnimatedCounter
+                    value={expiringItems.length}
+                    style={styles.urgentCardSubtitle}
+                  />
+                  <EnhancedText style={styles.urgentCardSubtitle}>
+                    {" items need immediate attention"}
+                  </EnhancedText>
+                </View>
+              </View>
             </View>
           ) : (
-            itemGroups
-              .filter((group) =>
-                group.name.toLowerCase().includes(searchText.toLowerCase())
-              )
-              .map((group) => (
-                <ItemGroupCard
+            // Achievement card for no expiring items
+            <AchievementCard
+              title="All Clear!"
+              message="No items are expiring soon. Great job managing your inventory!"
+              iconName="check-circle"
+              iconColor="#22C55E"
+            />
+          )}
+
+          {/* Low stock alert card with animated counter */}
+          <View style={[styles.card, styles.lowStockCard]}>
+            <MaterialIcons
+              name="inventory"
+              size={22}
+              color="#FF9500"
+              style={styles.cardIcon}
+            />
+            <View style={styles.cardContent}>
+              <EnhancedText style={styles.lowStockCardTitle}>
+                Low Stock Alert
+              </EnhancedText>
+              <View style={styles.cardCountContainer}>
+                <AnimatedCounter
+                  value={lowStockGroups}
+                  style={styles.lowStockCardSubtitle}
+                />
+                <EnhancedText style={styles.lowStockCardSubtitle}>
+                  {" groups running low"}
+                </EnhancedText>
+              </View>
+            </View>
+          </View>
+
+          {/* Tip card - conditionally render based on helpfulTips setting */}
+          {helpfulTips && currentTip && <TipCard tip={currentTip} />}
+
+          {/* Insights Carousel - replaces the static Expiring Soon card */}
+          <InsightsCarousel
+            expiringItems={expiringItems as FoodItem[]}
+            wastePercentage={wastePercentage}
+            mostConsumedCategory={mostConsumedCategory}
+            onItemPress={handleItemPress}
+          />
+
+          {/* Location filter with animated counters */}
+          <View style={styles.locationFilterContainer}>
+            <Pressable
+              style={[
+                styles.locationButton,
+                filter === "all" && styles.activeLocationButton,
+              ]}
+              onPress={() => setFilter("all")}
+            >
+              <Ionicons
+                name="apps"
+                size={18}
+                color={filter === "all" ? "#333" : "#999"}
+                style={styles.locationIcon}
+              />
+              <EnhancedText
+                style={[
+                  styles.locationText,
+                  filter === "all" && styles.activeLocationText,
+                ]}
+              >
+                All
+              </EnhancedText>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.locationButton,
+                filter === "fridge" && styles.activeLocationButton,
+              ]}
+              onPress={() => setFilter("fridge")}
+            >
+              <Ionicons
+                name="home"
+                size={18}
+                color={filter === "fridge" ? "#333" : "#999"}
+                style={styles.locationIcon}
+              />
+              <View style={styles.locationTextContainer}>
+                <EnhancedText
+                  style={[
+                    styles.locationText,
+                    filter === "fridge" && styles.activeLocationText,
+                  ]}
+                >
+                  Fridge (
+                </EnhancedText>
+                <AnimatedCounter
+                  value={fridgeCount}
+                  style={{
+                    fontSize: 14,
+                    color: filter === "fridge" ? "#333333" : "#A1A1AB",
+                    fontWeight: filter === "fridge" ? "600" : "500",
+                  }}
+                />
+                <EnhancedText
+                  style={[
+                    styles.locationText,
+                    filter === "fridge" && styles.activeLocationText,
+                  ]}
+                >
+                  )
+                </EnhancedText>
+              </View>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.locationButton,
+                filter === "shelf" && styles.activeLocationButton,
+              ]}
+              onPress={() => setFilter("shelf")}
+            >
+              <Ionicons
+                name="cube"
+                size={18}
+                color={filter === "shelf" ? "#333" : "#999"}
+                style={styles.locationIcon}
+              />
+              <View style={styles.locationTextContainer}>
+                <EnhancedText
+                  style={[
+                    styles.locationText,
+                    filter === "shelf" && styles.activeLocationText,
+                  ]}
+                >
+                  Shelf (
+                </EnhancedText>
+                <AnimatedCounter
+                  value={shelfCount}
+                  style={{
+                    fontSize: 14,
+                    color: filter === "shelf" ? "#333333" : "#A1A1AB",
+                    fontWeight: filter === "shelf" ? "600" : "500",
+                  }}
+                />
+                <EnhancedText
+                  style={[
+                    styles.locationText,
+                    filter === "shelf" && styles.activeLocationText,
+                  ]}
+                >
+                  )
+                </EnhancedText>
+              </View>
+            </Pressable>
+          </View>
+
+          {/* Inventory items section */}
+          <View style={styles.inventorySection}>
+            <EnhancedText style={styles.sectionTitle}>
+              Your Inventory
+            </EnhancedText>
+
+            {loading ? (
+              <EmptyStateView
+                title=""
+                message="Loading items..."
+                isLoading={true}
+              />
+            ) : allItemGroups.length === 0 ? (
+              <EmptyStateView
+                title="No Items Found"
+                message="Add some items to your inventory!"
+                icon="cube-outline"
+                actionLabel="Add Your First Item"
+                onAction={() => router.push("/(tabs)/add")}
+              />
+            ) : !hasFilteredResults && searchText.trim() !== "" ? (
+              <EmptyStateView
+                title="No Matching Items"
+                message={`No items found matching "${searchText}". Try adjusting your search or filters.`}
+                icon="search"
+                actionLabel="Clear Search"
+                onAction={handleClearSearch}
+                isFiltered={true}
+                searchQuery={searchText}
+              />
+            ) : !hasFilteredResults ? (
+              <EmptyStateView
+                title={`No ${
+                  filter === "shelf"
+                    ? "Shelf"
+                    : filter === "fridge"
+                    ? "Fridge"
+                    : ""
+                } Items Found`}
+                message={`You don't have any items in your ${
+                  filter === "shelf"
+                    ? "shelf"
+                    : filter === "fridge"
+                    ? "fridge"
+                    : "inventory"
+                }.`}
+                icon="cube-outline"
+                actionLabel={`Add ${
+                  filter === "shelf"
+                    ? "Shelf"
+                    : filter === "fridge"
+                    ? "Fridge"
+                    : ""
+                } Item`}
+                onAction={() => router.push("/(tabs)/add")}
+              />
+            ) : (
+              filteredGroups.map((group) => (
+                <AnimatedItemGroupCard
                   key={group.name}
                   itemName={group.name}
                   entries={group.entries.map((entry) => ({
@@ -600,22 +808,27 @@ export default function InventoryScreen() {
                   onUseAll={handleEntryUseAll}
                   onEditEntry={handleEditEntry}
                   onDeleteEntry={handleDeleteEntry}
+                  onAddMore={() => handleAddMore(group.name)}
                   initialExpanded={true}
+                  isNew={newItemGroups.has(group.name)}
                 />
               ))
-          )}
-        </View>
-      </ScrollView>
+            )}
+          </View>
+        </ScrollView>
 
-      {/* Add button (floating) - always visible */}
-      <TouchableOpacity
-        style={styles.floatingButton}
-        onPress={() => router.push("/(tabs)/add")}
-        accessibilityLabel="Add new item"
-      >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
-    </View>
+        {/* Add button (floating) - only show if there are items */}
+        {filteredGroups.length > 0 && (
+          <TouchableOpacity
+            style={styles.floatingButton}
+            onPress={() => router.push("/(tabs)/add")}
+            accessibilityLabel="Add new item"
+          >
+            <Ionicons name="add" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </SafeAreaWrapper>
   );
 }
 
@@ -630,13 +843,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 90,
+    paddingTop: 10, // Add some padding at the top for better spacing
+  },
+  statusTextContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 15,
   },
   statusText: {
     fontSize: 13,
     color: "#9BA4A9",
-    textAlign: "center",
-    marginVertical: 15,
     fontWeight: "500",
+  },
+  statusTextHighlight: {
+    fontSize: 13,
+    color: "#22C55E",
+    fontWeight: "700",
   },
   searchContainer: {
     flexDirection: "row",
@@ -820,21 +1043,24 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: 30,
     alignItems: "center",
+    justifyContent: "center",
+    marginTop: 40,
   },
   emptyStateText: {
-    fontSize: 15,
+    fontSize: 16,
     color: "#666666",
     textAlign: "center",
     fontWeight: "500",
+    marginTop: 16,
+    marginBottom: 24,
   },
   emptyStateButton: {
     backgroundColor: "#22C55E",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 28,
   },
   emptyStateButtonText: {
     color: "#FFFFFF",
@@ -862,5 +1088,13 @@ const styles = StyleSheet.create({
   foodIcon: {
     padding: 0,
     margin: 0,
+  },
+  cardCountContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  locationTextContainer: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 });

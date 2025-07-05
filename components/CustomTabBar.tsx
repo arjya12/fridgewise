@@ -26,7 +26,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({
   // Render a tab icon based on route name and focus state
   const renderIcon = (routeName: string, isFocused: boolean) => {
     if (routeName === "index") {
-      // Use the custom home icon for Dashboard
+      // Use the custom home icon for Home
       return (
         <Image
           source={require("../assets/images/figma/home_icon.png")}
@@ -42,12 +42,10 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({
     // For other tabs, use Ionicons
     let iconName: keyof typeof Ionicons.glyphMap = "home";
 
-    if (routeName === "demo") {
-      iconName = "cube";
-    } else if (routeName === "profile") {
-      iconName = "person";
-    } else if (routeName === "stats") {
+    if (routeName === "stats") {
       iconName = "settings";
+    } else if (routeName === "menu") {
+      iconName = "menu";
     }
 
     return (

@@ -20,7 +20,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     <View
       style={[
         styles.container,
-        { paddingTop: insets.top > 0 ? insets.top : 16 },
+        { paddingTop: Math.max(insets.top, 16) }, // Ensure minimum padding of 16
       ]}
     >
       <Image
