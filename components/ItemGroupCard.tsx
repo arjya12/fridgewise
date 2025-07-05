@@ -10,8 +10,8 @@ import {
   UIManager,
   View,
 } from "react-native";
-import FoodIcon from "./FoodIcon";
 import ItemEntryCard from "./ItemEntryCard";
+import RealisticFoodImage from "./RealisticFoodImage";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === "android") {
@@ -105,9 +105,48 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
     if (diffDays < 0) return "Expired";
     if (diffDays === 0) return "Today";
     if (diffDays === 1) return "Tomorrow";
-    if (diffDays <= 7) return `${diffDays} days`;
+    if (diffDays < 7) return `${diffDays} days`;
 
-    return undefined; // No urgent expiry badge needed
+    if (diffDays < 30) {
+      const diffWeeks = Math.floor(diffDays / 7);
+      return `${diffWeeks} week${diffWeeks > 1 ? "s" : ""}`;
+    }
+
+    if (diffDays < 365) {
+      const diffMonths = Math.floor(diffDays / 30.44);
+      return `${diffMonths} month${diffMonths > 1 ? "s" : ""}`;
+    }
+
+    const diffYears = Math.floor(diffDays / 365);
+    return `${diffYears} year${diffYears > 1 ? "s" : ""}`;
+  };
+
+  // Get earliest expiry status text for display in collapsed view
+  const getEarliestExpiryText = (): string | undefined => {
+    if (entries.length === 0) return undefined;
+
+    let earliestDays: number | undefined;
+    let earliestExpiryDate: Date | undefined;
+
+    for (const entry of entries) {
+      if (!entry.expiryDate) continue;
+
+      const expiryDate = new Date(entry.expiryDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const diffTime = expiryDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (earliestDays === undefined || diffDays < earliestDays) {
+        earliestDays = diffDays;
+        earliestExpiryDate = expiryDate;
+      }
+    }
+
+    if (earliestDays === undefined) return undefined;
+
+    return formatExpiryStatus(earliestExpiryDate?.toISOString());
   };
 
   // Get expiry status for the status dot
@@ -136,12 +175,12 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
 
     if (earliestDays < 0) return "expired";
     if (earliestDays === 0) return "today";
-    if (earliestDays <= 3) return "soon";
+    if (earliestDays <= 7) return "soon"; // Changed from 3 to 7 days for "soon"
     return "fresh";
   };
 
-  // Get the color for the status dot
-  const getStatusDotColor = (): string => {
+  // Get the color for the status dot and text
+  const getExpiryColor = (): string => {
     const status = getExpiryStatus();
 
     switch (status) {
@@ -152,7 +191,7 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
       case "soon":
         return "#FFCC00"; // Yellow
       case "fresh":
-        return "#34C759"; // Green
+        return "#6B7280"; // Neutral gray for fresh items
       default:
         return "transparent";
     }
@@ -212,25 +251,48 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
     );
   };
 
-  const statusDotColor = getStatusDotColor();
+  const expiryColor = getExpiryColor();
   const statusLabel = getStatusLabel();
+  const earliestExpiryText = getEarliestExpiryText();
 
   return (
     <View style={styles.container}>
       {/* Header with item info and toggle */}
       <View style={styles.header}>
-        <View style={styles.itemInfoContainer}>
+        <TouchableOpacity
+          style={styles.itemInfoContainer}
+          onPress={() => setExpanded(!expanded)}
+          accessibilityLabel={expanded ? "Collapse item" : "Expand item"}
+        >
           <View style={styles.iconContainer}>
-            <FoodIcon foodName={itemName} size={24} />
-            {statusDotColor !== "transparent" && (
-              <View
-                style={[styles.statusDot, { backgroundColor: statusDotColor }]}
-                accessibilityLabel={statusLabel}
-              />
-            )}
+            <RealisticFoodImage foodName={itemName} size={40} />
+            {/* Add a status indicator dot */}
+            <View
+              style={[styles.statusDot, { backgroundColor: getExpiryColor() }]}
+              accessibilityLabel={statusLabel}
+            />
           </View>
           <View style={styles.itemInfo}>
-            <Text style={styles.itemName}>{itemName}</Text>
+            <View style={styles.nameAndExpiryContainer}>
+              <Text style={styles.itemName}>{itemName}</Text>
+              {/* Only show expiry text in header when collapsed to avoid redundancy */}
+              {!expanded && earliestExpiryText && (
+                <Text
+                  style={[
+                    styles.expiryText,
+                    {
+                      color:
+                        getExpiryStatus() === "fresh"
+                          ? "#6B7280"
+                          : getExpiryColor(),
+                    },
+                  ]}
+                  accessibilityLabel={statusLabel}
+                >
+                  {earliestExpiryText}
+                </Text>
+              )}
+            </View>
             <View style={styles.quantityRow}>
               <Text style={styles.entryCount}>
                 {totalQuantity} total • {entries.length}{" "}
@@ -239,24 +301,36 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
               {renderQuantityIndicator()}
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.headerActions}>
+          {/* Add "Add More" button in collapsed view */}
+          {!expanded && (
+            <TouchableOpacity
+              style={styles.collapsedAddButton}
+              onPress={onAddMore}
+              accessibilityLabel={`Add more ${itemName}`}
+            >
+              <Ionicons name="add-circle-outline" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.toggleButton}
             onPress={() => setExpanded(!expanded)}
             accessibilityLabel={expanded ? "Collapse item" : "Expand item"}
           >
             <Animated.View
-              style={{ transform: [{ rotate: arrowRotationDegrees }] }}
+              style={{
+                transform: [{ rotate: arrowRotationDegrees }],
+              }}
             >
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+              <Ionicons name="chevron-forward" size={18} color="#6B7280" />
             </Animated.View>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Expandable entries container */}
+      {/* Entries (visible when expanded) */}
       {expanded && (
         <View style={styles.entriesContainer}>
           {entries.map((entry) => (
@@ -279,10 +353,6 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
               }
             />
           ))}
-          <TouchableOpacity style={styles.addMoreButton} onPress={onAddMore}>
-            <Ionicons name="add-circle-outline" size={22} color="#22C55E" />
-            <Text style={styles.addMoreButtonText}>Add More</Text>
-          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -293,22 +363,21 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: "white",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
-    overflow: "hidden",
     marginBottom: 16,
+    overflow: "hidden",
     shadowColor: "#0000001A",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    padding: 12,
-    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    padding: 16,
   },
   itemInfoContainer: {
     flexDirection: "row",
@@ -316,37 +385,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    marginRight: 12,
     position: "relative",
+    marginRight: 12,
   },
   statusDot: {
     position: "absolute",
+    bottom: 0,
+    right: 0,
     width: 10,
     height: 10,
     borderRadius: 5,
-    bottom: -2,
-    right: -2,
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: "white",
   },
   itemInfo: {
     justifyContent: "center",
     flex: 1,
   },
+  nameAndExpiryContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
+  },
   itemName: {
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
-    marginBottom: 2,
+    marginRight: 8,
+  },
+  expiryText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   quantityRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
   },
   entryCount: {
     fontSize: 14,
     color: "#6B7280",
+    flex: 1,
   },
   quantityIndicatorContainer: {
     flexDirection: "row",
@@ -366,9 +444,18 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
+    marginLeft: 8,
+  },
+  collapsedAddButton: {
+    padding: 8,
+    marginRight: 4,
   },
   toggleButton: {
     padding: 8,
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
   },
   entriesContainer: {
     paddingHorizontal: 12,
@@ -378,16 +465,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: "#F3F4F6",
     borderRadius: 8,
+    marginTop: 12,
   },
   addMoreButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     color: "#22C55E",
+    marginLeft: 6,
   },
 });
 

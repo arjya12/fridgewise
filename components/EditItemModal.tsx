@@ -1,7 +1,11 @@
+import { foodCategoryIcons } from "@/utils/foodCategoryIcons";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,15 +19,19 @@ type EditItemModalProps = {
   onUpdate: (itemData: {
     name: string;
     quantity: number;
-    daysUntilExpiry: number;
+    expiryDate: string;
     location: string;
+    category: string;
+    notes: string;
   }) => void;
   onDelete: () => void;
   itemData: {
     name: string;
     quantity: number;
-    daysUntilExpiry: number;
+    expiryDate: string;
     location: string;
+    category: string;
+    notes: string;
   };
 };
 
@@ -39,10 +47,12 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
 }) => {
   const [name, setName] = useState(itemData.name);
   const [quantity, setQuantity] = useState(itemData.quantity);
-  const [daysUntilExpiry, setDaysUntilExpiry] = useState(
-    itemData.daysUntilExpiry.toString()
-  );
+  const [expiryDate, setExpiryDate] = useState(new Date(itemData.expiryDate));
   const [location, setLocation] = useState(itemData.location);
+  const [category, setCategory] = useState(itemData.category);
+  const [notes, setNotes] = useState(itemData.notes);
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
 
   // Update local state when itemData changes
@@ -50,8 +60,10 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
     if (visible) {
       setName(itemData.name);
       setQuantity(itemData.quantity);
-      setDaysUntilExpiry(itemData.daysUntilExpiry.toString());
+      setExpiryDate(new Date(itemData.expiryDate));
       setLocation(itemData.location);
+      setCategory(itemData.category);
+      setNotes(itemData.notes || "");
     }
   }, [visible, itemData]);
 
@@ -69,13 +81,22 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
     onUpdate({
       name,
       quantity,
-      daysUntilExpiry: parseInt(daysUntilExpiry) || 0,
+      expiryDate: expiryDate.toISOString(),
       location,
+      category,
+      notes,
     });
     onClose();
   };
 
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || expiryDate;
+    setShowDatePicker(Platform.OS === "ios");
+    setExpiryDate(currentDate);
+  };
+
   const locationOptions = ["Fridge", "Shelf"];
+  const categoryOptions = Object.keys(foodCategoryIcons);
 
   return (
     <Modal
@@ -95,7 +116,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
           </View>
 
           {/* Form Content */}
-          <View style={styles.content}>
+          <ScrollView style={styles.content}>
             {/* Item Name */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Item Name</Text>
@@ -107,7 +128,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               />
             </View>
 
-            {/* Quantity & Days Until Expiry */}
+            {/* Quantity & Expiry Date */}
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
                 <Text style={styles.label}>Quantity</Text>
@@ -141,21 +162,24 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               </View>
 
               <View style={[styles.formGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Days Until Expiry</Text>
-                <TextInput
+                <Text style={styles.label}>Expiry Date</Text>
+                <TouchableOpacity
                   style={styles.textInput}
-                  value={daysUntilExpiry}
-                  onChangeText={(text) => {
-                    // Allow only numbers
-                    if (/^\d*$/.test(text)) {
-                      setDaysUntilExpiry(text);
-                    }
-                  }}
-                  keyboardType="numeric"
-                  placeholder="Days"
-                />
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text>{expiryDate.toLocaleDateString()}</Text>
+                </TouchableOpacity>
               </View>
             </View>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={expiryDate}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+              />
+            )}
 
             {/* Location */}
             <View style={styles.formGroup}>
@@ -200,7 +224,40 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
                 </View>
               )}
             </View>
-          </View>
+
+            {/* Category */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Category</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {categoryOptions.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.categoryButton,
+                      category === cat && styles.categoryButtonSelected,
+                    ]}
+                    onPress={() => setCategory(cat)}
+                  >
+                    <Text>
+                      {foodCategoryIcons[cat as keyof typeof foodCategoryIcons]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Notes */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Notes</Text>
+              <TextInput
+                style={[styles.textInput, styles.notesInput]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Add any notes..."
+                multiline
+              />
+            </View>
+          </ScrollView>
 
           {/* Action Buttons */}
           <View style={styles.actions}>
@@ -256,67 +313,67 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   formGroup: {
-    marginBottom: 16,
-  },
-  formRow: {
-    flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "500",
     color: "#374151",
     marginBottom: 8,
   },
   textInput: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#D1D5DB",
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
     color: "#111827",
+  },
+  notesInput: {
+    height: 100,
+    textAlignVertical: "top",
+  },
+  formRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   quantityContainer: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  quantityButton: {
-    width: 36,
-    height: 36,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#D1D5DB",
-    borderRadius: 6,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "white",
+  },
+  quantityButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   quantityButtonText: {
     fontSize: 20,
+    fontWeight: "600",
     color: "#374151",
-    fontWeight: "400",
   },
   quantityInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginHorizontal: 8,
+    paddingVertical: 12,
     fontSize: 16,
     color: "#111827",
     textAlign: "center",
+    fontWeight: "500",
   },
   dropdownButton: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#D1D5DB",
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   dropdownButtonText: {
     fontSize: 16,
@@ -324,38 +381,53 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     marginTop: 4,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 6,
     backgroundColor: "white",
-    elevation: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   dropdownItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
   dropdownItemSelected: {
-    backgroundColor: "#F3F8FF",
+    backgroundColor: "#F3F4F6",
   },
   dropdownItemText: {
     fontSize: 16,
-    color: "#374151",
+    color: "#111827",
   },
   dropdownItemTextSelected: {
-    color: "#2563EB",
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+  categoryButton: {
+    height: 60,
+    width: 60,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  categoryButtonSelected: {
+    borderColor: "#0066FF",
+    backgroundColor: "#EBF5FF",
   },
   actions: {
     flexDirection: "row",
+    justifyContent: "space-between",
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
+    backgroundColor: "#F9FAFB",
   },
   updateButton: {
     flex: 1,

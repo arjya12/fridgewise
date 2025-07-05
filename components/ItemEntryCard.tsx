@@ -1,14 +1,8 @@
 import { formatExpiry } from "@/utils/formatExpiry";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useRef, useState } from "react";
-import {
-  Dimensions,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import ActionMenu from "./ActionMenu";
+import React, { useRef } from "react";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 
 type ItemEntryCardProps = {
   quantity: number;
@@ -39,143 +33,131 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
   const expiryStatus = formatExpiry(expiryDate);
   const { color, backgroundColor, borderColor, iconColor } =
     getExpiryColors(expiryStatus);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const optionsButtonRef = useRef<View>(null);
-
-  const handleOptionsPress = () => {
-    if (optionsButtonRef.current) {
-      // We're directly measuring the three-dot button's position on screen
-      optionsButtonRef.current.measure(
-        (
-          x: number,
-          y: number,
-          width: number,
-          height: number,
-          pageX: number,
-          pageY: number
-        ) => {
-          // Get screen dimensions to ensure menu stays on screen
-          const screenWidth = Dimensions.get("window").width;
-
-          // Calculate the absolute position for the menu
-          // - Horizontal position: Align with the right side of the controls section
-          // - Vertical position: Place exactly 2px below the button's bottom edge
-          const menuX = Math.min(screenWidth - 170, pageX - 140);
-          const menuY = pageY + height + 2; // Exactly 2px below button
-
-          setMenuPosition({ x: menuX, y: menuY });
-          setMenuVisible(true);
-
-          // Also call the original onOptionsPress if provided
-          if (onOptionsPress) {
-            onOptionsPress();
-          }
-        }
-      );
-    }
-  };
+  const swipeableRef = useRef<Swipeable>(null);
 
   const handleEditPress = () => {
+    swipeableRef.current?.close();
     if (onEditPress) {
       onEditPress();
     }
   };
 
-  const handleDeletePress = () => {
-    if (onDeletePress) {
-      onDeletePress();
-    }
+  const showDeleteConfirmation = () => {
+    swipeableRef.current?.close();
+    Alert.alert(
+      "Delete Item",
+      "Are you sure you want to delete this item? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            if (onDeletePress) {
+              onDeletePress();
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const renderRightActions = () => {
+    return (
+      <View style={styles.rightActionsContainer}>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={handleEditPress}
+          accessibilityLabel="Edit item"
+        >
+          <Ionicons name="pencil" size={20} color="#FFFFFF" />
+          <Text style={styles.actionButtonText}>Edit</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={showDeleteConfirmation}
+          accessibilityLabel="Delete item"
+        >
+          <Ionicons name="trash" size={20} color="#FFFFFF" />
+          <Text style={styles.actionButtonText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor }]}>
-      <View style={styles.topRow}>
-        <View style={styles.quantitySection}>
-          <Text style={styles.quantityText}>{quantity}</Text>
-        </View>
-
-        {isUseFirst && (
-          <View style={styles.useFirstContainer}>
-            <Ionicons
-              name="alert-circle"
-              size={12}
-              color="#92400E"
-              style={styles.useFirstIcon}
-            />
-            <Text style={styles.useFirstText}>Use First</Text>
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={40}
+    >
+      <View style={[styles.container, { backgroundColor }]}>
+        <View style={styles.topRow}>
+          <View style={styles.quantitySection}>
+            <Text style={styles.quantityText}>{quantity}</Text>
           </View>
-        )}
-      </View>
 
-      <View style={styles.bottomRow}>
-        {expiryStatus && (
-          <View
-            style={[
-              styles.expiryBadge,
-              { backgroundColor: borderColor, borderColor },
-            ]}
-          >
-            <Ionicons
-              name="alert-circle"
-              size={12}
-              color={iconColor}
-              style={styles.expiryIcon}
-            />
-            <Text style={[styles.expiryText, { color }]}>{expiryStatus}</Text>
-          </View>
-        )}
-
-        <View style={styles.controlsContainer}>
-          <TouchableOpacity
-            style={styles.decrementButton}
-            onPress={onDecrement}
-            accessibilityLabel="Decrease quantity"
-          >
-            <Text style={styles.controlButtonText}>−</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.incrementButton}
-            onPress={onIncrement}
-            accessibilityLabel="Increase quantity"
-          >
-            <Text style={styles.controlButtonText}>+</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.useAllButton}
-            onPress={onUseAll}
-            accessibilityLabel="Use all"
-          >
-            <Text style={styles.useAllButtonText}>Use All</Text>
-          </TouchableOpacity>
-
-          {(onOptionsPress || onEditPress || onDeletePress) && (
-            <TouchableOpacity
-              style={styles.optionsButton}
-              onPress={handleOptionsPress}
-              accessibilityLabel="More options"
-            >
-              <View ref={optionsButtonRef} collapsable={false}>
-                <Ionicons name="ellipsis-vertical" size={16} color="#9CA3AF" />
-              </View>
-            </TouchableOpacity>
+          {isUseFirst && (
+            <View style={styles.useFirstContainer}>
+              <Ionicons
+                name="alert-circle"
+                size={12}
+                color="#92400E"
+                style={styles.useFirstIcon}
+              />
+              <Text style={styles.useFirstText}>Use First</Text>
+            </View>
           )}
         </View>
-      </View>
 
-      {/* Action Menu */}
-      {menuVisible && (
-        <ActionMenu
-          visible={menuVisible}
-          onClose={() => setMenuVisible(false)}
-          onEdit={handleEditPress}
-          onDelete={handleDeletePress}
-          position={menuPosition}
-        />
-      )}
-    </View>
+        <View style={styles.bottomRow}>
+          {expiryStatus && (
+            <View
+              style={[
+                styles.expiryBadge,
+                { backgroundColor: borderColor, borderColor },
+              ]}
+            >
+              <Ionicons
+                name="alert-circle"
+                size={12}
+                color={iconColor}
+                style={styles.expiryIcon}
+              />
+              <Text style={[styles.expiryText, { color }]}>{expiryStatus}</Text>
+            </View>
+          )}
+
+          <View style={styles.controlsContainer}>
+            <TouchableOpacity
+              style={styles.decrementButton}
+              onPress={onDecrement}
+              accessibilityLabel="Decrease quantity"
+            >
+              <Text style={styles.controlButtonText}>−</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.incrementButton}
+              onPress={onIncrement}
+              accessibilityLabel="Increase quantity"
+            >
+              <Text style={styles.controlButtonText}>+</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.useAllButton}
+              onPress={onUseAll}
+              accessibilityLabel="Use all"
+            >
+              <Text style={styles.useAllButtonText}>Use All</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Swipeable>
   );
 };
 
@@ -310,25 +292,43 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   useAllButton: {
-    paddingHorizontal: 12,
-    height: 36,
-    borderRadius: 6,
-    backgroundColor: "#F3F4F6",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#374151", // Consistent dark gray
+    marginLeft: 8,
   },
   useAllButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    color: "#4B5563",
+    color: "#FFFFFF", // White text for high contrast
   },
-  optionsButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 6,
+  rightActionsContainer: {
+    flexDirection: "row",
+    width: 160,
+    marginBottom: 12,
+  },
+  editButton: {
+    backgroundColor: "#0066FF",
     justifyContent: "center",
     alignItems: "center",
+    width: 80,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+  },
+  deleteButton: {
+    backgroundColor: "#DC2626",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  actionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 4,
   },
 });
 

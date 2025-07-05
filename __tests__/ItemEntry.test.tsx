@@ -2,13 +2,43 @@ import ItemEntryCard from "@/components/ItemEntryCard";
 import ItemGroupCard from "@/components/ItemGroupCard";
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
+import { Alert } from "react-native";
+
+// Mock the Swipeable component from react-native-gesture-handler
+jest.mock("react-native-gesture-handler", () => {
+  const RealComponent = jest.requireActual("react-native-gesture-handler");
+  const MockSwipeable = ({
+    children,
+    renderRightActions,
+  }: {
+    children: React.ReactNode;
+    renderRightActions: () => React.ReactNode;
+  }) => {
+    return (
+      <RealComponent.RectButton>
+        {children}
+        {/* Render the right actions for testing */}
+        <div data-testid="swipe-actions">{renderRightActions()}</div>
+      </RealComponent.RectButton>
+    );
+  };
+
+  return {
+    ...RealComponent,
+    Swipeable: MockSwipeable,
+  };
+});
+
+// Mock Alert.alert
+jest.spyOn(Alert, "alert").mockImplementation(() => {});
 
 describe("ItemEntryCard", () => {
   it("renders correctly with all elements", () => {
     const onDecrement = jest.fn();
     const onIncrement = jest.fn();
     const onUseAll = jest.fn();
-    const onOptionsPress = jest.fn();
+    const onEditPress = jest.fn();
+    const onDeletePress = jest.fn();
 
     const { getByText, getByLabelText } = render(
       <ItemEntryCard
@@ -20,7 +50,8 @@ describe("ItemEntryCard", () => {
         onDecrement={onDecrement}
         onIncrement={onIncrement}
         onUseAll={onUseAll}
-        onOptionsPress={onOptionsPress}
+        onEditPress={onEditPress}
+        onDeletePress={onDeletePress}
       />
     );
 
@@ -37,14 +68,16 @@ describe("ItemEntryCard", () => {
     expect(getByLabelText("Decrease quantity")).toBeTruthy();
     expect(getByLabelText("Increase quantity")).toBeTruthy();
     expect(getByLabelText("Use all")).toBeTruthy();
-    expect(getByLabelText("More options")).toBeTruthy();
+
+    // Check swipe actions are available
+    expect(getByLabelText("Edit item")).toBeTruthy();
+    expect(getByLabelText("Delete item")).toBeTruthy();
   });
 
   it("calls the correct functions when buttons are pressed", () => {
     const onDecrement = jest.fn();
     const onIncrement = jest.fn();
     const onUseAll = jest.fn();
-    const onOptionsPress = jest.fn();
 
     const { getByLabelText } = render(
       <ItemEntryCard
@@ -56,7 +89,6 @@ describe("ItemEntryCard", () => {
         onDecrement={onDecrement}
         onIncrement={onIncrement}
         onUseAll={onUseAll}
-        onOptionsPress={onOptionsPress}
       />
     );
 
@@ -73,11 +105,55 @@ describe("ItemEntryCard", () => {
     expect(onUseAll).toHaveBeenCalledTimes(1);
   });
 
+  it("calls the edit function when edit button is pressed", () => {
+    const onEditPress = jest.fn();
+
+    const { getByLabelText } = render(
+      <ItemEntryCard
+        quantity={2}
+        onDecrement={jest.fn()}
+        onIncrement={jest.fn()}
+        onUseAll={jest.fn()}
+        onEditPress={onEditPress}
+      />
+    );
+
+    // Press edit button
+    fireEvent.press(getByLabelText("Edit item"));
+    expect(onEditPress).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows confirmation dialog when delete button is pressed", () => {
+    const onDeletePress = jest.fn();
+
+    const { getByLabelText } = render(
+      <ItemEntryCard
+        quantity={2}
+        onDecrement={jest.fn()}
+        onIncrement={jest.fn()}
+        onUseAll={jest.fn()}
+        onDeletePress={onDeletePress}
+      />
+    );
+
+    // Press delete button
+    fireEvent.press(getByLabelText("Delete item"));
+
+    // Verify Alert.alert was called
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Delete Item",
+      "Are you sure you want to delete this item? This action cannot be undone.",
+      expect.arrayContaining([
+        expect.objectContaining({ text: "Cancel" }),
+        expect.objectContaining({ text: "Delete" }),
+      ])
+    );
+  });
+
   it('renders without "Use First" tag when isUseFirst is false', () => {
     const onDecrement = jest.fn();
     const onIncrement = jest.fn();
     const onUseAll = jest.fn();
-    const onOptionsPress = jest.fn();
 
     const { queryByText } = render(
       <ItemEntryCard
@@ -89,7 +165,6 @@ describe("ItemEntryCard", () => {
         onDecrement={onDecrement}
         onIncrement={onIncrement}
         onUseAll={onUseAll}
-        onOptionsPress={onOptionsPress}
       />
     );
 
@@ -100,7 +175,6 @@ describe("ItemEntryCard", () => {
     const onDecrement = jest.fn();
     const onIncrement = jest.fn();
     const onUseAll = jest.fn();
-    const onOptionsPress = jest.fn();
 
     const { queryByText } = render(
       <ItemEntryCard
@@ -110,7 +184,6 @@ describe("ItemEntryCard", () => {
         onDecrement={onDecrement}
         onIncrement={onIncrement}
         onUseAll={onUseAll}
-        onOptionsPress={onOptionsPress}
       />
     );
 

@@ -38,7 +38,7 @@ export default function TabLayout() {
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="add-circle" size={size} color={color} />
             ),
-            tabBarButton: () => null, // Hide this tab button
+            tabBarButton: () => null, // Hide this tab button as we have a custom center button
           }}
         />
 

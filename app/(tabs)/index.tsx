@@ -1,7 +1,13 @@
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   Dimensions,
@@ -17,11 +23,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import AchievementCard from "@/components/AchievementCard";
-import AnimatedCounter from "@/components/AnimatedCounter";
 import AnimatedItemGroupCard from "@/components/AnimatedItemGroupCard";
+import DashboardSummary from "@/components/DashboardSummary";
+import EditItemModal from "@/components/EditItemModal";
 import EmptyStateView from "@/components/EmptyStateView";
-import InsightsCarousel from "@/components/InsightsCarousel";
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import TipCard from "@/components/TipCard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +35,7 @@ import { useTips } from "@/contexts/TipsContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { FoodItem } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
+import { formatExpiry } from "@/utils/formatExpiry";
 
 const { width, height } = Dimensions.get("window");
 
@@ -136,20 +142,13 @@ export default function InventoryScreen() {
   const prevItemGroupsRef = useRef<ItemGroup[]>([]);
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const { user } = useAuth();
+  const { user, userProfile, getUserProfile } = useAuth();
   const { helpfulTips } = useSettings();
-  const { currentTip } = useTips();
+  const { currentTip, refreshTip } = useTips();
 
   // State for edit modal
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [currentEditItem, setCurrentEditItem] = useState<{
-    id: string;
-    groupName: string;
-    name: string;
-    quantity: number;
-    daysUntilExpiry: number;
-    location: "fridge" | "shelf";
-  } | null>(null);
+  const [currentEditItem, setCurrentEditItem] = useState<FoodItem | null>(null);
 
   // State for filtered groups and search results
   const [filteredGroups, setFilteredGroups] = useState<ItemGroup[]>([]);
@@ -218,13 +217,37 @@ export default function InventoryScreen() {
     };
   }, [items]);
 
-  useEffect(() => {
-    if (!user) {
-      router.replace("/(auth)/login");
-      return;
+  // Extract first name from full name or email
+  const getFirstName = () => {
+    if (userProfile?.full_name) {
+      // Extract first name from full name
+      return userProfile.full_name.split(" ")[0];
+    } else if (user?.email) {
+      // Use the part before @ in email
+      return user.email.split("@")[0];
     }
-    loadItems();
-  }, [user, filter]);
+    return undefined;
+  };
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        loadItems();
+        // Fetch user profile if not available
+        if (!userProfile) {
+          getUserProfile();
+        }
+
+        // Refresh the tip when the screen comes into focus
+        if (helpfulTips) {
+          refreshTip();
+        }
+      } else {
+        router.replace("/(auth)/login");
+      }
+    }, [user, filter, userProfile, helpfulTips])
+  );
 
   // Effect to filter items based on search text
   useEffect(() => {
@@ -428,76 +451,64 @@ export default function InventoryScreen() {
   const handleEditEntry = (itemId: string) => {
     const item = items.find((i) => i.id === itemId);
     if (item) {
-      // Calculate days until expiry
-      const expiryDate = item.expiry_date
-        ? new Date(item.expiry_date)
-        : new Date();
-      const today = new Date();
-      const diffTime = expiryDate.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      setCurrentEditItem({
-        id: itemId,
-        groupName: item.name,
-        name: item.name,
-        quantity: item.quantity,
-        daysUntilExpiry: diffDays,
-        location: item.location as "fridge" | "shelf",
-      });
+      setCurrentEditItem(item);
       setEditModalVisible(true);
     }
   };
 
   // Handle delete for an item entry
-  const handleDeleteEntry = (itemId: string) => {
-    Alert.alert("Delete Item", "Are you sure you want to delete this item?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await foodItemsService.deleteItem(itemId);
-            await loadItems(); // Reload items after deletion
-          } catch (error: any) {
-            Alert.alert("Error", error.message);
-          }
-        },
-      },
-    ]);
+  const handleDeleteEntry = async (itemId: string) => {
+    try {
+      setLoading(true);
+      await foodItemsService.deleteItem(itemId);
+      await loadItems(); // Refresh the list
+    } catch (error) {
+      console.error("Failed to delete item:", error);
+      Alert.alert("Error", "Failed to delete item.");
+    } finally {
+      setLoading(false);
+      setEditModalVisible(false); // Close modal if open
+      setCurrentEditItem(null);
+    }
   };
 
-  // Handle update from edit modal
   const handleUpdateItem = (updatedItemData: {
     name: string;
     quantity: number;
-    daysUntilExpiry: number;
+    expiryDate: string;
     location: string;
+    category: string;
+    notes: string;
   }) => {
-    if (currentEditItem) {
-      const updateItem = async () => {
-        try {
-          const expiryDate = new Date();
-          expiryDate.setDate(
-            expiryDate.getDate() + updatedItemData.daysUntilExpiry
-          );
+    if (!currentEditItem) return;
 
-          await foodItemsService.updateItem(currentEditItem.id, {
-            name: updatedItemData.name,
-            quantity: updatedItemData.quantity,
-            expiry_date: expiryDate.toISOString(),
-            location: updatedItemData.location as "fridge" | "shelf",
-          });
+    const updatePayload: Partial<FoodItem> = {
+      ...updatedItemData,
+      expiry_date: updatedItemData.expiryDate,
+      location: updatedItemData.location as "fridge" | "shelf",
+    };
 
-          setEditModalVisible(false);
-          await loadItems(); // Reload all items to reflect changes
-        } catch (error: any) {
-          Alert.alert("Error", error.message);
+    const updateItem = async () => {
+      try {
+        setLoading(true);
+        const updated = await foodItemsService.updateItem(
+          currentEditItem.id,
+          updatePayload
+        );
+        if (updated) {
+          // Invalidate and refetch
+          loadItems();
         }
-      };
-
-      updateItem();
-    }
+      } catch (error) {
+        console.error("Failed to update item:", error);
+        Alert.alert("Error", "Failed to update item.");
+      } finally {
+        setLoading(false);
+        setEditModalVisible(false);
+        setCurrentEditItem(null);
+      }
+    };
+    updateItem();
   };
 
   return (
@@ -518,232 +529,107 @@ export default function InventoryScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
           }
         >
-          {/* Status summary with animated counters */}
-          <View style={styles.statusTextContainer}>
-            <AnimatedCounter
-              value={expiringItems.length}
-              style={styles.statusTextHighlight}
-            />
-            <EnhancedText style={styles.statusText}>
-              {" "}
-              items expiring soon,{" "}
-            </EnhancedText>
-            <AnimatedCounter
-              value={lowStockGroups}
-              style={styles.statusTextHighlight}
-            />
-            <EnhancedText style={styles.statusText}>
-              {" "}
-              groups low stock
-            </EnhancedText>
-          </View>
-
-          {/* Search bar */}
-          <View style={styles.searchContainer}>
-            <Ionicons
-              name="search"
-              size={18}
-              color="#BBBBBB"
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search your inventory.."
-              placeholderTextColor="#BBBBBB"
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-            {searchText.length > 0 && (
-              <TouchableOpacity onPress={handleClearSearch}>
-                <Ionicons name="close-circle" size={18} color="#BBBBBB" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Conditional rendering based on expiring items */}
-          {expiringItems.length > 0 ? (
-            // Urgent alert card with animated counter
-            <View style={[styles.card, styles.urgentCard]}>
-              <MaterialIcons
-                name="warning"
-                size={22}
-                color="#FF3B30"
-                style={styles.cardIcon}
-              />
-              <View style={styles.cardContent}>
-                <EnhancedText style={styles.urgentCardTitle}>
-                  Urgent: Items Expiring Soon
-                </EnhancedText>
-                <View style={styles.cardCountContainer}>
-                  <AnimatedCounter
-                    value={expiringItems.length}
-                    style={styles.urgentCardSubtitle}
-                  />
-                  <EnhancedText style={styles.urgentCardSubtitle}>
-                    {" items need immediate attention"}
-                  </EnhancedText>
-                </View>
-              </View>
-            </View>
-          ) : (
-            // Achievement card for no expiring items
-            <AchievementCard
-              title="All Clear!"
-              message="No items are expiring soon. Great job managing your inventory!"
-              iconName="check-circle"
-              iconColor="#22C55E"
-            />
-          )}
-
-          {/* Low stock alert card with animated counter */}
-          <View style={[styles.card, styles.lowStockCard]}>
-            <MaterialIcons
-              name="inventory"
-              size={22}
-              color="#FF9500"
-              style={styles.cardIcon}
-            />
-            <View style={styles.cardContent}>
-              <EnhancedText style={styles.lowStockCardTitle}>
-                Low Stock Alert
-              </EnhancedText>
-              <View style={styles.cardCountContainer}>
-                <AnimatedCounter
-                  value={lowStockGroups}
-                  style={styles.lowStockCardSubtitle}
-                />
-                <EnhancedText style={styles.lowStockCardSubtitle}>
-                  {" groups running low"}
-                </EnhancedText>
-              </View>
-            </View>
-          </View>
+          {/* Unified Dashboard Summary */}
+          <DashboardSummary
+            expiringItems={expiringItems as FoodItem[]}
+            lowStockGroups={lowStockGroups}
+            wastePercentage={wastePercentage}
+            mostConsumedCategory={mostConsumedCategory}
+            userName={getFirstName()}
+            onItemPress={handleItemPress}
+          />
 
           {/* Tip card - conditionally render based on helpfulTips setting */}
           {helpfulTips && currentTip && <TipCard tip={currentTip} />}
 
-          {/* Insights Carousel - replaces the static Expiring Soon card */}
-          <InsightsCarousel
-            expiringItems={expiringItems as FoodItem[]}
-            wastePercentage={wastePercentage}
-            mostConsumedCategory={mostConsumedCategory}
-            onItemPress={handleItemPress}
-          />
-
-          {/* Location filter with animated counters */}
-          <View style={styles.locationFilterContainer}>
-            <Pressable
-              style={[
-                styles.locationButton,
-                filter === "all" && styles.activeLocationButton,
-              ]}
-              onPress={() => setFilter("all")}
-            >
-              <Ionicons
-                name="apps"
-                size={18}
-                color={filter === "all" ? "#333" : "#999"}
-                style={styles.locationIcon}
-              />
-              <EnhancedText
-                style={[
-                  styles.locationText,
-                  filter === "all" && styles.activeLocationText,
-                ]}
-              >
-                All
-              </EnhancedText>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.locationButton,
-                filter === "fridge" && styles.activeLocationButton,
-              ]}
-              onPress={() => setFilter("fridge")}
-            >
-              <Ionicons
-                name="home"
-                size={18}
-                color={filter === "fridge" ? "#333" : "#999"}
-                style={styles.locationIcon}
-              />
-              <View style={styles.locationTextContainer}>
-                <EnhancedText
-                  style={[
-                    styles.locationText,
-                    filter === "fridge" && styles.activeLocationText,
-                  ]}
-                >
-                  Fridge (
-                </EnhancedText>
-                <AnimatedCounter
-                  value={fridgeCount}
-                  style={{
-                    fontSize: 14,
-                    color: filter === "fridge" ? "#333333" : "#A1A1AB",
-                    fontWeight: filter === "fridge" ? "600" : "500",
-                  }}
-                />
-                <EnhancedText
-                  style={[
-                    styles.locationText,
-                    filter === "fridge" && styles.activeLocationText,
-                  ]}
-                >
-                  )
-                </EnhancedText>
-              </View>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.locationButton,
-                filter === "shelf" && styles.activeLocationButton,
-              ]}
-              onPress={() => setFilter("shelf")}
-            >
-              <Ionicons
-                name="cube"
-                size={18}
-                color={filter === "shelf" ? "#333" : "#999"}
-                style={styles.locationIcon}
-              />
-              <View style={styles.locationTextContainer}>
-                <EnhancedText
-                  style={[
-                    styles.locationText,
-                    filter === "shelf" && styles.activeLocationText,
-                  ]}
-                >
-                  Shelf (
-                </EnhancedText>
-                <AnimatedCounter
-                  value={shelfCount}
-                  style={{
-                    fontSize: 14,
-                    color: filter === "shelf" ? "#333333" : "#A1A1AB",
-                    fontWeight: filter === "shelf" ? "600" : "500",
-                  }}
-                />
-                <EnhancedText
-                  style={[
-                    styles.locationText,
-                    filter === "shelf" && styles.activeLocationText,
-                  ]}
-                >
-                  )
-                </EnhancedText>
-              </View>
-            </Pressable>
-          </View>
-
-          {/* Inventory items section */}
+          {/* Inventory items section with integrated search and filters */}
           <View style={styles.inventorySection}>
-            <EnhancedText style={styles.sectionTitle}>
-              Your Inventory
-            </EnhancedText>
+            {/* Unified inventory header with title and search */}
+            <View style={styles.inventoryHeaderContainer}>
+              <View style={styles.inventoryHeader}>
+                <Text style={styles.sectionTitle}>Your Inventory</Text>
+              </View>
 
+              {/* Search bar integrated with header */}
+              <View style={styles.searchContainer}>
+                <Ionicons
+                  name="search"
+                  size={18}
+                  color="#BBBBBB"
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search your inventory.."
+                  placeholderTextColor="#BBBBBB"
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={handleClearSearch}>
+                    <Ionicons name="close-circle" size={18} color="#BBBBBB" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Location filter buttons in a pill-style container */}
+            <View style={styles.filtersContainer}>
+              <View style={styles.locationFilterContainer}>
+                <Pressable
+                  style={[
+                    styles.locationButton,
+                    filter === "all" && styles.activeLocationButton,
+                  ]}
+                  onPress={() => setFilter("all")}
+                >
+                  <Text
+                    style={[
+                      styles.locationText,
+                      filter === "all" && styles.activeLocationText,
+                    ]}
+                  >
+                    All
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.locationButton,
+                    filter === "fridge" && styles.activeLocationButton,
+                  ]}
+                  onPress={() => setFilter("fridge")}
+                >
+                  <Text
+                    style={[
+                      styles.locationText,
+                      filter === "fridge" && styles.activeLocationText,
+                    ]}
+                  >
+                    Fridge ({fridgeCount})
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.locationButton,
+                    filter === "shelf" && styles.activeLocationButton,
+                  ]}
+                  onPress={() => setFilter("shelf")}
+                >
+                  <Text
+                    style={[
+                      styles.locationText,
+                      filter === "shelf" && styles.activeLocationText,
+                    ]}
+                  >
+                    Shelf ({shelfCount})
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Inventory items list */}
             {loading ? (
               <EmptyStateView
                 title=""
@@ -801,7 +687,7 @@ export default function InventoryScreen() {
                   itemName={group.name}
                   entries={group.entries.map((entry) => ({
                     ...entry,
-                    expiryStatus: entry.expiryStatus,
+                    expiryStatus: formatExpiry(entry.expiryDate),
                   }))}
                   onDecrement={handleEntryDecrement}
                   onIncrement={handleEntryIncrement}
@@ -817,16 +703,29 @@ export default function InventoryScreen() {
           </View>
         </ScrollView>
 
-        {/* Add button (floating) - only show if there are items */}
-        {filteredGroups.length > 0 && (
-          <TouchableOpacity
-            style={styles.floatingButton}
-            onPress={() => router.push("/(tabs)/add")}
-            accessibilityLabel="Add new item"
-          >
-            <Ionicons name="add" size={28} color="#FFFFFF" />
-          </TouchableOpacity>
+        {currentEditItem && (
+          <EditItemModal
+            visible={editModalVisible}
+            onClose={() => {
+              setEditModalVisible(false);
+              setCurrentEditItem(null);
+            }}
+            onUpdate={handleUpdateItem}
+            onDelete={() => handleDeleteEntry(currentEditItem.id)}
+            itemData={{
+              ...currentEditItem,
+              name: currentEditItem.name || "",
+              quantity: currentEditItem.quantity || 0,
+              expiryDate:
+                currentEditItem.expiry_date || new Date().toISOString(),
+              location: currentEditItem.location || "fridge",
+              category: currentEditItem.category || "Other",
+              notes: currentEditItem.notes || "",
+            }}
+          />
         )}
+
+        {/* Remove the floating action button since we now have a center tab bar button */}
       </View>
     </SafeAreaWrapper>
   );
@@ -843,23 +742,21 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 90,
-    paddingTop: 10, // Add some padding at the top for better spacing
+    paddingTop: 10,
   },
-  statusTextContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginVertical: 15,
+  inventorySection: {
+    marginTop: 10,
   },
-  statusText: {
-    fontSize: 13,
-    color: "#9BA4A9",
-    fontWeight: "500",
+  inventoryHeaderContainer: {
+    marginBottom: 12,
   },
-  statusTextHighlight: {
-    fontSize: 13,
-    color: "#22C55E",
+  inventoryHeader: {
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: "700",
+    color: "#333333",
   },
   searchContainer: {
     flexDirection: "row",
@@ -870,7 +767,6 @@ const styles = StyleSheet.create({
     borderColor: "#EEEEEE",
     height: 48,
     paddingHorizontal: 15,
-    marginBottom: 15,
   },
   searchIcon: {
     marginRight: 10,
@@ -881,220 +777,35 @@ const styles = StyleSheet.create({
     color: "#333333",
     fontWeight: "400",
   },
-  card: {
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 15,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    shadowColor: "transparent",
-    borderWidth: 0,
-    elevation: 0,
-  },
-  urgentCard: {
-    backgroundColor: "#FEF2F2",
-    paddingVertical: 18,
-    borderLeftWidth: 4,
-    borderLeftColor: "#FF3B30",
-  },
-  lowStockCard: {
-    backgroundColor: "#FFF5EB",
-    paddingVertical: 18,
-    borderLeftWidth: 4,
-    borderLeftColor: "#FF9500",
-  },
-  tipCard: {
-    backgroundColor: "#FFFBE5",
-    paddingVertical: 18,
-    borderLeftWidth: 4,
-    borderLeftColor: "#FFCC00",
-  },
-  cardIcon: {
-    width: 22,
-    height: 22,
-    marginRight: 14,
-    marginTop: 2,
-  },
-  tipCardIcon: {
-    width: 22,
-    height: 22,
-    marginRight: 14,
-    marginTop: 2,
-  },
-  cardContent: {
-    flex: 1,
-  },
-  urgentCardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#CC6667",
-    marginBottom: 4,
-  },
-  urgentCardSubtitle: {
-    fontSize: 14,
-    color: "#E88B8D",
-    fontWeight: "500",
-    opacity: 1,
-  },
-  lowStockCardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#D17E59",
-    marginBottom: 4,
-  },
-  lowStockCardSubtitle: {
-    fontSize: 14,
-    color: "#F0A076",
-    fontWeight: "500",
-    opacity: 1,
-  },
-  tipText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#BA9F7C",
-    flex: 1,
-    fontWeight: "600",
-  },
-  expiringContainer: {
-    backgroundColor: "#FFF7ED",
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 15,
-    alignItems: "center",
-    height: 140,
-    justifyContent: "center",
-  },
-  expiringIconTop: {
-    marginBottom: 8,
-  },
-  expiringCount: {
-    fontSize: 48,
-    fontWeight: "900",
-    color: "#424753",
-    marginVertical: 0,
-    height: 60,
-    textAlignVertical: "center",
-  },
-  expiringTitle: {
-    fontSize: 13,
-    color: "#9E9FA3",
-    marginTop: 5,
-    marginBottom: 10,
-    fontWeight: "500",
-  },
-  dotContainer: {
-    flexDirection: "row",
-    marginTop: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#EEEEEE",
-    marginHorizontal: 4,
-  },
-  activeDot: {
-    backgroundColor: "#AAAAAA",
+  filtersContainer: {
+    marginBottom: 16,
   },
   locationFilterContainer: {
     flexDirection: "row",
-    marginBottom: 15,
-    borderRadius: 8,
-    overflow: "hidden",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 20,
+    padding: 4,
   },
   locationButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
-    backgroundColor: "#F8F8F8",
-    marginHorizontal: 4,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   activeLocationButton: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EEEEEE",
-  },
-  locationIcon: {
-    marginRight: 8,
+    backgroundColor: "#22C55E",
+    shadowColor: "rgba(0,0,0,0.1)",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   locationText: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#A1A1AB",
     fontWeight: "500",
   },
   activeLocationText: {
-    color: "#333333",
-    fontWeight: "600",
-  },
-  inventorySection: {
-    marginTop: 10,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333333",
-    marginBottom: 15,
-  },
-  emptyState: {
-    padding: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 40,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: "#666666",
-    textAlign: "center",
-    fontWeight: "500",
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  emptyStateButton: {
-    backgroundColor: "#22C55E",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-  },
-  emptyStateButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
     fontWeight: "600",
-    marginLeft: 8,
-  },
-  floatingButton: {
-    position: "absolute",
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#22C55E",
-    justifyContent: "center",
-    alignItems: "center",
-    bottom: 30,
-    right: 30,
-    elevation: 10,
-    shadowColor: "rgba(0,0,0,0.3)",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    zIndex: 100,
-  },
-  foodIcon: {
-    padding: 0,
-    margin: 0,
-  },
-  cardCountContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  locationTextContainer: {
-    flexDirection: "row",
-    alignItems: "center",
   },
 });

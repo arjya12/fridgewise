@@ -1,5 +1,5 @@
 // app/(tabs)/add.tsx
-import FoodIcon from "@/components/FoodIcon";
+import RealisticFoodImage from "@/components/RealisticFoodImage";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
@@ -250,7 +250,7 @@ export default function AddItemScreen() {
                 />
                 {name.trim() !== "" && (
                   <View style={styles.foodIconPreview}>
-                    <FoodIcon foodName={name} size={20} />
+                    <RealisticFoodImage foodName={name} size={20} />
                   </View>
                 )}
               </View>
@@ -280,7 +280,7 @@ export default function AddItemScreen() {
                       }}
                     >
                       <View style={styles.suggestionContent}>
-                        <FoodIcon foodName={item.name} size={20} />
+                        <RealisticFoodImage foodName={item.name} size={20} />
                         <ThemedText style={dynamicStyles.suggestionName}>
                           {item.name}
                         </ThemedText>

@@ -1,6 +1,6 @@
 import EditItemModal from "@/components/EditItemModal";
-import FoodIcon from "@/components/FoodIcon";
 import ItemGroupCard from "@/components/ItemGroupCard";
+import RealisticFoodImage from "@/components/RealisticFoodImage";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -240,7 +240,11 @@ export default function ItemDetailsScreen() {
         </TouchableOpacity>
         <View style={styles.titleContainer}>
           <View style={styles.titleWithIcon}>
-            <FoodIcon foodName={itemName} size={24} style={styles.foodIcon} />
+            <RealisticFoodImage
+              foodName={itemName}
+              size={24}
+              style={styles.foodIcon}
+            />
             <Text style={styles.title}>{itemName}</Text>
           </View>
           <Text style={styles.subtitle}>
@@ -267,6 +271,7 @@ export default function ItemDetailsScreen() {
             onDecrement={handleDecrement}
             onIncrement={handleIncrement}
             onUseAll={handleUseAll}
+            onAddMore={() => router.push(`/(tabs)/add`)}
             onEntryOptions={handleEntryOptions}
             onEditEntry={handleEditEntry}
             onDeleteEntry={handleDeleteEntry}
