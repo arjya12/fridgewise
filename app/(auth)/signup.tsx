@@ -458,7 +458,7 @@ export default function SignUpScreen() {
                     </Text>
                     <Text
                       style={styles.toggleLink}
-                      onPress={() => router.replace("/(auth)/login")}
+                      onPress={() => router.replace("/(auth)/welcome?login=1")}
                     >
                       Sign in
                     </Text>
