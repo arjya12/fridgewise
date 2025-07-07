@@ -6,6 +6,7 @@ import {
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -14,6 +15,11 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { TipsProvider } from "@/contexts/TipsContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import {
+  registerBackgroundTasks,
+  requestNotificationPermissions,
+  scheduleBackgroundTasks,
+} from "@/services/notificationService";
 
 // Utility function to ensure text props are properly handled
 const ensureTextSafety = (text: string | number | undefined): string => {
@@ -28,6 +34,25 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
+
+  // Initialize notifications when the app starts
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      try {
+        // Request notification permissions
+        const status = await requestNotificationPermissions();
+        console.log("Notification permission status:", status);
+
+        // Register and schedule background tasks
+        await registerBackgroundTasks();
+        await scheduleBackgroundTasks();
+      } catch (error) {
+        console.error("Error initializing notifications:", error);
+      }
+    };
+
+    initializeNotifications();
+  }, []);
 
   if (!loaded) {
     return null;
