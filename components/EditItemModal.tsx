@@ -1,4 +1,4 @@
-import { useSettings } from "@/contexts/SettingsContext";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { foodCategoryIcons } from "@/utils/foodCategoryIcons";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -47,7 +47,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   onDelete,
   itemData,
 }) => {
-  const { effectiveTheme: theme } = useSettings();
+  const theme = useColorScheme();
   const isDark = theme === "dark";
 
   const [name, setName] = useState(itemData.name);

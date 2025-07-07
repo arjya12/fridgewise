@@ -3,7 +3,9 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Alert,
@@ -35,7 +37,7 @@ const Dropdown = ({
   onToggle,
   placeholder = "Select...",
 }: DropdownProps) => {
-  const { effectiveTheme: theme } = useSettings();
+  const theme = useColorScheme();
   const isDark = theme === "dark";
 
   // Animation values
@@ -159,7 +161,7 @@ const Dropdown = ({
 
 // Settings Screen component
 export default function SettingsScreen() {
-  const { effectiveTheme: theme } = useSettings();
+  const theme = useColorScheme();
   const isDark = theme === "dark";
   const cardBackgroundColor = isDark ? "#1C1C1E" : "#FFFFFF";
   const cardBorderColor = isDark ? "#2C2C2E" : "#F3F4F6";
@@ -171,8 +173,6 @@ export default function SettingsScreen() {
 
   // Use the settings context
   const {
-    language,
-    setLanguage,
     expiryAlerts,
     setExpiryAlerts,
     lowStockAlerts,
@@ -188,13 +188,6 @@ export default function SettingsScreen() {
   } = useSettings();
 
   const { user, userProfile } = useAuth();
-
-  // Theme options and language options
-  const themeOptions = ["Light", "Dark", "System"];
-  const languageOptions = ["English", "Spanish", "French", "German"];
-
-  // Display theme with capitalized first letter
-  const displayTheme = theme.charAt(0).toUpperCase() + theme.slice(1);
 
   const handleToggleDropdown = (dropdownName: string) => {
     setOpenDropdown(openDropdown === dropdownName ? null : dropdownName);
@@ -239,12 +232,7 @@ export default function SettingsScreen() {
             {/* User Profile */}
             <TouchableOpacity
               style={styles.settingItem}
-              onPress={() =>
-                Alert.alert(
-                  "Profile",
-                  "Profile editing will be available in a future update."
-                )
-              }
+              onPress={() => router.push("/(tabs)/profile")}
             >
               <View style={styles.settingIconContainer}>
                 <Ionicons
@@ -271,12 +259,7 @@ export default function SettingsScreen() {
             {/* Change Password */}
             <TouchableOpacity
               style={styles.settingItem}
-              onPress={() =>
-                Alert.alert(
-                  "Change Password",
-                  "Password change will be available in a future update."
-                )
-              }
+              onPress={() => router.push("/(auth)/change-password")}
             >
               <View style={styles.settingIconContainer}>
                 <Ionicons name="key-outline" size={20} color="#FFFFFF" />
@@ -315,63 +298,6 @@ export default function SettingsScreen() {
               <ThemedText style={styles.sectionTitle}>
                 App Preferences
               </ThemedText>
-            </View>
-
-            {/* Theme Setting */}
-            <View style={[styles.settingItem, styles.themeSettingItem]}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="sunny-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>Theme</ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Choose your preferred theme
-                </ThemedText>
-              </View>
-              <View style={styles.themeDropdownPosition}>
-                <Dropdown
-                  options={themeOptions}
-                  selectedValue={displayTheme}
-                  onSelect={(value: string) => {
-                    const lowerValue = value.toLowerCase();
-                    if (
-                      lowerValue === "light" ||
-                      lowerValue === "dark" ||
-                      lowerValue === "system"
-                    ) {
-                      // setTheme(lowerValue); // This line was removed from useSettings
-                    }
-                  }}
-                  isOpen={openDropdown === "theme"}
-                  onToggle={() => handleToggleDropdown("theme")}
-                />
-              </View>
-            </View>
-
-            {/* Language Setting */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="globe-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>Language</ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Select your language
-                </ThemedText>
-              </View>
-              <View style={styles.themeDropdownPosition}>
-                <Dropdown
-                  options={languageOptions}
-                  selectedValue={language}
-                  onSelect={setLanguage}
-                  isOpen={openDropdown === "language"}
-                  onToggle={() => handleToggleDropdown("language")}
-                />
-              </View>
             </View>
 
             {/* Helpful Tips Setting */}
@@ -516,32 +442,6 @@ export default function SettingsScreen() {
               </ThemedText>
             </View>
 
-            {/* Data Backup & Restore */}
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() =>
-                Alert.alert(
-                  "Data Backup",
-                  "Backup and restore functionality will be available in a future update."
-                )
-              }
-            >
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="save-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Data Backup & Restore
-                </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Back up or restore your data
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#BBBBBB" />
-            </TouchableOpacity>
-
             {/* Analytics */}
             <View style={styles.settingItem}>
               <View style={styles.settingIconContainer}>
@@ -552,7 +452,7 @@ export default function SettingsScreen() {
                 <ThemedText
                   style={[styles.settingDescription, { color: subTextColor }]}
                 >
-                  Allow anonymous usage data
+                  Help improve the app with usage data
                 </ThemedText>
               </View>
               <Switch
@@ -576,7 +476,7 @@ export default function SettingsScreen() {
                 <ThemedText
                   style={[styles.settingDescription, { color: subTextColor }]}
                 >
-                  Send anonymous crash reports
+                  Send crash reports to improve stability
                 </ThemedText>
               </View>
               <Switch
@@ -587,14 +487,50 @@ export default function SettingsScreen() {
                 ios_backgroundColor="#D1D5DB"
               />
             </View>
+          </View>
 
-            {/* Privacy Policy */}
+          {/* About Section */}
+          <View
+            style={[
+              styles.section,
+              {
+                backgroundColor: cardBackgroundColor,
+                borderColor: cardBorderColor,
+              },
+            ]}
+          >
+            <View style={styles.sectionHeader}>
+              <Ionicons
+                name="information-circle-outline"
+                size={18}
+                color={subTextColor}
+                style={styles.sectionIcon}
+              />
+              <ThemedText style={styles.sectionTitle}>About</ThemedText>
+            </View>
+
+            {/* Version */}
+            <View style={styles.settingItem}>
+              <View style={styles.settingIconContainer}>
+                <Ionicons name="code-outline" size={20} color="#FFFFFF" />
+              </View>
+              <View style={styles.settingContent}>
+                <ThemedText style={styles.settingTitle}>Version</ThemedText>
+                <ThemedText
+                  style={[styles.settingDescription, { color: subTextColor }]}
+                >
+                  1.0.0
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Terms of Service */}
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() =>
                 Alert.alert(
-                  "Privacy Policy",
-                  "Our privacy policy details how we collect, use, and protect your data. The full policy will be available in a future update."
+                  "Terms of Service",
+                  "Terms of Service will be available in a future update."
                 )
               }
             >
@@ -607,12 +543,32 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.settingContent}>
                 <ThemedText style={styles.settingTitle}>
-                  Privacy Policy
+                  Terms of Service
                 </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Read our privacy policy
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#BBBBBB" />
+            </TouchableOpacity>
+
+            {/* Privacy Policy */}
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() =>
+                Alert.alert(
+                  "Privacy Policy",
+                  "Privacy Policy will be available in a future update."
+                )
+              }
+            >
+              <View style={styles.settingIconContainer}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+              </View>
+              <View style={styles.settingContent}>
+                <ThemedText style={styles.settingTitle}>
+                  Privacy Policy
                 </ThemedText>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#BBBBBB" />
@@ -724,56 +680,54 @@ const styles = StyleSheet.create({
   },
   selectorText: {
     fontSize: 14,
-    fontWeight: "500",
     marginRight: 8,
   },
   backdropOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalCentering: {
     flex: 1,
+    width: "100%",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
   dropdownContainer: {
     width: 180,
-    backgroundColor: "white",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E4E4E7",
+    overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   dropdownContent: {
-    borderRadius: 12,
-    overflow: "hidden",
+    width: "100%",
   },
   dropdownItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
   },
   dropdownItemSelected: {
-    backgroundColor: "#F0F9FF",
+    backgroundColor: "rgba(2, 132, 199, 0.1)",
   },
   dropdownItemText: {
     fontSize: 14,
-    fontWeight: "400",
   },
   dropdownItemTextSelected: {
     fontWeight: "500",
-    color: "#0284C7",
   },
   checkmarkIcon: {
     marginRight: 8,

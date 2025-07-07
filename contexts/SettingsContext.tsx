@@ -1,21 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { useColorScheme as useDeviceColorScheme } from "react-native";
-
-// Define the theme types
-type ThemeType = "light" | "dark" | "system";
 
 // Define the settings interface
 interface SettingsContextType {
-  // Theme settings
-  theme: ThemeType;
-  setTheme: (theme: ThemeType) => void;
-  effectiveTheme: "light" | "dark"; // The actual theme applied (resolves 'system')
-
-  // Language settings
-  language: string;
-  setLanguage: (language: string) => void;
-
   // Notification settings
   expiryAlerts: boolean;
   setExpiryAlerts: (enabled: boolean) => void;
@@ -35,8 +22,6 @@ interface SettingsContextType {
 
 // Storage keys
 const STORAGE_KEYS = {
-  THEME: "settings.theme",
-  LANGUAGE: "settings.language",
   EXPIRY_ALERTS: "settings.expiryAlerts",
   LOW_STOCK_ALERTS: "settings.lowStockAlerts",
   HELPFUL_TIPS: "settings.helpfulTips",
@@ -47,11 +32,6 @@ const STORAGE_KEYS = {
 
 // Create the context with default values
 const SettingsContext = createContext<SettingsContextType>({
-  theme: "system",
-  setTheme: () => {},
-  effectiveTheme: "light",
-  language: "English",
-  setLanguage: () => {},
   expiryAlerts: true,
   setExpiryAlerts: () => {},
   lowStockAlerts: true,
@@ -68,12 +48,7 @@ const SettingsContext = createContext<SettingsContextType>({
 
 // Provider component
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  // Device theme from the system
-  const deviceTheme = useDeviceColorScheme();
-
   // State for all settings
-  const [theme, setThemeState] = useState<ThemeType>("system");
-  const [language, setLanguageState] = useState("English");
   const [expiryAlerts, setExpiryAlertsState] = useState(true);
   const [lowStockAlerts, setLowStockAlertsState] = useState(true);
   const [helpfulTips, setHelpfulTipsState] = useState(true);
@@ -81,25 +56,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [analytics, setAnalyticsState] = useState(true);
   const [crashReports, setCrashReportsState] = useState(true);
 
-  // Calculate the effective theme (resolving 'system')
-  const effectiveTheme = theme === "system" ? deviceTheme || "light" : theme;
-
   // Load settings from AsyncStorage on mount
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // Load theme
-        const savedTheme = await AsyncStorage.getItem(STORAGE_KEYS.THEME);
-        if (savedTheme) {
-          setThemeState(savedTheme as ThemeType);
-        }
-
-        // Load language
-        const savedLanguage = await AsyncStorage.getItem(STORAGE_KEYS.LANGUAGE);
-        if (savedLanguage) {
-          setLanguageState(savedLanguage);
-        }
-
         // Load notification settings
         const savedExpiryAlerts = await AsyncStorage.getItem(
           STORAGE_KEYS.EXPIRY_ALERTS
@@ -150,25 +110,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     loadSettings();
   }, []);
-
-  // Save settings to AsyncStorage when they change
-  const setTheme = async (newTheme: ThemeType) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.THEME, newTheme);
-      setThemeState(newTheme);
-    } catch (error) {
-      console.error("Failed to save theme setting:", error);
-    }
-  };
-
-  const setLanguage = async (newLanguage: string) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.LANGUAGE, newLanguage);
-      setLanguageState(newLanguage);
-    } catch (error) {
-      console.error("Failed to save language setting:", error);
-    }
-  };
 
   const setExpiryAlerts = async (enabled: boolean) => {
     try {
@@ -229,11 +170,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   // Create the value object
   const value: SettingsContextType = {
-    theme,
-    setTheme,
-    effectiveTheme,
-    language,
-    setLanguage,
     expiryAlerts,
     setExpiryAlerts,
     lowStockAlerts,

@@ -1,6 +1,6 @@
-import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import "react-native-url-polyfill/auto";
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -60,6 +60,7 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name?: string;
+  avatar_url?: string;
   notification_preferences: {
     expiry_days_before: number;
     low_stock_threshold: number;

@@ -12,6 +12,9 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName?: string) => Promise<void>;
   signOut: () => Promise<void>;
   getUserProfile: () => Promise<UserProfile | null>;
+  updateUserProfile: (
+    data: Partial<UserProfile>
+  ) => Promise<UserProfile | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,6 +45,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return data as UserProfile;
     } catch (error) {
       console.error("Error in getUserProfile:", error);
+      return null;
+    }
+  };
+
+  // Update user profile data
+  const updateUserProfile = async (
+    data: Partial<UserProfile>
+  ): Promise<UserProfile | null> => {
+    try {
+      if (!user) return null;
+
+      // Remove id from data if present as it shouldn't be updated
+      const { id, ...updateData } = data;
+
+      const { data: updatedProfile, error } = await supabase
+        .from("user_profiles")
+        .update(updateData)
+        .eq("id", user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error updating user profile:", error);
+        return null;
+      }
+
+      // Update the local state
+      setUserProfile(updatedProfile as UserProfile);
+      return updatedProfile as UserProfile;
+    } catch (error) {
+      console.error("Error in updateUserProfile:", error);
       return null;
     }
   };
@@ -138,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         getUserProfile,
+        updateUserProfile,
       }}
     >
       {children}

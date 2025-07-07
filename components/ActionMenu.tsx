@@ -1,5 +1,5 @@
 import { ThemedText } from "@/components/ThemedText";
-import { useSettings } from "@/contexts/SettingsContext";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
@@ -32,7 +32,7 @@ const ActionMenu: React.FC<ActionMenuProps> = ({
   onDelete,
   position,
 }) => {
-  const { effectiveTheme: theme } = useSettings();
+  const theme = useColorScheme();
   const isDark = theme === "dark";
 
   // Animation for menu appearance
