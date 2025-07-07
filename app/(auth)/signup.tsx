@@ -155,7 +155,7 @@ export default function SignUpScreen() {
       Alert.alert(
         "Sign up successful! Please check your email to verify your account."
       );
-      router.replace("/(auth)/login");
+      router.push("/(auth)/welcome?login=1");
     } catch (error: any) {
       Alert.alert("Sign-up failed", error.message || "Failed to sign up");
     } finally {
