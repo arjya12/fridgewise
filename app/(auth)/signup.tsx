@@ -42,7 +42,8 @@ function getPasswordStrength(password: string): {
 }
 
 export default function SignUpScreen() {
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -53,7 +54,8 @@ export default function SignUpScreen() {
   const { signUp } = useAuth();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const [fullNameFocused, setFullNameFocused] = useState(false);
+  const [firstNameFocused, setFirstNameFocused] = useState(false);
+  const [lastNameFocused, setLastNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
@@ -95,7 +97,8 @@ export default function SignUpScreen() {
 
   function validate() {
     const newErrors: { [key: string]: string } = {};
-    if (!fullName.trim()) newErrors.fullName = "Please enter your name.";
+    if (!firstName.trim()) newErrors.firstName = "Please enter your first name.";
+    if (!lastName.trim()) newErrors.lastName = "Please enter your last name.";
     if (!email.match(/^\S+@\S+\.\S+$/))
       newErrors.email = "Please enter a valid email.";
     if (password.length < 6)
@@ -110,7 +113,8 @@ export default function SignUpScreen() {
   const handleSignUp = async () => {
     // Check for empty fields
     if (
-      !fullName.trim() ||
+      !firstName.trim() ||
+      !lastName.trim() ||
       !email.trim() ||
       !password.trim() ||
       !confirmPassword.trim()
@@ -151,7 +155,7 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      await signUp(email, password, fullName);
+      await signUp(email, password, `${firstName} ${lastName}`);
       Alert.alert(
         "Sign up successful! Please check your email to verify your account."
       );
@@ -179,7 +183,7 @@ export default function SignUpScreen() {
               flexGrow: 1,
               justifyContent: "flex-start",
               alignItems: "center",
-              marginTop: 40,
+              marginTop: 10,
             }}
             keyboardShouldPersistTaps="handled"
             ref={scrollRef}
@@ -190,7 +194,7 @@ export default function SignUpScreen() {
                   width: 340,
                   maxWidth: "92%",
                   alignItems: "center",
-                  marginTop: 48,
+                  marginTop: 10,
                   marginBottom: 24,
                 }}
               >
@@ -223,12 +227,12 @@ export default function SignUpScreen() {
                   Create your FridgeWise account
                 </Text>
                 <View style={styles.form}>
-                  {/* Full Name Field */}
+                  {/* First Name Field */}
                   <View
                     style={[
                       styles.inputGroup,
-                      fullNameFocused && styles.inputGroupFocused,
-                      errors.fullName && styles.inputGroupError,
+                      firstNameFocused && styles.inputGroupFocused,
+                      errors.firstName && styles.inputGroupError,
                     ]}
                   >
                     <Ionicons
@@ -239,20 +243,52 @@ export default function SignUpScreen() {
                     />
                     <TextInput
                       style={styles.input}
-                      placeholder="Name"
+                      placeholder="First Name"
                       placeholderTextColor="#737373"
-                      value={fullName}
-                      onChangeText={setFullName}
+                      value={firstName}
+                      onChangeText={setFirstName}
                       autoCapitalize="words"
                       editable={!loading}
-                      accessibilityLabel="Full name input"
-                      onFocus={() => setFullNameFocused(true)}
-                      onBlur={() => setFullNameFocused(false)}
+                      accessibilityLabel="First name input"
+                      onFocus={() => setFirstNameFocused(true)}
+                      onBlur={() => setFirstNameFocused(false)}
                       returnKeyType="next"
                     />
                   </View>
-                  {errors.fullName && (
-                    <Text style={styles.errorText}>{errors.fullName}</Text>
+                  {errors.firstName && (
+                    <Text style={styles.errorText}>{errors.firstName}</Text>
+                  )}
+
+                  {/* Last Name Field */}
+                  <View
+                    style={[
+                      styles.inputGroup,
+                      lastNameFocused && styles.inputGroupFocused,
+                      errors.lastName && styles.inputGroupError,
+                    ]}
+                  >
+                    <Ionicons
+                      name="person-outline"
+                      size={20}
+                      color={THEME_GREEN}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Last Name"
+                      placeholderTextColor="#737373"
+                      value={lastName}
+                      onChangeText={setLastName}
+                      autoCapitalize="words"
+                      editable={!loading}
+                      accessibilityLabel="Last name input"
+                      onFocus={() => setLastNameFocused(true)}
+                      onBlur={() => setLastNameFocused(false)}
+                      returnKeyType="next"
+                    />
+                  </View>
+                  {errors.lastName && (
+                    <Text style={styles.errorText}>{errors.lastName}</Text>
                   )}
 
                   {/* Email Field */}
@@ -310,11 +346,30 @@ export default function SignUpScreen() {
                       onChangeText={setPassword}
                       secureTextEntry={!showPassword}
                       editable={!loading}
+                      maxLength={16}
                       accessibilityLabel="Password input"
                       onFocus={() => setPasswordFocused(true)}
                       onBlur={() => setPasswordFocused(false)}
                       returnKeyType="next"
                     />
+                    {password && (
+                      <View style={styles.passwordStrengthInline}>
+                        <View
+                          style={[
+                            styles.passwordStrengthBar,
+                            { backgroundColor: passwordStrength.color },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.passwordStrengthText,
+                            { color: passwordStrength.color },
+                          ]}
+                        >
+                          {passwordStrength.label}
+                        </Text>
+                      </View>
+                    )}
                     <View
                       style={styles.eyeIcon}
                       onTouchEnd={() => setShowPassword(!showPassword)}
@@ -331,24 +386,6 @@ export default function SignUpScreen() {
                   </View>
                   {errors.password && (
                     <Text style={styles.errorText}>{errors.password}</Text>
-                  )}
-                  {password && (
-                    <View style={styles.passwordStrengthContainer}>
-                      <View
-                        style={[
-                          styles.passwordStrengthBar,
-                          { backgroundColor: passwordStrength.color },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.passwordStrengthText,
-                          { color: passwordStrength.color },
-                        ]}
-                      >
-                        {passwordStrength.label}
-                      </Text>
-                    </View>
                   )}
 
                   {/* Confirm Password Field */}
@@ -515,7 +552,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEME_INPUT_BG,
     marginBottom: 16,
     paddingHorizontal: 12,
-    height: 48,
+    height: 47,
     position: "relative",
   },
   inputGroupFocused: {
@@ -622,20 +659,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: 4,
   },
-  passwordStrengthContainer: {
+  passwordStrengthInline: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  passwordStrengthBar: {
-    width: 36,
-    height: 6,
-    borderRadius: 3,
     marginRight: 8,
   },
+  passwordStrengthBar: {
+    width: 24,
+    height: 4,
+    borderRadius: 2,
+    marginRight: 4,
+  },
   passwordStrengthText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
   },
   checkboxTouchable: {
