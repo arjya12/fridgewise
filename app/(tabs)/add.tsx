@@ -1,4 +1,5 @@
 // app/(tabs)/add.tsx
+import BarcodeScannerModal from "@/components/BarcodeScannerModal";
 import RealisticFoodImage from "@/components/RealisticFoodImage";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -6,6 +7,7 @@ import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { FoodItem } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -21,6 +23,9 @@ import {
   View,
 } from "react-native";
 
+/**
+ * Screen for adding or editing food items
+ */
 export default function AddItemScreen() {
   const params = useLocalSearchParams<{ edit: string; id: string }>();
   const isEditing = params.edit === "true" && Boolean(params.id);
@@ -36,6 +41,9 @@ export default function AddItemScreen() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditing);
   const colorScheme = useColorScheme();
+
+  // State for barcode scanner
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
   // State for suggestions
   const [suggestions, setSuggestions] = useState<FoodItem[]>([]);
@@ -191,6 +199,18 @@ export default function AddItemScreen() {
     }
   };
 
+  // Handle product data from barcode scan
+  const handleProductFound = (productData: {
+    name: string;
+    category?: string;
+  }) => {
+    setName(productData.name);
+    if (productData.category) {
+      setCategory(productData.category);
+    }
+    setShowSuggestions(false);
+  };
+
   const commonUnits = ["pcs", "kg", "g", "L", "ml", "oz", "lb"];
   const commonCategories = [
     "Dairy",
@@ -254,6 +274,27 @@ export default function AddItemScreen() {
                   </View>
                 )}
               </View>
+
+              {/* Barcode scanner button */}
+              <TouchableOpacity
+                style={[
+                  styles.barcodeButton,
+                  {
+                    backgroundColor:
+                      colorScheme === "dark" ? "#2A2A2A" : "#F5F5F5",
+                  },
+                ]}
+                onPress={() => setShowBarcodeScanner(true)}
+              >
+                <Ionicons
+                  name="barcode-outline"
+                  size={24}
+                  color={colorScheme === "dark" ? "#FFF" : "#000"}
+                />
+                <ThemedText style={styles.barcodeButtonText}>
+                  Scan Barcode
+                </ThemedText>
+              </TouchableOpacity>
             </View>
 
             {showSuggestions && (
@@ -511,6 +552,13 @@ export default function AddItemScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScannerModal
+        visible={showBarcodeScanner}
+        onClose={() => setShowBarcodeScanner(false)}
+        onProductFound={handleProductFound}
+      />
     </ThemedView>
   );
 }
@@ -676,5 +724,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  barcodeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 44,
+    borderRadius: 8,
+    marginTop: 8,
+    paddingHorizontal: 16,
+  },
+  barcodeButtonText: {
+    fontSize: 16,
+    marginLeft: 8,
   },
 });

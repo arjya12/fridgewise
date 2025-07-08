@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { formatExpiry } from "@/utils/formatExpiry";
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import { EXPIRY_CHECK_TASK, scheduleNotification } from "./notificationService";
 
@@ -119,7 +119,7 @@ export function registerExpiryCheckTask() {
     TaskManager.defineTask(EXPIRY_CHECK_TASK, async ({ data, error }) => {
       if (error) {
         console.error("Error in expiry check task:", error);
-        return BackgroundFetch.BackgroundFetchResult.Failed;
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
 
       try {
@@ -136,7 +136,7 @@ export function registerExpiryCheckTask() {
 
         if (settingsError) {
           console.error("Error fetching user settings:", settingsError);
-          return BackgroundFetch.BackgroundFetchResult.Failed;
+          return BackgroundTask.BackgroundTaskResult.Failed;
         }
 
         // Check for expiring items
@@ -146,11 +146,11 @@ export function registerExpiryCheckTask() {
         );
 
         return result
-          ? BackgroundFetch.BackgroundFetchResult.NewData
-          : BackgroundFetch.BackgroundFetchResult.NoData;
+          ? BackgroundTask.BackgroundTaskResult.Success
+          : BackgroundTask.BackgroundTaskResult.Success;
       } catch (error) {
         console.error("Error in expiry check task:", error);
-        return BackgroundFetch.BackgroundFetchResult.Failed;
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
     });
   }

@@ -33,6 +33,16 @@ export default function TabLayout() {
         />
 
         <Tabs.Screen
+          name="calendar"
+          options={{
+            title: "Calendar",
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="calendar-outline" color={color} size={24} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
           name="add"
           options={{
             title: "Add",
@@ -69,6 +79,26 @@ export default function TabLayout() {
             title: "Test",
             tabBarIcon: ({ color }) => (
               <Ionicons name="notifications-outline" color={color} size={24} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="test"
+          options={{
+            title: "Debug",
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="bug-outline" color={color} size={24} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="barcode-test"
+          options={{
+            title: "Barcode",
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="barcode-outline" color={color} size={24} />
             ),
           }}
         />

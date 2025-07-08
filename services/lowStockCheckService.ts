@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import {
   LOW_STOCK_CHECK_TASK,
@@ -117,7 +117,7 @@ export function registerLowStockCheckTask() {
     TaskManager.defineTask(LOW_STOCK_CHECK_TASK, async ({ data, error }) => {
       if (error) {
         console.error("Error in low stock check task:", error);
-        return BackgroundFetch.BackgroundFetchResult.Failed;
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
 
       try {
@@ -134,7 +134,7 @@ export function registerLowStockCheckTask() {
 
         if (settingsError) {
           console.error("Error fetching user settings:", settingsError);
-          return BackgroundFetch.BackgroundFetchResult.Failed;
+          return BackgroundTask.BackgroundTaskResult.Failed;
         }
 
         // Check for low stock items
@@ -144,11 +144,11 @@ export function registerLowStockCheckTask() {
         );
 
         return result
-          ? BackgroundFetch.BackgroundFetchResult.NewData
-          : BackgroundFetch.BackgroundFetchResult.NoData;
+          ? BackgroundTask.BackgroundTaskResult.Success
+          : BackgroundTask.BackgroundTaskResult.Success;
       } catch (error) {
         console.error("Error in low stock check task:", error);
-        return BackgroundFetch.BackgroundFetchResult.Failed;
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
     });
   }

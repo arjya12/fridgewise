@@ -1,12 +1,14 @@
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { registerExpiryCheckTask } from "./expiryCheckService";
-import { registerLowStockCheckTask } from "./lowStockCheckService";
 
-// Define task names for background fetch operations
+// Define task names for background task operations
 export const EXPIRY_CHECK_TASK = "EXPIRY_CHECK_TASK";
 export const LOW_STOCK_CHECK_TASK = "LOW_STOCK_CHECK_TASK";
+
+// Check if running in Expo Go
+const isExpoGo = Constants.appOwnership === "expo";
 
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -39,6 +41,7 @@ export async function requestNotificationPermissions() {
     await setupNotificationChannels();
   }
 
+  console.log("Notification permission status:", finalStatus);
   return finalStatus;
 }
 
@@ -87,28 +90,44 @@ export async function scheduleNotification(
   channelId = "default",
   trigger: Notifications.NotificationTriggerInput = null
 ) {
-  return await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      data,
-      ...(Platform.OS === "android" ? { channelId } : {}),
-    },
-    trigger,
-  });
+  try {
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data,
+        ...(Platform.OS === "android" ? { channelId } : {}),
+      },
+      trigger,
+    });
+  } catch (error) {
+    console.warn("Failed to schedule notification:", error);
+    return null;
+  }
 }
 
 /**
  * Register background tasks for checking expiry and low stock
+ * This function should be called from the main app after all services are loaded
  */
 export async function registerBackgroundTasks() {
-  // Register the expiry check task
-  registerExpiryCheckTask();
+  try {
+    // Dynamically import the task registration functions to avoid circular dependencies
+    const { registerExpiryCheckTask } = await import("./expiryCheckService");
+    const { registerLowStockCheckTask } = await import(
+      "./lowStockCheckService"
+    );
 
-  // Register the low stock check task
-  registerLowStockCheckTask();
+    // Register the expiry check task
+    registerExpiryCheckTask();
 
-  console.log("Background tasks registered");
+    // Register the low stock check task
+    registerLowStockCheckTask();
+
+    console.log("Background tasks registered");
+  } catch (error) {
+    console.warn("Failed to register background tasks:", error);
+  }
 }
 
 /**
@@ -116,18 +135,20 @@ export async function registerBackgroundTasks() {
  */
 export async function scheduleBackgroundTasks() {
   try {
-    // Schedule the expiry check task to run daily
-    await BackgroundFetch.registerTaskAsync(EXPIRY_CHECK_TASK, {
-      minimumInterval: 24 * 60 * 60, // 24 hours in seconds
-      stopOnTerminate: false,
-      startOnBoot: true,
+    // Skip background task scheduling in Expo Go as it's not fully supported
+    if (isExpoGo) {
+      console.log("Background tasks not scheduled in Expo Go");
+      return;
+    }
+
+    // Schedule the expiry check task to run daily (minimum 15 minutes for testing)
+    await BackgroundTask.registerTaskAsync(EXPIRY_CHECK_TASK, {
+      minimumInterval: 24 * 60, // 24 hours in minutes
     });
 
-    // Schedule the low stock check task to run daily
-    await BackgroundFetch.registerTaskAsync(LOW_STOCK_CHECK_TASK, {
-      minimumInterval: 24 * 60 * 60, // 24 hours in seconds
-      stopOnTerminate: false,
-      startOnBoot: true,
+    // Schedule the low stock check task to run daily (minimum 15 minutes for testing)
+    await BackgroundTask.registerTaskAsync(LOW_STOCK_CHECK_TASK, {
+      minimumInterval: 24 * 60, // 24 hours in minutes
     });
 
     console.log("Background tasks scheduled successfully");
