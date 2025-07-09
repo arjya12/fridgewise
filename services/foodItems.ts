@@ -1,9 +1,18 @@
 // services/foodItems.ts
 import { FoodItem, supabase, UsageLog } from "@/lib/supabase";
+import {
+  addUrgencyToItem,
+  addUrgencyToItems,
+  UrgencyInfo,
+} from "@/utils/urgencyUtils";
+
+export type FoodItemWithUrgency = FoodItem & { urgency: UrgencyInfo };
 
 export const foodItemsService = {
   // Get all food items for the current user
-  async getItems(location?: "fridge" | "shelf") {
+  async getItems(
+    location?: "fridge" | "shelf"
+  ): Promise<FoodItemWithUrgency[]> {
     let query = supabase
       .from("food_items")
       .select("*")
@@ -15,11 +24,15 @@ export const foodItemsService = {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data as FoodItem[];
+
+    // Add urgency information to each item
+    return addUrgencyToItems(data as FoodItem[]);
   },
 
   // Get items expiring soon
-  async getExpiringItems(daysAhead: number = 7) {
+  async getExpiringItems(
+    daysAhead: number = 7
+  ): Promise<FoodItemWithUrgency[]> {
     const today = new Date();
     const futureDate = new Date();
     futureDate.setDate(today.getDate() + daysAhead);
@@ -32,11 +45,13 @@ export const foodItemsService = {
       .order("expiry_date", { ascending: true });
 
     if (error) throw error;
-    return data as FoodItem[];
+
+    // Add urgency information to each item
+    return addUrgencyToItems(data as FoodItem[]);
   },
 
   // Get expired items
-  async getExpiredItems() {
+  async getExpiredItems(): Promise<FoodItemWithUrgency[]> {
     const today = new Date().toISOString().split("T")[0];
 
     const { data, error } = await supabase
@@ -46,11 +61,16 @@ export const foodItemsService = {
       .order("expiry_date", { ascending: true });
 
     if (error) throw error;
-    return data as FoodItem[];
+
+    // Add urgency information to each item
+    return addUrgencyToItems(data as FoodItem[]);
   },
 
   // Get items grouped by expiry date for calendar view
-  async getItemsByExpiryDate(startDate?: string, endDate?: string) {
+  async getItemsByExpiryDate(
+    startDate?: string,
+    endDate?: string
+  ): Promise<Record<string, FoodItemWithUrgency[]>> {
     let query = supabase
       .from("food_items")
       .select("*")
@@ -67,14 +87,15 @@ export const foodItemsService = {
     const { data, error } = await query;
     if (error) throw error;
 
-    // Group items by expiry date
-    const itemsByDate: Record<string, FoodItem[]> = {};
+    // Group items by expiry date and add urgency information
+    const itemsByDate: Record<string, FoodItemWithUrgency[]> = {};
     (data as FoodItem[]).forEach((item) => {
       if (item.expiry_date) {
         if (!itemsByDate[item.expiry_date]) {
           itemsByDate[item.expiry_date] = [];
         }
-        itemsByDate[item.expiry_date].push(item);
+        // Add urgency information to the item
+        itemsByDate[item.expiry_date].push(addUrgencyToItem(item));
       }
     });
 
@@ -84,7 +105,7 @@ export const foodItemsService = {
   // Add a new food item
   async addItem(
     item: Omit<FoodItem, "id" | "user_id" | "created_at" | "updated_at">
-  ) {
+  ): Promise<FoodItemWithUrgency> {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error("User not authenticated");
 
@@ -98,11 +119,16 @@ export const foodItemsService = {
       .single();
 
     if (error) throw error;
-    return data as FoodItem;
+
+    // Add urgency information to the returned item
+    return addUrgencyToItem(data as FoodItem);
   },
 
   // Update a food item
-  async updateItem(id: string, updates: Partial<FoodItem>) {
+  async updateItem(
+    id: string,
+    updates: Partial<FoodItem>
+  ): Promise<FoodItemWithUrgency> {
     const { data, error } = await supabase
       .from("food_items")
       .update(updates)
@@ -111,11 +137,13 @@ export const foodItemsService = {
       .single();
 
     if (error) throw error;
-    return data as FoodItem;
+
+    // Add urgency information to the returned item
+    return addUrgencyToItem(data as FoodItem);
   },
 
   // Delete a food item
-  async deleteItem(id: string) {
+  async deleteItem(id: string): Promise<void> {
     const { error } = await supabase.from("food_items").delete().eq("id", id);
 
     if (error) throw error;
@@ -126,7 +154,7 @@ export const foodItemsService = {
     itemId: string,
     status: "used" | "expired" | "wasted",
     quantity: number
-  ) {
+  ): Promise<void> {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error("User not authenticated");
 
@@ -193,7 +221,7 @@ export const foodItemsService = {
   },
 
   // Search items
-  async searchItems(query: string) {
+  async searchItems(query: string): Promise<FoodItemWithUrgency[]> {
     const { data, error } = await supabase
       .from("food_items")
       .select("*")
@@ -201,6 +229,8 @@ export const foodItemsService = {
       .order("name");
 
     if (error) throw error;
-    return data as FoodItem[];
+
+    // Add urgency information to each item
+    return addUrgencyToItems(data as FoodItem[]);
   },
 };

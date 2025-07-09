@@ -54,8 +54,8 @@ const EmptyStateView: React.FC<EmptyStateViewProps> = ({
         <Ionicons name="search" size={iconSize} color={iconColor} />
         <Text style={styles.title}>No matching items</Text>
         <Text style={styles.message}>
-          No items found matching "{searchQuery}". Try adjusting your search or
-          filters.
+          No items found matching &quot;{searchQuery}&quot;. Try adjusting your
+          search or filters.
         </Text>
         {onAction && actionLabel && (
           <TouchableOpacity style={styles.actionButton} onPress={onAction}>

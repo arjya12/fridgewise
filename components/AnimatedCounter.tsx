@@ -111,4 +111,8 @@ const AnimatedText = React.memo(
   }
 );
 
+AnimatedText.displayName = "AnimatedText";
+
+AnimatedCounter.displayName = "AnimatedCounter";
+
 export default AnimatedCounter;

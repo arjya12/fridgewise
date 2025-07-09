@@ -663,7 +663,7 @@ export default function InventoryScreen() {
                     ? "Fridge"
                     : ""
                 } Items Found`}
-                message={`You don't have any items in your ${
+                message={`You don&apos;t have any items in your ${
                   filter === "shelf"
                     ? "shelf"
                     : filter === "fridge"

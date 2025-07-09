@@ -95,7 +95,7 @@ const DashboardSummary: React.FC<DashboardSummaryProps> = ({
 
       {/* Dashboard header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Here's your status</Text>
+        <Text style={styles.headerTitle}>Here&apos;s your status</Text>
         <Text style={styles.headerSubtitle}>
           {expiringItems.length > 0 || lowStockGroups > 0
             ? "Items that need your attention"
