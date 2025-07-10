@@ -18,7 +18,6 @@ Phase 3 has successfully implemented the core calendar enhancement features from
 
 - `utils/urgencyUtils.ts` - Enhanced with Phase 2 urgency system
 - `utils/calendarUtils.ts` - Updated with enhanced marking logic
-- `components/calendar/EnhancedCalendarWithIndicators.tsx` - New enhanced calendar component
 - `components/calendar/CompactLegend.tsx` - Responsive legend component
 - `app/(tabs)/calendar.tsx` - Integrated new calendar component
 
@@ -269,7 +268,6 @@ AFTER (Phase 3):
 
 ```
 NEW COMPONENTS:
-├── components/calendar/EnhancedCalendarWithIndicators.tsx (19.5KB)
 ├── components/calendar/CompactLegend.tsx (9.5KB)
 
 ENHANCED UTILITIES:

@@ -1,9 +1,11 @@
 // components/Next7DaysView.tsx
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { FoodItemWithUrgency, foodItemsService } from "@/services/foodItems";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Dimensions,
   FlatList,
+  ListRenderItem,
   RefreshControl,
   StyleSheet,
   Text,
@@ -13,6 +15,27 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EmptyStateView from "./EmptyStateView";
 import EnhancedSwipeableItemCard from "./EnhancedSwipeableItemCard";
+
+// =============================================================================
+// PERFORMANCE OPTIMIZATIONS
+// =============================================================================
+
+// Memoized item card component
+const MemoizedItemCard = memo(
+  EnhancedSwipeableItemCard,
+  (prevProps, nextProps) => {
+    return (
+      prevProps.item.id === nextProps.item.id &&
+      prevProps.item.expiry_date === nextProps.item.expiry_date &&
+      prevProps.item.quantity === nextProps.item.quantity
+    );
+  }
+);
+
+// Window size optimization based on screen height
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const ITEM_HEIGHT = 120; // Estimated height including day headers
+const WINDOW_SIZE = Math.ceil(SCREEN_HEIGHT / ITEM_HEIGHT) + 3;
 
 interface Next7DaysViewProps {
   onItemPress?: (item: FoodItemWithUrgency) => void;
@@ -219,41 +242,64 @@ export default function Next7DaysView({
     );
   };
 
-  const renderDayGroup = ({ item: group }: { item: DayGroup }) => {
-    const filteredItems = getFilteredItems(group.items);
+  // Memoized render function for better performance
+  const renderDayGroup: ListRenderItem<DayGroup> = useCallback(
+    ({ item: group }) => {
+      const filteredItems = getFilteredItems(group.items);
 
-    if (filteredItems.length === 0 && selectedFilter !== "all") {
-      return null;
-    }
+      if (filteredItems.length === 0 && selectedFilter !== "all") {
+        return null; // Don't render empty filtered groups
+      }
 
-    return (
-      <View style={styles.dayGroup}>
-        {renderDayHeader(group)}
+      return (
+        <View key={group.date} style={styles.dayGroup}>
+          {renderDayHeader(group)}
 
-        {filteredItems.length > 0 ? (
-          <View style={styles.itemsList}>
-            {filteredItems.map((item) => (
-              <EnhancedSwipeableItemCard
-                key={item.id}
-                item={item}
-                onPress={() => onItemPress?.(item)}
-                onMarkUsed={() => onMarkUsed?.(item.id)}
-                onExtendExpiry={() => onExtendExpiry?.(item.id)}
-                onDelete={() => onDeleteItem?.(item.id)}
-                style={styles.itemCard}
-              />
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyDay}>
-            <Text style={[styles.emptyDayText, { color: textColor }]}>
-              No items expiring
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  };
+          {filteredItems.length > 0 ? (
+            <View style={styles.itemsList}>
+              {filteredItems.map((item) => (
+                <MemoizedItemCard
+                  key={item.id}
+                  item={item}
+                  onPress={() => onItemPress?.(item)}
+                  onMarkUsed={() => onMarkUsed?.(item.id)}
+                  onExtendExpiry={() => onExtendExpiry?.(item.id)}
+                  onDelete={() => onDeleteItem?.(item.id)}
+                />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyDay}>
+              <Text style={[styles.emptyDayText, { color: textColor }]}>
+                No items expiring
+              </Text>
+            </View>
+          )}
+        </View>
+      );
+    },
+    [
+      selectedFilter,
+      textColor,
+      onItemPress,
+      onMarkUsed,
+      onExtendExpiry,
+      onDeleteItem,
+    ]
+  );
+
+  // Optimized getItemLayout for FlatList performance
+  const getItemLayout = useCallback(
+    (data: any, index: number) => ({
+      length: ITEM_HEIGHT,
+      offset: ITEM_HEIGHT * index,
+      index,
+    }),
+    []
+  );
+
+  // Key extractor for FlatList
+  const keyExtractor = useCallback((item: DayGroup) => item.date, []);
 
   const FilterButton = ({
     filter,
@@ -304,7 +350,7 @@ export default function Next7DaysView({
     </TouchableOpacity>
   );
 
-  const totalStats = getTotalStats();
+  const totalStats = useMemo(() => getTotalStats(), [dayGroups]);
   const hasItems = dayGroups.some((group) => group.items.length > 0);
 
   return (
@@ -351,7 +397,7 @@ export default function Next7DaysView({
         <FlatList
           data={dayGroups}
           renderItem={renderDayGroup}
-          keyExtractor={(item) => item.date}
+          keyExtractor={keyExtractor}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: insets.bottom + 16 },
@@ -364,6 +410,14 @@ export default function Next7DaysView({
             />
           }
           showsVerticalScrollIndicator={false}
+          getItemLayout={getItemLayout}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={WINDOW_SIZE}
+          windowSize={WINDOW_SIZE}
+          initialNumToRender={3}
+          updateCellsBatchingPeriod={50}
+          disableVirtualization={dayGroups.length < 5}
+          legacyImplementation={false}
         />
       ) : (
         <EmptyStateView

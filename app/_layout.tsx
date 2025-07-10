@@ -12,6 +12,7 @@ import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CalendarProvider } from "@/contexts/CalendarContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { TipsProvider } from "@/contexts/TipsContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -64,17 +65,19 @@ export default function RootLayout() {
         <AuthProvider>
           <SettingsProvider>
             <TipsProvider>
-              <ThemeProvider
-                value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-              >
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="(auth)" />
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="+not-found" />
-                </Stack>
-                <StatusBar style="auto" />
-              </ThemeProvider>
+              <CalendarProvider>
+                <ThemeProvider
+                  value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                >
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="(auth)" />
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="+not-found" />
+                  </Stack>
+                  <StatusBar style="auto" />
+                </ThemeProvider>
+              </CalendarProvider>
             </TipsProvider>
           </SettingsProvider>
         </AuthProvider>

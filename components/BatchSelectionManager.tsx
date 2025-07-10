@@ -47,7 +47,7 @@ const BatchSelectionManager: React.FC<BatchSelectionManagerProps> = ({
   const primaryColor = "#007AFF";
   const borderColor = useThemeColor(
     { light: "#E0E0E0", dark: "#3C3C3E" },
-    "border"
+    "icon"
   );
 
   // Animate selection mode visibility
@@ -366,7 +366,7 @@ export const SelectionCheckbox: React.FC<{
   );
   const borderColor = useThemeColor(
     { light: "#E0E0E0", dark: "#3C3C3E" },
-    "border"
+    "icon"
   );
 
   if (!selectionMode) return null;
@@ -407,7 +407,7 @@ export const SelectableItemWrapper: React.FC<{
 }) => {
   const borderColor = useThemeColor(
     { light: "#E0E0E0", dark: "#3C3C3E" },
-    "border"
+    "icon"
   );
   const primaryColor = "#007AFF";
 

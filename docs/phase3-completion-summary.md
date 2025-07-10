@@ -33,14 +33,8 @@ Phase 3 successfully implemented all calendar enhancement features specified in 
 
 #### Key Components:
 
-- **EnhancedCalendarWithIndicators.tsx** (19.5KB)
-
-  - Mobile-first responsive design with animation support
-  - Theme-aware styling with dark mode compatibility
-  - Haptic feedback integration for iOS
-  - Performance optimizations with memoization
-
 - **CompactLegend.tsx** (8.2KB)
+
   - Three layout modes: horizontal, vertical, grid
   - Automatic adaptation for screen sizes (320px → 1440px+)
   - Phase 2 color coding with enhanced contrast ratios
@@ -375,9 +369,8 @@ Phase 3 Implementation Files:
 │   ├── ResponsiveContainer.tsx            (12KB) ✅
 │   ├── AccessibilityWrapper.tsx           (8KB)  ✅
 │   └── calendar/
-│       ├── EnhancedCalendarWithIndicators.tsx (19.5KB) ✅
 │       ├── CompactLegend.tsx              (8.2KB) ✅
-│       └── ResponsiveCalendarLayout.tsx   (10KB) ✅
+│       ├── ResponsiveCalendarLayout.tsx   (10KB) ✅
 ├── utils/
 │   ├── urgencyUtils.ts                    (6KB)  ✅
 │   ├── responsiveUtils.ts                 (15KB) ✅
@@ -405,8 +398,7 @@ Phase 3 Implementation Files:
 
 ```typescript
 // Updated imports in calendar.tsx
-import EnhancedCalendarWithIndicators from "@/components/calendar/EnhancedCalendarWithIndicators";
-import { calculateEnhancedUrgency } from "@/utils/urgencyUtils";
+import CompactLegend from "@/components/calendar/CompactLegend";
 import ResponsiveContainer from "@/components/ResponsiveContainer";
 ```
 

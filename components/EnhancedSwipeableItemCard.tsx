@@ -1,139 +1,131 @@
-// Enhanced Swipeable Item Card - Phase 2 Implementation
-// Implements advanced gesture recognition, progressive feedback, and accessibility
+/**
+ * Enhanced Swipeable Item Card
+ * Implements progressive swipe animations with haptic feedback
+ * Based on Phase 1 animation validation
+ */
 
-import { useThemeColor } from "@/hooks/useThemeColor";
-import { FoodItem } from "@/lib/supabase";
-import { calculateEnhancedUrgency } from "@/utils/urgencyUtils";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  Dimensions,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle,
-} from "react-native";
+import React, { useCallback, useMemo } from "react";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   PanGestureHandler,
   PanGestureHandlerGestureEvent,
-  State,
 } from "react-native-gesture-handler";
-
-// =============================================================================
-// PHASE 2 GESTURE SPECIFICATIONS
-// =============================================================================
-
-const GESTURE_CONFIG = {
-  // Phase 2 thresholds
-  RECOGNITION_THRESHOLD: 20, // Minimum movement to recognize gesture
-  ACTION_THRESHOLD: 120, // Point where action becomes available
-  EXECUTION_THRESHOLD: 200, // Point where action auto-executes
-  MAX_TRANSLATION: 280, // Maximum allowed translation
-
-  // Animation timings (Phase 2 specifications)
-  FEEDBACK_DURATION: 150, // Quick visual feedback
-  RESET_DURATION: 300, // Smooth reset animation
-  HAPTIC_DELAY: 50, // Delay between haptic feedbacks
-
-  // Visual feedback progression
-  SCALE_REDUCTION: 0.95, // Card scaling during gesture
-  SHADOW_EXPANSION: 1.5, // Shadow expansion multiplier
-  BORDER_EXPANSION: 2, // Border width increase
-};
+import Animated, {
+  interpolate,
+  interpolateColor,
+  runOnJS,
+  useAnimatedGestureHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { useThemeColor } from "../hooks/useThemeColor";
+import { FoodItem } from "../lib/supabase";
+import { formatExpiry } from "../utils/formatExpiry";
+import RealisticFoodImage from "./RealisticFoodImage";
 
 // =============================================================================
 // INTERFACES
 // =============================================================================
 
-interface EnhancedSwipeableItemCardProps {
+export interface EnhancedSwipeableItemCardProps {
   item: FoodItem;
-  onPress: () => void;
-  onMarkUsed: () => void;
-  onExtendExpiry: () => void;
-  compactMode?: boolean;
-  accessibilityEnabled?: boolean;
-  gesturesEnabled?: boolean;
-  onSwipeStart?: () => void;
-  onSwipeEnd?: () => void;
+  onMarkUsed: (item: FoodItem, quantity?: number) => void;
+  onExtendExpiry: (item: FoodItem, days: number) => void;
+  onPress?: (item: FoodItem) => void;
+  onDelete?: (item: FoodItem) => void;
+  disabled?: boolean;
+  showQuantitySelector?: boolean;
+  enableHaptics?: boolean;
+  animationConfig?: SwipeAnimationConfig;
 }
 
-interface SwipeState {
-  action: "none" | "markUsed" | "extendExpiry";
-  phase: "idle" | "recognition" | "available" | "committed";
-  direction: "left" | "right" | "none";
-  intensity: number; // 0-1 scale of gesture intensity
+export interface SwipeAnimationConfig {
+  swipeThreshold: number;
+  maxSwipeDistance: number;
+  springConfig: {
+    stiffness: number;
+    damping: number;
+    mass: number;
+  };
+  timingConfig: {
+    duration: number;
+  };
+  progressiveThresholds: {
+    light: number;
+    medium: number;
+    strong: number;
+    action: number;
+  };
 }
 
-interface FoodItemWithUrgency extends FoodItem {
-  urgency: ReturnType<typeof calculateEnhancedUrgency>;
-}
+// =============================================================================
+// DEFAULT CONFIGURATION
+// =============================================================================
+
+const DEFAULT_ANIMATION_CONFIG: SwipeAnimationConfig = {
+  swipeThreshold: 80,
+  maxSwipeDistance: 150,
+  springConfig: {
+    stiffness: 150,
+    damping: 20,
+    mass: 1,
+  },
+  timingConfig: {
+    duration: 300,
+  },
+  progressiveThresholds: {
+    light: 20,
+    medium: 50,
+    strong: 80,
+    action: 120,
+  },
+};
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
-const EnhancedSwipeableItemCard: React.FC<EnhancedSwipeableItemCardProps> = ({
+export function EnhancedSwipeableItemCard({
   item,
-  onPress,
   onMarkUsed,
   onExtendExpiry,
-  compactMode = false,
-  accessibilityEnabled = true,
-  gesturesEnabled = true,
-  onSwipeStart,
-  onSwipeEnd,
-}) => {
-  const screenWidth = Dimensions.get("window").width;
+  onPress,
+  onDelete,
+  disabled = false,
+  showQuantitySelector = true,
+  enableHaptics = true,
+  animationConfig = DEFAULT_ANIMATION_CONFIG,
+}: EnhancedSwipeableItemCardProps) {
+  // =============================================================================
+  // THEME AND COLORS
+  // =============================================================================
 
-  // Theme colors
-  const textColor = useThemeColor(
-    { light: "#11181C", dark: "#ECEDEE" },
-    "text"
-  );
-  const borderColor = useThemeColor(
-    { light: "#E5E7EB", dark: "#3C3C3E" },
-    "border"
-  );
+  const backgroundColor = useThemeColor({}, "background");
+  const textColor = useThemeColor({}, "text");
+  const tintColor = useThemeColor({}, "tint");
+  const borderColor = useThemeColor({}, "icon");
 
-  // Calculate urgency information
-  const itemWithUrgency = useMemo(
-    (): FoodItemWithUrgency => ({
-      ...item,
-      urgency: calculateEnhancedUrgency(item.expiry_date!),
-    }),
-    [item]
-  );
+  // =============================================================================
+  // ANIMATED VALUES
+  // =============================================================================
 
-  // State management
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [swipeState, setSwipeState] = useState<SwipeState>({
-    action: "none",
-    phase: "idle",
-    direction: "none",
-    intensity: 0,
-  });
-  const [lastHapticTime, setLastHapticTime] = useState(0);
+  const translateX = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const backgroundOpacity = useSharedValue(0);
+  const iconOpacity = useSharedValue(0);
+  const iconScale = useSharedValue(0.8);
 
-  // Animation values
-  const translateX = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(1)).current;
-  const actionOpacity = useRef(new Animated.Value(0)).current;
-  const borderWidth = useRef(new Animated.Value(2)).current;
-  const shadowOpacity = useRef(new Animated.Value(0.1)).current;
+  // =============================================================================
+  // HAPTIC FEEDBACK
+  // =============================================================================
 
-  // Progressive haptic feedback with Phase 2 timing
   const triggerHaptic = useCallback(
-    (type: "light" | "medium" | "success", force = false) => {
-      if (Platform.OS !== "ios") return;
-
-      const now = Date.now();
-      if (!force && now - lastHapticTime < GESTURE_CONFIG.HAPTIC_DELAY) return;
-
-      setLastHapticTime(now);
+    (type: "light" | "medium" | "heavy" | "success") => {
+      if (!enableHaptics) return;
 
       switch (type) {
         case "light":
@@ -142,501 +134,326 @@ const EnhancedSwipeableItemCard: React.FC<EnhancedSwipeableItemCardProps> = ({
         case "medium":
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           break;
+        case "heavy":
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          break;
         case "success":
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           break;
       }
     },
-    [lastHapticTime]
+    [enableHaptics]
   );
 
-  // Enhanced gesture event handler with Phase 2 specifications
-  const onGestureEvent = useCallback(
-    (event: PanGestureHandlerGestureEvent) => {
-      const { translationX, velocityX } = event.nativeEvent;
+  // =============================================================================
+  // GESTURE HANDLER
+  // =============================================================================
 
-      // Calculate gesture metrics
-      const absTranslation = Math.abs(translationX);
-      const direction = translationX > 0 ? "right" : "left";
-      const intensity = Math.min(
-        absTranslation / GESTURE_CONFIG.ACTION_THRESHOLD,
-        1
-      );
+  const gestureHandler =
+    useAnimatedGestureHandler<PanGestureHandlerGestureEvent>({
+      onStart: () => {
+        if (disabled) return;
+        scale.value = withSpring(0.98, animationConfig.springConfig);
+      },
 
-      // Determine action based on direction
-      const action = direction === "right" ? "markUsed" : "extendExpiry";
+      onActive: (event) => {
+        if (disabled) return;
 
-      // Determine gesture phase
-      let phase: SwipeState["phase"] = "idle";
-      if (absTranslation >= GESTURE_CONFIG.RECOGNITION_THRESHOLD) {
-        phase = "recognition";
-        if (absTranslation >= GESTURE_CONFIG.ACTION_THRESHOLD) {
-          phase = "available";
-          if (absTranslation >= GESTURE_CONFIG.EXECUTION_THRESHOLD) {
-            phase = "committed";
-          }
-        }
-      }
+        const { translationX } = event;
+        const clampedTranslation = Math.max(
+          -animationConfig.maxSwipeDistance,
+          Math.min(animationConfig.maxSwipeDistance, translationX)
+        );
 
-      // Update swipe state
-      const newState: SwipeState = {
-        action: phase === "idle" ? "none" : action,
-        phase,
-        direction: phase === "idle" ? "none" : direction,
-        intensity,
-      };
+        translateX.value = clampedTranslation;
 
-      // Trigger haptic feedback for phase transitions
-      if (newState.phase !== swipeState.phase) {
-        if (newState.phase === "recognition") {
-          triggerHaptic("light");
-        } else if (newState.phase === "available") {
-          triggerHaptic("medium");
-        } else if (newState.phase === "committed") {
-          triggerHaptic("success", true);
-        }
-      }
+        // Progressive background opacity based on swipe distance
+        const progress =
+          Math.abs(clampedTranslation) / animationConfig.maxSwipeDistance;
+        backgroundOpacity.value = interpolate(
+          progress,
+          [0, 0.2, 0.5, 0.8, 1.0],
+          [0, 0.15, 0.3, 0.6, 0.8]
+        );
 
-      setSwipeState(newState);
+        // Progressive icon opacity and scale
+        iconOpacity.value = interpolate(
+          progress,
+          [0, 0.2, 0.4, 0.7, 1.0],
+          [0, 0, 0.3, 0.7, 1.0]
+        );
 
-      // Update animations with Phase 2 progressive feedback
-      const constrainedTranslation =
-        Math.sign(translationX) *
-        Math.min(absTranslation, GESTURE_CONFIG.MAX_TRANSLATION);
+        iconScale.value = interpolate(
+          progress,
+          [0, 0.2, 0.4, 0.7, 1.0],
+          [0.8, 0.85, 0.9, 0.95, 1.0]
+        );
 
-      translateX.setValue(constrainedTranslation);
-
-      // Progressive visual feedback
-      const scaleValue =
-        phase === "idle"
-          ? 1
-          : 1 - (intensity * 0.05 + (phase === "committed" ? 0.05 : 0));
-      scale.setValue(scaleValue);
-
-      const opacityValue =
-        phase === "idle" ? 0 : Math.min(0.2 + intensity * 0.8, 1);
-      actionOpacity.setValue(opacityValue);
-
-      const borderValue =
-        phase === "idle" ? 2 : 2 + intensity * GESTURE_CONFIG.BORDER_EXPANSION;
-      borderWidth.setValue(borderValue);
-
-      const shadowValue = phase === "idle" ? 0.1 : 0.1 + intensity * 0.2;
-      shadowOpacity.setValue(shadowValue);
-    },
-    [
-      swipeState.phase,
-      triggerHaptic,
-      translateX,
-      scale,
-      actionOpacity,
-      borderWidth,
-      shadowOpacity,
-    ]
-  );
-
-  // Enhanced gesture state change handler
-  const onHandlerStateChange = useCallback(
-    (event: PanGestureHandlerGestureEvent) => {
-      const { state, translationX } = event.nativeEvent;
-
-      if (state === State.BEGAN) {
-        onSwipeStart?.();
-      }
-
-      if (state === State.END || state === State.CANCELLED) {
-        const absTranslation = Math.abs(translationX);
-
+        // Progressive haptic feedback
+        const absTranslation = Math.abs(clampedTranslation);
         if (
-          absTranslation >= GESTURE_CONFIG.EXECUTION_THRESHOLD &&
-          swipeState.action !== "none"
+          absTranslation >= animationConfig.progressiveThresholds.light &&
+          absTranslation < animationConfig.progressiveThresholds.medium
         ) {
-          // Execute action
-          triggerHaptic("success", true);
+          runOnJS(triggerHaptic)("light");
+        } else if (
+          absTranslation >= animationConfig.progressiveThresholds.medium &&
+          absTranslation < animationConfig.progressiveThresholds.strong
+        ) {
+          runOnJS(triggerHaptic)("medium");
+        } else if (
+          absTranslation >= animationConfig.progressiveThresholds.strong
+        ) {
+          runOnJS(triggerHaptic)("heavy");
+        }
+      },
 
-          if (swipeState.action === "markUsed") {
-            onMarkUsed();
-          } else if (swipeState.action === "extendExpiry") {
-            onExtendExpiry();
+      onEnd: (event) => {
+        if (disabled) return;
+
+        const { translationX, velocityX } = event;
+        const shouldTriggerAction =
+          Math.abs(translationX) > animationConfig.swipeThreshold ||
+          Math.abs(velocityX) > 500;
+
+        if (shouldTriggerAction) {
+          // Trigger action based on swipe direction
+          if (translationX > 0) {
+            // Right swipe - Mark as used
+            runOnJS(triggerHaptic)("success");
+            runOnJS(handleMarkUsed)();
+          } else {
+            // Left swipe - Show action menu or delete
+            runOnJS(triggerHaptic)("success");
+            runOnJS(handleLeftSwipeAction)();
           }
         }
 
-        // Reset to idle state
-        resetToIdle();
-        onSwipeEnd?.();
-      }
-    },
-    [
-      swipeState.action,
-      triggerHaptic,
-      onMarkUsed,
-      onExtendExpiry,
-      onSwipeStart,
-      onSwipeEnd,
-    ]
-  );
-
-  // Reset animation and state
-  const resetToIdle = useCallback(() => {
-    Animated.parallel([
-      Animated.spring(translateX, {
-        toValue: 0,
-        tension: 100,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scale, {
-        toValue: 1,
-        tension: 100,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-      Animated.timing(actionOpacity, {
-        toValue: 0,
-        duration: GESTURE_CONFIG.RESET_DURATION,
-        useNativeDriver: true,
-      }),
-      Animated.timing(borderWidth, {
-        toValue: 2,
-        duration: GESTURE_CONFIG.RESET_DURATION,
-        useNativeDriver: false,
-      }),
-      Animated.timing(shadowOpacity, {
-        toValue: 0.1,
-        duration: GESTURE_CONFIG.RESET_DURATION,
-        useNativeDriver: false,
-      }),
-    ]).start();
-
-    setSwipeState({
-      action: "none",
-      phase: "idle",
-      direction: "none",
-      intensity: 0,
+        // Reset animations
+        translateX.value = withSpring(0, animationConfig.springConfig);
+        scale.value = withSpring(1, animationConfig.springConfig);
+        backgroundOpacity.value = withTiming(0, animationConfig.timingConfig);
+        iconOpacity.value = withTiming(0, animationConfig.timingConfig);
+        iconScale.value = withTiming(0.8, animationConfig.timingConfig);
+      },
     });
-  }, [translateX, scale, actionOpacity, borderWidth, shadowOpacity]);
 
-  // Action visual configuration
-  const getActionConfig = useCallback(() => {
-    switch (swipeState.action) {
-      case "markUsed":
-        return {
-          backgroundColor: "#34C759",
-          icon: "checkmark-circle" as const,
-          text: "Mark as Used",
-          description: "Remove from inventory",
-        };
-      case "extendExpiry":
-        return {
-          backgroundColor: "#FF9500",
-          icon: "time" as const,
-          text: "Extend Expiry",
-          description: "Add more time",
-        };
-      default:
-        return {
-          backgroundColor: textColor,
-          icon: "help" as const,
-          text: "",
-          description: "",
-        };
+  // =============================================================================
+  // ACTION HANDLERS
+  // =============================================================================
+
+  const handleMarkUsed = useCallback(() => {
+    if (showQuantitySelector && item.quantity > 1) {
+      Alert.alert("Mark as Used", `How much of ${item.name} did you use?`, [
+        { text: "Some", onPress: () => onMarkUsed(item, 1) },
+        {
+          text: "Half",
+          onPress: () => onMarkUsed(item, Math.floor(item.quantity / 2)),
+        },
+        { text: "All", onPress: () => onMarkUsed(item) },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    } else {
+      onMarkUsed(item);
     }
-  }, [swipeState.action, textColor]);
+  }, [item, onMarkUsed, showQuantitySelector]);
 
-  const actionConfig = getActionConfig();
-
-  // Dynamic styles
-  const cardStyle = useMemo(
-    (): Animated.WithAnimatedObject<ViewStyle> => ({
-      backgroundColor: itemWithUrgency.urgency.backgroundColor,
-      borderColor: itemWithUrgency.urgency.borderColor,
-      borderWidth: borderWidth,
-      transform: [{ translateX }, { scale }],
-      shadowOpacity: shadowOpacity,
-    }),
-    [itemWithUrgency.urgency, borderWidth, translateX, scale, shadowOpacity]
-  );
-
-  const actionBackgroundStyle = useMemo(
-    (): Animated.WithAnimatedObject<ViewStyle> => ({
-      opacity: actionOpacity,
-      backgroundColor: actionConfig.backgroundColor,
-    }),
-    [actionOpacity, actionConfig.backgroundColor]
-  );
-
-  // Accessibility features
-  const accessibilityLabel = useMemo(() => {
-    if (!accessibilityEnabled) return undefined;
-
-    return (
-      `${item.name}, ${itemWithUrgency.urgency.description}, ${item.location}. ` +
-      `Double-tap to expand, or swipe right to mark used, swipe left to extend expiry.`
+  const handleLeftSwipeAction = useCallback(() => {
+    Alert.alert(
+      "Item Actions",
+      `What would you like to do with ${item.name}?`,
+      [
+        {
+          text: "Extend Expiry (+3 days)",
+          onPress: () => onExtendExpiry(item, 3),
+        },
+        {
+          text: "Extend Expiry (+7 days)",
+          onPress: () => onExtendExpiry(item, 7),
+        },
+        ...(onDelete
+          ? [
+              {
+                text: "Delete",
+                style: "destructive" as const,
+                onPress: () => onDelete(item),
+              },
+            ]
+          : []),
+        { text: "Cancel", style: "cancel" },
+      ]
     );
-  }, [
-    accessibilityEnabled,
-    item.name,
-    itemWithUrgency.urgency.description,
-    item.location,
-  ]);
+  }, [item, onExtendExpiry, onDelete]);
+
+  const handlePress = useCallback(() => {
+    if (onPress && !disabled) {
+      onPress(item);
+    }
+  }, [onPress, item, disabled]);
+
+  // =============================================================================
+  // ANIMATED STYLES
+  // =============================================================================
+
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }, { scale: scale.value }],
+  }));
+
+  const backgroundAnimatedStyle = useAnimatedStyle(() => {
+    const isRightSwipe = translateX.value > 0;
+    return {
+      backgroundColor: interpolateColor(
+        backgroundOpacity.value,
+        [0, 1],
+        [
+          "transparent",
+          isRightSwipe ? "#16A34A" : "#DC2626", // Green for right (mark used), red for left (action)
+        ]
+      ),
+      opacity: backgroundOpacity.value,
+    };
+  });
+
+  const leftIconAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value < 0 ? iconOpacity.value : 0,
+    transform: [{ scale: translateX.value < 0 ? iconScale.value : 0.8 }],
+  }));
+
+  const rightIconAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value > 0 ? iconOpacity.value : 0,
+    transform: [{ scale: translateX.value > 0 ? iconScale.value : 0.8 }],
+  }));
+
+  // =============================================================================
+  // ITEM STATUS
+  // =============================================================================
+
+  const itemStatus = useMemo(() => {
+    if (!item.expiry_date) return "unknown";
+
+    const today = new Date().toISOString().split("T")[0];
+    const expiry = item.expiry_date;
+
+    if (expiry < today) return "expired";
+    if (expiry === today) return "expires-today";
+
+    const daysUntilExpiry = Math.ceil(
+      (new Date(expiry).getTime() - new Date(today).getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+
+    if (daysUntilExpiry <= 3) return "expires-soon";
+    return "fresh";
+  }, [item.expiry_date]);
+
+  const statusColor = useMemo(() => {
+    switch (itemStatus) {
+      case "expired":
+        return "#DC2626";
+      case "expires-today":
+        return "#EA580C";
+      case "expires-soon":
+        return "#D97706";
+      default:
+        return "#16A34A";
+    }
+  }, [itemStatus]);
+
+  // =============================================================================
+  // RENDER
+  // =============================================================================
 
   return (
     <View style={styles.container}>
-      {/* Background Action Indicator */}
-      <Animated.View style={[styles.actionBackground, actionBackgroundStyle]}>
-        <View style={styles.actionContent}>
-          <Ionicons name={actionConfig.icon} size={28} color="#FFFFFF" />
-          <Text style={styles.actionText}>{actionConfig.text}</Text>
-          <Text style={styles.actionDescription}>
-            {actionConfig.description}
-          </Text>
+      {/* Background Actions */}
+      <Animated.View
+        style={[styles.actionsBackground, backgroundAnimatedStyle]}
+      >
+        {/* Left Action - Extend/Delete */}
+        <Animated.View style={[styles.leftAction, leftIconAnimatedStyle]}>
+          <Ionicons name="time-outline" size={24} color="white" />
+          <Text style={styles.actionText}>Extend</Text>
+        </Animated.View>
 
-          {/* Progress indicator */}
-          <View style={styles.progressContainer}>
-            <View
-              style={[
-                styles.progressBar,
-                { width: `${swipeState.intensity * 100}%` },
-              ]}
-            />
-          </View>
-        </View>
+        {/* Right Action - Mark Used */}
+        <Animated.View style={[styles.rightAction, rightIconAnimatedStyle]}>
+          <Ionicons name="checkmark-circle-outline" size={24} color="white" />
+          <Text style={styles.actionText}>Used</Text>
+        </Animated.View>
       </Animated.View>
 
       {/* Main Card */}
-      <PanGestureHandler
-        enabled={gesturesEnabled}
-        onGestureEvent={onGestureEvent}
-        onHandlerStateChange={onHandlerStateChange}
-        activeOffsetX={[
-          -GESTURE_CONFIG.RECOGNITION_THRESHOLD,
-          GESTURE_CONFIG.RECOGNITION_THRESHOLD,
-        ]}
-        failOffsetY={[-20, 20]}
-      >
+      <PanGestureHandler onGestureEvent={gestureHandler} enabled={!disabled}>
         <Animated.View
-          style={[styles.card, cardStyle]}
-          accessible={accessibilityEnabled}
-          accessibilityLabel={accessibilityLabel}
-          accessibilityRole="button"
-          accessibilityActions={[
-            { name: "activate", label: "View details" },
-            { name: "markUsed", label: "Mark as used" },
-            { name: "extendExpiry", label: "Extend expiry date" },
-          ]}
-          onAccessibilityAction={(event) => {
-            switch (event.nativeEvent.actionName) {
-              case "activate":
-                onPress();
-                break;
-              case "markUsed":
-                onMarkUsed();
-                break;
-              case "extendExpiry":
-                onExtendExpiry();
-                break;
-            }
-          }}
+          style={[styles.card, { backgroundColor }, cardAnimatedStyle]}
         >
-          <TouchableOpacity
-            style={styles.cardContent}
-            onPress={() => setIsExpanded(!isExpanded)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.mainInfo}>
-              <View style={styles.nameRow}>
-                <Text
-                  style={[
-                    styles.itemName,
-                    { color: itemWithUrgency.urgency.color },
-                  ]}
-                >
-                  {item.name}
-                </Text>
-                <View
-                  style={[
-                    styles.urgencyBadge,
-                    { backgroundColor: itemWithUrgency.urgency.color },
-                  ]}
-                >
-                  <Text style={styles.urgencyText}>
-                    {itemWithUrgency.urgency.level.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
+          <View style={styles.cardContent} onTouchEnd={handlePress}>
+            {/* Food Image */}
+            <RealisticFoodImage
+              foodName={item.name}
+              style={styles.foodImage}
+              size={48}
+            />
 
-              <Text style={[styles.description, { color: textColor }]}>
-                {itemWithUrgency.urgency.description}
+            {/* Item Info */}
+            <View style={styles.itemInfo}>
+              <Text
+                style={[styles.itemName, { color: textColor }]}
+                numberOfLines={1}
+              >
+                {item.name}
               </Text>
 
-              {!compactMode && (
-                <View style={styles.detailsRow}>
-                  <Text style={[styles.details, { color: textColor }]}>
-                    {item.quantity} {item.unit}
-                  </Text>
+              <View style={styles.itemDetails}>
+                <Text style={[styles.itemQuantity, { color: textColor }]}>
+                  {item.quantity} {item.unit || "units"}
+                </Text>
+
+                {item.location && (
                   <View style={styles.locationBadge}>
                     <Ionicons
-                      name={item.location === "fridge" ? "snow" : "home"}
+                      name={
+                        item.location === "fridge"
+                          ? "snow-outline"
+                          : "home-outline"
+                      }
                       size={12}
-                      color={textColor}
+                      color={borderColor}
                     />
                     <Text style={[styles.locationText, { color: textColor }]}>
                       {item.location}
                     </Text>
                   </View>
-                </View>
-              )}
+                )}
+              </View>
+
+              {/* Expiry Info */}
+              <View style={styles.expiryInfo}>
+                <View
+                  style={[
+                    styles.statusIndicator,
+                    { backgroundColor: statusColor },
+                  ]}
+                />
+                <Text style={[styles.expiryText, { color: statusColor }]}>
+                  {formatExpiry(item.expiry_date)}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.rightSection}>
-              <Text
-                style={[
-                  styles.daysText,
-                  { color: itemWithUrgency.urgency.color },
-                ]}
-              >
-                {itemWithUrgency.urgency.description.includes("today")
-                  ? "Today"
-                  : itemWithUrgency.urgency.description.includes("Expired")
-                  ? "Expired"
-                  : `${Math.abs(getDaysUntilExpiry(item.expiry_date!))}d`}
-              </Text>
+            {/* Swipe Hint */}
+            <View style={styles.swipeHint}>
               <Ionicons
-                name={isExpanded ? "chevron-up" : "chevron-down"}
-                size={20}
-                color={textColor}
+                name="swap-horizontal-outline"
+                size={16}
+                color={borderColor}
               />
             </View>
-          </TouchableOpacity>
-
-          {/* Expanded Section */}
-          {isExpanded && (
-            <ExpandedSection
-              item={item}
-              onPress={onPress}
-              onMarkUsed={onMarkUsed}
-              onExtendExpiry={onExtendExpiry}
-              textColor={textColor}
-              borderColor={borderColor}
-            />
-          )}
-
-          {/* Swipe Instruction Hint */}
-          {!isExpanded && swipeState.phase === "idle" && gesturesEnabled && (
-            <View style={styles.swipeHint}>
-              <Text style={[styles.swipeHintText, { color: textColor }]}>
-                ← Extend • Used →
-              </Text>
-            </View>
-          )}
-
-          {/* Gesture State Indicator */}
-          {swipeState.phase !== "idle" && (
-            <View style={styles.gestureIndicator}>
-              <Text style={[styles.gestureText, { color: "#FFFFFF" }]}>
-                {swipeState.phase === "recognition" && "Recognized"}
-                {swipeState.phase === "available" && "Release to Action"}
-                {swipeState.phase === "committed" && "Executing..."}
-              </Text>
-            </View>
-          )}
+          </View>
         </Animated.View>
       </PanGestureHandler>
     </View>
   );
-};
-
-// =============================================================================
-// EXPANDED SECTION COMPONENT
-// =============================================================================
-
-interface ExpandedSectionProps {
-  item: FoodItem;
-  onPress: () => void;
-  onMarkUsed: () => void;
-  onExtendExpiry: () => void;
-  textColor: string;
-  borderColor: string;
-}
-
-const ExpandedSection: React.FC<ExpandedSectionProps> = ({
-  item,
-  onPress,
-  onMarkUsed,
-  onExtendExpiry,
-  textColor,
-  borderColor,
-}) => (
-  <View style={styles.expandedSection}>
-    <View style={[styles.separator, { backgroundColor: borderColor }]} />
-
-    {item.category && (
-      <View style={styles.expandedRow}>
-        <Ionicons name="pricetag" size={16} color={textColor} />
-        <Text style={[styles.expandedText, { color: textColor }]}>
-          {item.category}
-        </Text>
-      </View>
-    )}
-
-    <View style={styles.expandedRow}>
-      <Ionicons name="calendar" size={16} color={textColor} />
-      <Text style={[styles.expandedText, { color: textColor }]}>
-        Added {new Date(item.created_at).toLocaleDateString()}
-      </Text>
-    </View>
-
-    {item.expiry_date && (
-      <View style={styles.expandedRow}>
-        <Ionicons name="alarm" size={16} color={textColor} />
-        <Text style={[styles.expandedText, { color: textColor }]}>
-          Expires {new Date(item.expiry_date).toLocaleDateString()}
-        </Text>
-      </View>
-    )}
-
-    {/* Action Buttons */}
-    <View style={styles.actionButtons}>
-      <TouchableOpacity
-        style={[styles.actionButton, styles.viewButton]}
-        onPress={onPress}
-      >
-        <Ionicons name="eye" size={16} color="#007AFF" />
-        <Text style={styles.viewButtonText}>View Details</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.actionButton, styles.usedButton]}
-        onPress={onMarkUsed}
-      >
-        <Ionicons name="checkmark" size={16} color="#34C759" />
-        <Text style={styles.usedButtonText}>Mark Used</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.actionButton, styles.extendButton]}
-        onPress={onExtendExpiry}
-      >
-        <Ionicons name="time" size={16} color="#FF9500" />
-        <Text style={styles.extendButtonText}>Extend</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-);
-
-// =============================================================================
-// UTILITY FUNCTIONS
-// =============================================================================
-
-function getDaysUntilExpiry(expiryDate: string): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const expiry = new Date(expiryDate);
-  expiry.setHours(0, 0, 0, 0);
-
-  const diffTime = expiry.getTime() - today.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
 // =============================================================================
@@ -645,96 +462,73 @@ function getDaysUntilExpiry(expiryDate: string): number {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 12,
-    position: "relative",
+    marginHorizontal: 16,
+    marginVertical: 4,
   },
-  actionBackground: {
+  actionsBackground: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
     borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 0,
   },
-  actionContent: {
+  leftAction: {
     alignItems: "center",
-    gap: 4,
+    flexDirection: "row",
+    gap: 8,
+  },
+  rightAction: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   actionText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  actionDescription: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    opacity: 0.9,
-  },
-  progressContainer: {
-    width: 60,
-    height: 4,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    borderRadius: 2,
-    marginTop: 4,
-  },
-  progressBar: {
-    height: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 2,
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
   },
   card: {
     borderRadius: 12,
-    padding: 16,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.1)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    zIndex: 1,
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   cardContent: {
     flexDirection: "row",
     alignItems: "center",
+    padding: 16,
+    gap: 12,
   },
-  mainInfo: {
+  foodImage: {
+    borderRadius: 8,
+  },
+  itemInfo: {
     flex: 1,
-  },
-  nameRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
+    gap: 4,
   },
   itemName: {
     fontSize: 16,
     fontWeight: "600",
-    flex: 1,
   },
-  urgencyBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  urgencyText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "bold",
-  },
-  description: {
-    fontSize: 14,
-    marginBottom: 6,
-    opacity: 0.8,
-  },
-  detailsRow: {
+  itemDetails: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
   },
-  details: {
-    fontSize: 12,
+  itemQuantity: {
+    fontSize: 14,
     opacity: 0.7,
   },
   locationBadge: {
@@ -743,105 +537,31 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
     backgroundColor: "rgba(0,0,0,0.05)",
+    borderRadius: 8,
   },
   locationText: {
-    fontSize: 11,
+    fontSize: 12,
+    textTransform: "capitalize",
+  },
+  expiryInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  expiryText: {
+    fontSize: 14,
     fontWeight: "500",
   },
-  rightSection: {
-    alignItems: "center",
-    gap: 4,
-  },
-  daysText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  expandedSection: {
-    marginTop: 12,
-    gap: 8,
-  },
-  separator: {
-    height: 1,
-    marginBottom: 4,
-  },
-  expandedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  expandedText: {
-    fontSize: 13,
-    opacity: 0.8,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 12,
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    gap: 4,
-  },
-  viewButton: {
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-  },
-  usedButton: {
-    backgroundColor: "rgba(52, 199, 89, 0.1)",
-  },
-  extendButton: {
-    backgroundColor: "rgba(255, 149, 0, 0.1)",
-  },
-  viewButtonText: {
-    color: "#007AFF",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  usedButtonText: {
-    color: "#34C759",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  extendButtonText: {
-    color: "#FF9500",
-    fontSize: 12,
-    fontWeight: "600",
-  },
   swipeHint: {
-    position: "absolute",
-    bottom: 4,
-    right: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  swipeHintText: {
-    fontSize: 10,
-    opacity: 0.6,
-    fontStyle: "italic",
-  },
-  gestureIndicator: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: 12,
-  },
-  gestureText: {
-    fontSize: 10,
-    fontWeight: "600",
+    opacity: 0.3,
   },
 });
 
+// Default export for backward compatibility
 export default EnhancedSwipeableItemCard;

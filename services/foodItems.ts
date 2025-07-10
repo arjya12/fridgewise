@@ -234,3 +234,104 @@ export const foodItemsService = {
     return addUrgencyToItems(data as FoodItem[]);
   },
 };
+
+// Add batch operations for performance
+export const batchOperations = {
+  /**
+   * Batch update multiple items at once to reduce API calls
+   */
+  async batchUpdateItems(
+    updates: Array<{ id: string; updates: Partial<FoodItem> }>
+  ): Promise<void> {
+    try {
+      const promises = updates.map(({ id, updates: itemUpdates }) =>
+        supabase.from("food_items").update(itemUpdates).eq("id", id)
+      );
+
+      const results = await Promise.allSettled(promises);
+
+      // Check for failures
+      const failures = results.filter((result) => result.status === "rejected");
+      if (failures.length > 0) {
+        console.warn(`Batch update: ${failures.length} items failed to update`);
+      }
+    } catch (error) {
+      console.error("Batch update failed:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Batch mark multiple items as used
+   */
+  async batchMarkUsed(itemIds: string[]): Promise<void> {
+    try {
+      const usagePromises = itemIds.map((itemId) =>
+        supabase.from("food_usage_log").insert({
+          food_item_id: itemId,
+          action: "used",
+          quantity: 1,
+          timestamp: new Date().toISOString(),
+        })
+      );
+
+      await Promise.allSettled(usagePromises);
+    } catch (error) {
+      console.error("Batch mark used failed:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Batch delete multiple items
+   */
+  async batchDeleteItems(itemIds: string[]): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from("food_items")
+        .delete()
+        .in("id", itemIds);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Batch delete failed:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Preload data for multiple months to improve navigation
+   */
+  async preloadMonthsData(
+    months: Array<{ year: number; month: number }>
+  ): Promise<Record<string, Record<string, FoodItem[]>>> {
+    try {
+      const promises = months.map(async ({ year, month }) => {
+        const startDate = new Date(year, month - 1, 1)
+          .toISOString()
+          .split("T")[0];
+        const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+
+        const data = await foodItemsService.getItemsByExpiryDate(
+          startDate,
+          endDate
+        );
+        return { key: `${year}-${month}`, data };
+      });
+
+      const results = await Promise.allSettled(promises);
+      const successfulResults: Record<string, Record<string, FoodItem[]>> = {};
+
+      results.forEach((result) => {
+        if (result.status === "fulfilled") {
+          successfulResults[result.value.key] = result.value.data;
+        }
+      });
+
+      return successfulResults;
+    } catch (error) {
+      console.error("Preload months data failed:", error);
+      throw error;
+    }
+  },
+};

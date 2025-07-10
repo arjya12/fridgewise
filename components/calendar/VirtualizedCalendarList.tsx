@@ -15,6 +15,7 @@ import {
   NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
+  Text,
   View,
   ViewStyle,
 } from "react-native";
@@ -430,7 +431,7 @@ const ScrollIndicators: React.FC<ScrollIndicatorsProps> = memo(
             accessibilityRole="button"
             accessibilityLabel="Scroll to top"
           >
-            <View style={styles.scrollArrow}>↑</View>
+            <Text style={styles.scrollArrow}>↑</Text>
           </View>
         )}
 
@@ -555,7 +556,7 @@ const styles = StyleSheet.create({
   scrollArrow: {
     color: "white",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "bold" as const,
   },
   progressContainer: {
     flex: 1,

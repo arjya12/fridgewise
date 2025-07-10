@@ -17,6 +17,7 @@ export interface AnimationConfig {
   speed?: number;
   delay?: number;
   easing?: (value: number) => number;
+  deceleration?: number;
 }
 
 export interface OptimizedAnimationConfig extends AnimationConfig {
@@ -230,12 +231,12 @@ export function useInteractionComplete(callback: () => void, deps: any[] = []) {
   useEffect(() => {
     const handle = InteractionManager.runAfterInteractions(callback);
     return () => handle.cancel();
-  }, deps);
+  }, deps || []); // Ensure deps is always an array
 }
 
 export function useBatchedUpdates() {
   const [updates, setUpdates] = useState<Array<() => void>>([]);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const batchUpdate = useCallback((updateFn: () => void) => {
     setUpdates((prev) => [...prev, updateFn]);
@@ -516,7 +517,7 @@ export function useOptimizedGesture<T>(
   throttleMs: number = 16
 ) {
   const lastCallTime = useRef(0);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const throttledGesture = useCallback(
     (value: T) => {
