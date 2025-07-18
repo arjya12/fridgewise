@@ -434,9 +434,9 @@ export default function WelcomeScreen() {
                     onFocus={() => setEmailFocused(true)}
                     onBlur={() => setEmailFocused(false)}
                     underlineColorAndroid="transparent"
-                    autoComplete="off"
-                    importantForAutofill="no"
-                    textContentType="none"
+                    autoComplete="email"
+                    importantForAutofill="yes"
+                    textContentType="emailAddress"
                   />
                 </View>
                 <View
@@ -467,9 +467,9 @@ export default function WelcomeScreen() {
                     onFocus={() => setPasswordFocused(true)}
                     onBlur={() => setPasswordFocused(false)}
                     underlineColorAndroid="transparent"
-                    autoComplete="off"
-                    importantForAutofill="no"
-                    textContentType="none"
+                    autoComplete="password"
+                    importantForAutofill="yes"
+                    textContentType="password"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
