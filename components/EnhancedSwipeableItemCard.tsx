@@ -8,15 +8,11 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useMemo } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import {
-  PanGestureHandler,
-  PanGestureHandlerGestureEvent,
-} from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
   interpolateColor,
   runOnJS,
-  useAnimatedGestureHandler,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -24,8 +20,21 @@ import Animated, {
 } from "react-native-reanimated";
 import { useThemeColor } from "../hooks/useThemeColor";
 import { FoodItem } from "../lib/supabase";
-import { formatExpiry } from "../utils/formatExpiry";
 import RealisticFoodImage from "./RealisticFoodImage";
+
+// Helper function to get status text based on expiry date
+function getStatusText(expiryDate: string): string {
+  if (!expiryDate) return "SAFE";
+
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const diffTime = expiry.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return "EXPIRED";
+  if (diffDays <= 2) return "WARNING";
+  return "SAFE";
+}
 
 // =============================================================================
 // INTERFACES
@@ -118,6 +127,10 @@ export function EnhancedSwipeableItemCard({
   const backgroundOpacity = useSharedValue(0);
   const iconOpacity = useSharedValue(0);
   const iconScale = useSharedValue(0.8);
+  const isCommitted = useSharedValue(false);
+  const hapticState = useSharedValue(0);
+  const cardHeight = useSharedValue(1);
+  const cardOpacity = useSharedValue(1);
 
   // =============================================================================
   // HAPTIC FEEDBACK
@@ -144,99 +157,6 @@ export function EnhancedSwipeableItemCard({
     },
     [enableHaptics]
   );
-
-  // =============================================================================
-  // GESTURE HANDLER
-  // =============================================================================
-
-  const gestureHandler =
-    useAnimatedGestureHandler<PanGestureHandlerGestureEvent>({
-      onStart: () => {
-        if (disabled) return;
-        scale.value = withSpring(0.98, animationConfig.springConfig);
-      },
-
-      onActive: (event) => {
-        if (disabled) return;
-
-        const { translationX } = event;
-        const clampedTranslation = Math.max(
-          -animationConfig.maxSwipeDistance,
-          Math.min(animationConfig.maxSwipeDistance, translationX)
-        );
-
-        translateX.value = clampedTranslation;
-
-        // Progressive background opacity based on swipe distance
-        const progress =
-          Math.abs(clampedTranslation) / animationConfig.maxSwipeDistance;
-        backgroundOpacity.value = interpolate(
-          progress,
-          [0, 0.2, 0.5, 0.8, 1.0],
-          [0, 0.15, 0.3, 0.6, 0.8]
-        );
-
-        // Progressive icon opacity and scale
-        iconOpacity.value = interpolate(
-          progress,
-          [0, 0.2, 0.4, 0.7, 1.0],
-          [0, 0, 0.3, 0.7, 1.0]
-        );
-
-        iconScale.value = interpolate(
-          progress,
-          [0, 0.2, 0.4, 0.7, 1.0],
-          [0.8, 0.85, 0.9, 0.95, 1.0]
-        );
-
-        // Progressive haptic feedback
-        const absTranslation = Math.abs(clampedTranslation);
-        if (
-          absTranslation >= animationConfig.progressiveThresholds.light &&
-          absTranslation < animationConfig.progressiveThresholds.medium
-        ) {
-          runOnJS(triggerHaptic)("light");
-        } else if (
-          absTranslation >= animationConfig.progressiveThresholds.medium &&
-          absTranslation < animationConfig.progressiveThresholds.strong
-        ) {
-          runOnJS(triggerHaptic)("medium");
-        } else if (
-          absTranslation >= animationConfig.progressiveThresholds.strong
-        ) {
-          runOnJS(triggerHaptic)("heavy");
-        }
-      },
-
-      onEnd: (event) => {
-        if (disabled) return;
-
-        const { translationX, velocityX } = event;
-        const shouldTriggerAction =
-          Math.abs(translationX) > animationConfig.swipeThreshold ||
-          Math.abs(velocityX) > 500;
-
-        if (shouldTriggerAction) {
-          // Trigger action based on swipe direction
-          if (translationX > 0) {
-            // Right swipe - Mark as used
-            runOnJS(triggerHaptic)("success");
-            runOnJS(handleMarkUsed)();
-          } else {
-            // Left swipe - Show action menu or delete
-            runOnJS(triggerHaptic)("success");
-            runOnJS(handleLeftSwipeAction)();
-          }
-        }
-
-        // Reset animations
-        translateX.value = withSpring(0, animationConfig.springConfig);
-        scale.value = withSpring(1, animationConfig.springConfig);
-        backgroundOpacity.value = withTiming(0, animationConfig.timingConfig);
-        iconOpacity.value = withTiming(0, animationConfig.timingConfig);
-        iconScale.value = withTiming(0.8, animationConfig.timingConfig);
-      },
-    });
 
   // =============================================================================
   // ACTION HANDLERS
@@ -297,6 +217,70 @@ export function EnhancedSwipeableItemCard({
 
   const cardAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { scale: scale.value }],
+  }));
+
+  const foregroundAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  // Left swipe (Mark Used) background
+  const leftActionBackgroundAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-200, -20, 0], [1, 0.1, 0]),
+    width: interpolate(translateX.value, [-200, -20, 0], [300, 50, 0]),
+  }));
+
+  // Right swipe (Extend Expiry) background
+  const rightActionBackgroundAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, 20, 200], [0, 0.1, 1]),
+    width: interpolate(translateX.value, [0, 20, 200], [0, 50, 300]),
+  }));
+
+  // Left swipe (Mark Used) icon and text styles
+  const leftCheckmarkIconAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-40, -20, 0], [1, 0, 0]),
+    transform: [
+      {
+        scale: interpolate(translateX.value, [-40, -20, 0], [1, 0.8, 0.8]),
+      },
+    ],
+  }));
+
+  const leftActionTextAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-140, -120, 0], [1, 0, 0]),
+    transform: [
+      {
+        translateX: interpolate(translateX.value, [-140, -120, 0], [0, 10, 20]),
+      },
+    ],
+  }));
+
+  // Right swipe (Extend Expiry) icon and text styles
+  const rightExtendIconAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, 20, 40], [0, 0, 1]),
+    transform: [
+      {
+        scale: interpolate(translateX.value, [0, 20, 40], [0.8, 0.8, 1]),
+      },
+    ],
+  }));
+
+  const rightActionTextAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, 120, 140], [0, 0, 1]),
+    transform: [
+      {
+        translateX: interpolate(translateX.value, [0, 120, 140], [-20, -10, 0]),
+      },
+    ],
+  }));
+
+  const exitAnimationStyle = useAnimatedStyle(() => ({
+    height: cardHeight.value,
+    opacity: cardOpacity.value,
+    transform: [
+      {
+        scaleY: cardHeight.value,
+      },
+    ],
   }));
 
   const backgroundAnimatedStyle = useAnimatedStyle(() => {
@@ -363,96 +347,198 @@ export function EnhancedSwipeableItemCard({
   // RENDER
   // =============================================================================
 
+  // Define the new pan gesture using modern react-native-gesture-handler
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-Infinity, Infinity]) // Activate on both left and right swipes
+    .failOffsetY([-10, 10]) // Yield to vertical scroll if vertical movement > 10px
+    .onStart(() => {
+      // Reset state for new gesture
+      isCommitted.value = false;
+      hapticState.value = 0;
+    })
+    .onUpdate((event) => {
+      // Update translateX based on swipe distance (allow both directions)
+      translateX.value = event.translationX;
+
+      // Trigger haptic feedback when crossing thresholds
+      if (enableHaptics) {
+        // Right swipe threshold (extend expiry)
+        if (event.translationX >= 20 && hapticState.value === 0) {
+          hapticState.value = 1;
+          runOnJS(triggerHaptic)("light");
+        }
+        // Left swipe threshold (mark used)
+        else if (event.translationX <= -20 && hapticState.value === 0) {
+          hapticState.value = 1;
+          runOnJS(triggerHaptic)("light");
+        }
+      }
+    })
+    .onEnd((event) => {
+      // Evaluate final position and decide action
+      if (event.translationX <= -200 && !isCommitted.value) {
+        // Left swipe: Mark Used action
+        isCommitted.value = true;
+        runOnJS(onMarkUsed)(item);
+
+        // Start exit animation
+        cardHeight.value = withTiming(0, { duration: 300 });
+        cardOpacity.value = withTiming(0, { duration: 300 });
+      } else if (event.translationX >= 200 && !isCommitted.value) {
+        // Right swipe: Extend Expiry action
+        isCommitted.value = true;
+        runOnJS(onExtendExpiry)(item, 3); // Default to 3 days for now
+
+        // Reset position without exit animation
+        translateX.value = withSpring(0);
+      } else {
+        // Animate back to original position
+        translateX.value = withSpring(0);
+      }
+    });
+
   return (
-    <View style={styles.container}>
-      {/* Background Actions */}
-      <Animated.View
-        style={[styles.actionsBackground, backgroundAnimatedStyle]}
-      >
-        {/* Left Action - Extend/Delete */}
-        <Animated.View style={[styles.leftAction, leftIconAnimatedStyle]}>
-          <Ionicons name="time-outline" size={24} color="white" />
-          <Text style={styles.actionText}>Extend</Text>
-        </Animated.View>
-
-        {/* Right Action - Mark Used */}
-        <Animated.View style={[styles.rightAction, rightIconAnimatedStyle]}>
-          <Ionicons name="checkmark-circle-outline" size={24} color="white" />
-          <Text style={styles.actionText}>Used</Text>
-        </Animated.View>
-      </Animated.View>
-
-      {/* Main Card */}
-      <PanGestureHandler onGestureEvent={gestureHandler} enabled={!disabled}>
-        <Animated.View
-          style={[styles.card, { backgroundColor }, cardAnimatedStyle]}
-        >
-          <View style={styles.cardContent} onTouchEnd={handlePress}>
-            {/* Food Image */}
-            <RealisticFoodImage
-              foodName={item.name}
-              style={styles.foodImage}
-              size={48}
-            />
-
-            {/* Item Info */}
-            <View style={styles.itemInfo}>
-              <Text
-                style={[styles.itemName, { color: textColor }]}
-                numberOfLines={1}
+    // Root container with layered structure and exit animation
+    <Animated.View style={[styles.rootContainer, exitAnimationStyle]}>
+      <GestureDetector gesture={panGesture}>
+        <View style={styles.gestureContainer}>
+          {/* Left Swipe Action (Mark Used) */}
+          <Animated.View
+            style={[
+              styles.leftActionBackground,
+              leftActionBackgroundAnimatedStyle,
+            ]}
+          >
+            <View style={styles.leftActionContent}>
+              <Animated.View style={leftCheckmarkIconAnimatedStyle}>
+                <Ionicons name="checkmark" size={24} color="white" />
+              </Animated.View>
+              <Animated.Text
+                style={[styles.actionLabel, leftActionTextAnimatedStyle]}
               >
-                {item.name}
-              </Text>
+                ✓ USED
+              </Animated.Text>
+            </View>
+          </Animated.View>
 
-              <View style={styles.itemDetails}>
-                <Text style={[styles.itemQuantity, { color: textColor }]}>
-                  {item.quantity} {item.unit || "units"}
-                </Text>
+          {/* Right Swipe Action (Extend Expiry) */}
+          <Animated.View
+            style={[
+              styles.rightActionBackground,
+              rightActionBackgroundAnimatedStyle,
+            ]}
+          >
+            <View style={styles.rightActionContent}>
+              <Animated.View style={rightExtendIconAnimatedStyle}>
+                <Ionicons name="time-outline" size={24} color="white" />
+              </Animated.View>
+              <Animated.Text
+                style={[styles.actionLabel, rightActionTextAnimatedStyle]}
+              >
+                +3d EXTEND
+              </Animated.Text>
+            </View>
+          </Animated.View>
 
-                {item.location && (
-                  <View style={styles.locationBadge}>
-                    <Ionicons
-                      name={
-                        item.location === "fridge"
-                          ? "snow-outline"
-                          : "home-outline"
-                      }
-                      size={12}
-                      color={borderColor}
-                    />
-                    <Text style={[styles.locationText, { color: textColor }]}>
-                      {item.location}
-                    </Text>
-                  </View>
-                )}
-              </View>
+          {/* Background Actions */}
+          <Animated.View
+            style={[styles.actionsBackground, backgroundAnimatedStyle]}
+          >
+            {/* Left Action - Extend/Delete */}
+            <Animated.View style={[styles.leftAction, leftIconAnimatedStyle]}>
+              <Ionicons name="time-outline" size={24} color="white" />
+              <Text style={styles.actionText}>Extend</Text>
+            </Animated.View>
 
-              {/* Expiry Info */}
-              <View style={styles.expiryInfo}>
+            {/* Right Action - Mark Used */}
+            <Animated.View style={[styles.rightAction, rightIconAnimatedStyle]}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={24}
+                color="white"
+              />
+              <Text style={styles.actionText}>Used</Text>
+            </Animated.View>
+          </Animated.View>
+
+          {/* Main Card */}
+          <Animated.View
+            style={[styles.foregroundCard, foregroundAnimatedStyle]}
+          >
+            <Animated.View
+              style={[styles.card, { backgroundColor }, cardAnimatedStyle]}
+            >
+              <View style={styles.cardContent} onTouchEnd={handlePress}>
+                {/* Left Border Indicator */}
                 <View
                   style={[
-                    styles.statusIndicator,
+                    styles.leftBorderIndicator,
                     { backgroundColor: statusColor },
                   ]}
                 />
-                <Text style={[styles.expiryText, { color: statusColor }]}>
-                  {formatExpiry(item.expiry_date)}
-                </Text>
-              </View>
-            </View>
 
-            {/* Swipe Hint */}
-            <View style={styles.swipeHint}>
-              <Ionicons
-                name="swap-horizontal-outline"
-                size={16}
-                color={borderColor}
-              />
-            </View>
-          </View>
-        </Animated.View>
-      </PanGestureHandler>
-    </View>
+                {/* Main Content Container */}
+                <View style={styles.mainContentContainer}>
+                  {/* Top Row: Food Icon + Name and Status */}
+                  <View style={styles.topRow}>
+                    <View style={styles.leftSection}>
+                      <RealisticFoodImage
+                        foodName={item.name}
+                        style={styles.foodImage}
+                        size={24}
+                      />
+                      <Text
+                        style={[styles.itemName, { color: textColor }]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
+
+                    <View style={styles.rightSection}>
+                      <Text
+                        style={[
+                          styles.statusLabel,
+                          {
+                            color: statusColor,
+                            backgroundColor: `${statusColor}15`,
+                          },
+                        ]}
+                      >
+                        {getStatusText(item.expiry_date || "")}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Bottom Row: Location + Quantity and Arrow */}
+                  <View style={styles.bottomRow}>
+                    <View style={styles.locationQuantityContainer}>
+                      <Text
+                        style={[
+                          styles.locationQuantityText,
+                          { color: textColor },
+                        ]}
+                      >
+                        {item.location === "fridge" ? "Refrigerator" : "Shelf"}{" "}
+                        • Qty: {item.quantity}
+                      </Text>
+                    </View>
+
+                    <View style={styles.arrowIndicator}>
+                      <Ionicons
+                        name="chevron-forward-outline"
+                        size={16}
+                        color={borderColor}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </Animated.View>
+          </Animated.View>
+        </View>
+      </GestureDetector>
+    </Animated.View>
   );
 }
 
@@ -461,9 +547,52 @@ export function EnhancedSwipeableItemCard({
 // =============================================================================
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    marginHorizontal: 16,
+    marginVertical: 8,
+    position: "relative",
+  },
   container: {
     marginHorizontal: 16,
-    marginVertical: 4,
+    marginVertical: 8,
+  },
+  leftActionBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#22C55E", // Green background for Mark Used
+    borderRadius: 12,
+    opacity: 0, // Initially hidden
+  },
+  leftActionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    flex: 1,
+    height: "100%",
+    paddingRight: 20,
+  },
+  rightActionBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#3B82F6", // Blue background for Extend Expiry
+    borderRadius: 12,
+    opacity: 0, // Initially hidden
+  },
+  rightActionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 8,
+    flex: 1,
+    height: "100%",
+    paddingLeft: 20,
   },
   actionsBackground: {
     position: "absolute",
@@ -506,60 +635,89 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardContent: {
-    flexDirection: "row",
-    alignItems: "center",
+    position: "relative",
     padding: 16,
-    gap: 12,
+    minHeight: 64,
   },
   foodImage: {
     borderRadius: 8,
-  },
-  itemInfo: {
-    flex: 1,
-    gap: 4,
   },
   itemName: {
     fontSize: 16,
     fontWeight: "600",
   },
-  itemDetails: {
+  actionContent: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    flex: 1,
+    height: "100%",
+  },
+  actionLabel: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  foregroundCard: {
+    // This will contain all the card content and handle swipe translation
+    zIndex: 1,
+  },
+  gestureContainer: {
+    // Container for the GestureDetector to properly scope gesture handling
+    flex: 1,
+  },
+  leftBorderIndicator: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+  },
+  mainContentContainer: {
+    flex: 1,
+    paddingLeft: 12, // Space for left border indicator
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  leftSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
     gap: 8,
   },
-  itemQuantity: {
+  rightSection: {
+    alignItems: "flex-end",
+  },
+  statusLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    textAlign: "center",
+    minWidth: 60,
+  },
+  bottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  locationQuantityContainer: {
+    flex: 1,
+  },
+  locationQuantityText: {
     fontSize: 14,
     opacity: 0.7,
   },
-  locationBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: "rgba(0,0,0,0.05)",
-    borderRadius: 8,
-  },
-  locationText: {
-    fontSize: 12,
-    textTransform: "capitalize",
-  },
-  expiryInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  expiryText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  swipeHint: {
-    opacity: 0.3,
+  arrowIndicator: {
+    opacity: 0.5,
   },
 });
 

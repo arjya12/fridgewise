@@ -486,11 +486,6 @@ const PerformanceOptimizedCalendar: React.FC<
         style={styles.panel}
       />
 
-      {/* Performance Metrics Display (Development Only) */}
-      {__DEV__ && performance.metrics && (
-        <PerformanceMetricsDisplay metrics={performance.metrics} />
-      )}
-
       {/* Virtualization Info (Development Only) */}
       {__DEV__ && isVirtualized && (
         <VirtualizationInfo
@@ -506,30 +501,6 @@ const PerformanceOptimizedCalendar: React.FC<
 // =============================================================================
 // DEVELOPMENT COMPONENTS
 // =============================================================================
-
-interface PerformanceMetricsDisplayProps {
-  metrics: CalendarPerformanceMetrics;
-}
-
-const PerformanceMetricsDisplay: React.FC<PerformanceMetricsDisplayProps> = ({
-  metrics,
-}) => {
-  if (!__DEV__) return null;
-
-  return (
-    <View style={styles.metricsContainer}>
-      <View style={styles.metricItem}>
-        <View>Render: {metrics.renderTime.toFixed(2)}ms</View>
-      </View>
-      <View style={styles.metricItem}>
-        <View>Data: {metrics.dataProcessingTime.toFixed(2)}ms</View>
-      </View>
-      <View style={styles.metricItem}>
-        <View>Renders: {metrics.reRenderCount}</View>
-      </View>
-    </View>
-  );
-};
 
 interface VirtualizationInfoProps {
   totalItems: number;
@@ -618,18 +589,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 8,
   },
-  metricsContainer: {
-    position: "absolute",
-    top: 50,
-    right: 10,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    padding: 8,
-    borderRadius: 4,
-    zIndex: 1000,
-  },
-  metricItem: {
-    marginBottom: 4,
-  },
+
   virtualizationContainer: {
     position: "absolute",
     top: 120,

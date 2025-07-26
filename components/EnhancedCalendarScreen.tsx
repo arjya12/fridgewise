@@ -4,7 +4,7 @@
  * Based on Phase 2 implementation progress
  */
 
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -13,6 +13,11 @@ import {
   View,
 } from "react-native";
 import { Calendar } from "react-native-calendars";
+import {
+  Gesture,
+  GestureDetector,
+  PanGestureHandlerEventPayload,
+} from "react-native-gesture-handler";
 import { CalendarProvider } from "../contexts/CalendarContext";
 import {
   useCalendarPerformance,
@@ -22,6 +27,7 @@ import { useThemeColor } from "../hooks/useThemeColor";
 import { FoodItem } from "../lib/supabase";
 import { formatExpiry } from "../utils/formatExpiry";
 import { EnhancedSwipeableItemCard } from "./EnhancedSwipeableItemCard";
+import ExtendExpiryModal from "./modals/ExtendExpiryModal";
 
 function getUrgencyColor(urgency: string) {
   switch (urgency) {
@@ -88,6 +94,14 @@ function EnhancedCalendarScreenCore({
       console.warn("[Calendar Performance]", warning);
     },
   });
+
+  // =============================================================================
+  // MODAL STATE
+  // =============================================================================
+
+  const [isExtendModalVisible, setIsExtendModalVisible] = useState(false);
+  const [selectedItemForExtension, setSelectedItemForExtension] =
+    useState<FoodItem | null>(null);
 
   // =============================================================================
   // THEME
@@ -177,15 +191,32 @@ function EnhancedCalendarScreenCore({
     [markItemUsed]
   );
 
-  const handleExtendExpiry = useCallback(
+  const handleExtendExpiry = useCallback((item: FoodItem, days: number) => {
+    // Open modal instead of directly extending
+    setSelectedItemForExtension(item);
+    setIsExtendModalVisible(true);
+  }, []);
+
+  const handleOpenExtendModal = useCallback((item: FoodItem) => {
+    setSelectedItemForExtension(item);
+    setIsExtendModalVisible(true);
+  }, []);
+
+  const handleCloseExtendModal = useCallback(() => {
+    setSelectedItemForExtension(null);
+    setIsExtendModalVisible(false);
+  }, []);
+
+  const handleModalExtendExpiry = useCallback(
     async (item: FoodItem, days: number) => {
       try {
         await extendExpiry(item.id, days);
+        handleCloseExtendModal();
       } catch (error) {
         console.error("Failed to extend expiry:", error);
       }
     },
-    [extendExpiry]
+    [extendExpiry, handleCloseExtendModal]
   );
 
   const handleRefresh = useCallback(async () => {
@@ -313,6 +344,28 @@ function EnhancedCalendarScreenCore({
   // RENDER
   // =============================================================================
 
+  const panGesture = Gesture.Pan().onEnd(
+    (event: PanGestureHandlerEventPayload) => {
+      if (event.translationX > 50) {
+        // Swipe right (previous month)
+        startMeasurement();
+        const newMonth = currentMonth.month === 1 ? 12 : currentMonth.month - 1;
+        const newYear =
+          currentMonth.month === 1 ? currentMonth.year - 1 : currentMonth.year;
+        setCurrentMonth({ year: newYear, month: newMonth });
+        endMeasurement("month change (swipe right)");
+      } else if (event.translationX < -50) {
+        // Swipe left (next month)
+        startMeasurement();
+        const newMonth = currentMonth.month === 12 ? 1 : currentMonth.month + 1;
+        const newYear =
+          currentMonth.month === 12 ? currentMonth.year + 1 : currentMonth.year;
+        setCurrentMonth({ year: newYear, month: newMonth });
+        endMeasurement("month change (swipe left)");
+      }
+    }
+  );
+
   return (
     <View style={[styles.container, { backgroundColor }, style]}>
       <ScrollView
@@ -323,66 +376,54 @@ function EnhancedCalendarScreenCore({
         showsVerticalScrollIndicator={false}
       >
         {/* Calendar */}
-        <View style={styles.calendarContainer}>
-          <Calendar
-            current={`${currentMonth.year}-${String(
-              currentMonth.month
-            ).padStart(2, "0")}-01`}
-            onDayPress={handleDatePress}
-            onMonthChange={handleMonthChange}
-            markedDates={enhancedMarkedDates}
-            markingType="multi-dot"
-            theme={calendarTheme}
-            firstDay={1}
-            showWeekNumbers={false}
-            disableMonthChange={false}
-            enableSwipeMonths={true}
-            disableAllTouchEventsForDisabledDays={true}
-            hideExtraDays={true}
-            hideArrows={false}
-            hideDayNames={false}
-            disableArrowLeft={false}
-            disableArrowRight={false}
-            monthFormat="MMMM yyyy"
-            onPressArrowLeft={(subtractMonth) => subtractMonth()}
-            onPressArrowRight={(addMonth) => addMonth()}
-            renderHeader={(date) => (
-              <View style={styles.calendarHeader}>
-                <Text style={[styles.calendarHeaderText, { color: textColor }]}>
-                  {date?.toString("MMMM yyyy")}
-                </Text>
-              </View>
-            )}
-          />
-        </View>
+        <GestureDetector gesture={panGesture}>
+          <View style={styles.calendarContainer}>
+            <Calendar
+              current={`${currentMonth.year}-${String(
+                currentMonth.month
+              ).padStart(2, "0")}-01`}
+              onDayPress={handleDatePress}
+              onMonthChange={handleMonthChange}
+              markedDates={enhancedMarkedDates}
+              markingType="multi-dot"
+              theme={calendarTheme}
+              firstDay={1}
+              showWeekNumbers={false}
+              disableMonthChange={false}
+              disableAllTouchEventsForDisabledDays={true}
+              hideExtraDays={true}
+              hideArrows={false}
+              hideDayNames={false}
+              disableArrowLeft={false}
+              disableArrowRight={false}
+              monthFormat="MMMM yyyy"
+              renderHeader={(date) => (
+                <View style={styles.calendarHeader}>
+                  <Text
+                    style={[styles.calendarHeaderText, { color: textColor }]}
+                  >
+                    {date?.toString("MMMM yyyy")}
+                  </Text>
+                </View>
+              )}
+            />
+          </View>
+        </GestureDetector>
 
         {/* Selected Date Items */}
         {renderSelectedDateItems()}
 
         {/* Expiring Soon Items */}
         {renderExpiringSoonItems()}
-
-        {/* Performance Metrics (Debug Mode) */}
-        {enablePerformanceMonitoring && __DEV__ && (
-          <View style={styles.debugSection}>
-            <Text style={[styles.debugTitle, { color: borderColor }]}>
-              Performance Metrics
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Render Time: {metrics.renderTime}ms
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Memory Usage: {Math.round(metrics.memoryUsage / 1024 / 1024)}MB
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Items: {metrics.itemCount}
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Warnings: {metrics.warnings.length}
-            </Text>
-          </View>
-        )}
       </ScrollView>
+
+      {/* Extend Expiry Modal */}
+      <ExtendExpiryModal
+        isVisible={isExtendModalVisible}
+        item={selectedItemForExtension}
+        onClose={handleCloseExtendModal}
+        onExtend={handleModalExtendExpiry}
+      />
     </View>
   );
 }
@@ -465,20 +506,5 @@ const styles = StyleSheet.create({
   moreItemsText: {
     fontSize: 14,
     fontStyle: "italic",
-  },
-  debugSection: {
-    margin: 16,
-    padding: 12,
-    backgroundColor: "rgba(0,0,0,0.05)",
-    borderRadius: 8,
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    marginBottom: 2,
   },
 });
