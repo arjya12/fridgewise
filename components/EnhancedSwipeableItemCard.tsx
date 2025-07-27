@@ -551,11 +551,10 @@ export function EnhancedSwipeableItemCard({
 // =============================================================================
 
 const styles = StyleSheet.create({
-<<<<<<< HEAD
   container: {
     marginHorizontal: 16,
     marginVertical: 8,
-=======
+  },
   rootContainer: {
     position: "relative",
   },
@@ -596,7 +595,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
     paddingLeft: 20,
->>>>>>> 3604630b75e7f789517ed354267c4bff8fdc7750
   },
   actionsBackground: {
     position: "absolute",

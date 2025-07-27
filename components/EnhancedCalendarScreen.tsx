@@ -614,13 +614,10 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     fontStyle: "italic",
   },
-<<<<<<< HEAD
-=======
   itemsContainer: {
     paddingHorizontal: 20,
   },
   itemCardWrapper: {
     marginBottom: 12,
   },
->>>>>>> 3604630b75e7f789517ed354267c4bff8fdc7750
 });
