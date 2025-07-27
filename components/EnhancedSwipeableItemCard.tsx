@@ -463,7 +463,7 @@ export function EnhancedSwipeableItemCard({
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginVertical: 4,
+    marginVertical: 8,
   },
   actionsBackground: {
     position: "absolute",

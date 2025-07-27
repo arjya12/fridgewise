@@ -361,27 +361,6 @@ function EnhancedCalendarScreenCore({
 
         {/* Expiring Soon Items */}
         {renderExpiringSoonItems()}
-
-        {/* Performance Metrics (Debug Mode) */}
-        {enablePerformanceMonitoring && __DEV__ && (
-          <View style={styles.debugSection}>
-            <Text style={[styles.debugTitle, { color: borderColor }]}>
-              Performance Metrics
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Render Time: {metrics.renderTime}ms
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Memory Usage: {Math.round(metrics.memoryUsage / 1024 / 1024)}MB
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Items: {metrics.itemCount}
-            </Text>
-            <Text style={[styles.debugText, { color: borderColor }]}>
-              Warnings: {metrics.warnings.length}
-            </Text>
-          </View>
-        )}
       </ScrollView>
     </View>
   );
@@ -465,20 +444,5 @@ const styles = StyleSheet.create({
   moreItemsText: {
     fontSize: 14,
     fontStyle: "italic",
-  },
-  debugSection: {
-    margin: 16,
-    padding: 12,
-    backgroundColor: "rgba(0,0,0,0.05)",
-    borderRadius: 8,
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    marginBottom: 2,
   },
 });
