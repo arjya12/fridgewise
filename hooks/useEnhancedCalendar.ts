@@ -33,6 +33,11 @@ const monthDataCache = new Map<
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 12; // Store up to 12 months
 
+// Clear cache function to handle data updates
+export const clearMonthDataCache = () => {
+  monthDataCache.clear();
+};
+
 // Batch prefetch adjacent months
 const prefetchAdjacentMonths = async (
   currentMonth: CalendarMonth,

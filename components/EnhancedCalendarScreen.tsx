@@ -118,28 +118,85 @@ function EnhancedCalendarScreenCore({
 
   const calendarTheme = useMemo(
     () => ({
-      backgroundColor,
-      calendarBackground: backgroundColor,
+      backgroundColor: "transparent",
+      calendarBackground: "transparent",
       textSectionTitleColor: textColor,
-      selectedDayBackgroundColor: tintColor,
-      selectedDayTextColor: backgroundColor,
-      todayTextColor: tintColor,
+      selectedDayBackgroundColor: "#007AFF", // iOS blue color to match the design
+      selectedDayTextColor: "#FFFFFF",
+      todayTextColor: "#007AFF",
       dayTextColor: textColor,
-      textDisabledColor: borderColor,
-      dotColor: tintColor,
-      selectedDotColor: backgroundColor,
-      arrowColor: tintColor,
+      textDisabledColor: "#C7C7CC",
+      dotColor: "#007AFF",
+      selectedDotColor: "#FFFFFF",
+      arrowColor: textColor,
       monthTextColor: textColor,
-      indicatorColor: tintColor,
+      indicatorColor: "#007AFF",
       textDayFontFamily: "System",
       textMonthFontFamily: "System",
       textDayHeaderFontFamily: "System",
       textDayFontWeight: "400" as const,
       textMonthFontWeight: "600" as const,
-      textDayHeaderFontWeight: "600" as const,
+      textDayHeaderFontWeight: "500" as const,
       textDayFontSize: 16,
       textMonthFontSize: 18,
       textDayHeaderFontSize: 13,
+      // Clean, minimal styling
+      "stylesheet.calendar.header": {
+        week: {
+          marginTop: 5,
+          marginBottom: 10,
+          flexDirection: "row",
+          justifyContent: "space-around",
+          backgroundColor: "transparent",
+        },
+        dayHeader: {
+          marginTop: 2,
+          marginBottom: 7,
+          width: 32,
+          textAlign: "center",
+          fontSize: 13,
+          fontWeight: "500",
+          color: textColor,
+          opacity: 0.6,
+        },
+      },
+      "stylesheet.day.basic": {
+        base: {
+          width: 32,
+          height: 32,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 16,
+          margin: 1,
+        },
+        text: {
+          marginTop: 0,
+          fontSize: 16,
+          fontWeight: "400",
+          color: textColor,
+          backgroundColor: "transparent",
+        },
+        today: {
+          backgroundColor: "transparent",
+          borderWidth: 1,
+          borderColor: "#007AFF",
+        },
+        todayText: {
+          color: "#007AFF",
+          fontWeight: "500",
+        },
+        selected: {
+          backgroundColor: "#007AFF",
+          borderRadius: 16,
+        },
+        selectedText: {
+          color: "#FFFFFF",
+          fontWeight: "500",
+        },
+        disabled: {
+          opacity: 0.2,
+        },
+      },
     }),
     [backgroundColor, textColor, tintColor, borderColor]
   );
@@ -239,7 +296,36 @@ function EnhancedCalendarScreenCore({
   // =============================================================================
 
   const renderSelectedDateItems = useCallback(() => {
-    if (!selectedDate || selectedDateItems.length === 0) {
+    if (!selectedDate) {
+      return null;
+    }
+
+    // Calculate if this is a future date from today
+    const today = new Date().toISOString().split("T")[0];
+    const selectedDateObj = new Date(selectedDate);
+    const todayObj = new Date(today);
+    const diffTime = selectedDateObj.getTime() - todayObj.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    let itemsToShow: typeof selectedDateItems;
+    let titleText: string;
+
+    if (diffDays <= 0) {
+      // For today or past dates, show items for that specific date
+      itemsToShow = selectedDateItems;
+      titleText = `Items for ${formatExpiry(selectedDate)}`;
+    } else {
+      // For future dates, show all items expiring from today to that date
+      const rangeItems = selectedDateItems.filter((item) => {
+        if (!item.expiry_date) return false;
+        const itemDate = item.expiry_date;
+        return itemDate >= today && itemDate <= selectedDate;
+      });
+      itemsToShow = rangeItems;
+      titleText = `Items for ${formatExpiry(selectedDate)}`;
+    }
+
+    if (itemsToShow.length === 0) {
       return null;
     }
 
@@ -251,27 +337,38 @@ function EnhancedCalendarScreenCore({
               style={[styles.sectionIndicator, { backgroundColor: tintColor }]}
             />
             <Text style={[styles.sectionTitle, { color: textColor }]}>
-              Items for {formatExpiry(selectedDate)}
+              {titleText}
             </Text>
           </View>
           <Text style={[styles.itemCount, { color: borderColor }]}>
-            {selectedDateItems.length} item
-            {selectedDateItems.length === 1 ? "" : "s"}
+            {itemsToShow.length} item
+            {itemsToShow.length === 1 ? "" : "s"}
           </Text>
         </View>
 
-        {selectedDateItems.map((item) => (
-          <EnhancedSwipeableItemCard
-            key={item.id}
-            item={item}
-            onMarkUsed={handleMarkUsed}
-            onExtendExpiry={handleExtendExpiry}
-            onPress={onItemPress}
-            onDelete={onItemDelete}
-            enableHaptics={true}
-            showQuantitySelector={true}
-          />
-        ))}
+        <View style={styles.itemsContainer}>
+          {itemsToShow.slice(0, 5).map((item) => (
+            <View key={item.id} style={styles.itemCardWrapper}>
+              <EnhancedSwipeableItemCard
+                item={item}
+                onPress={onItemPress}
+                onDelete={onItemDelete}
+                onMarkUsed={handleMarkUsed}
+                onExtendExpiry={handleOpenExtendModal}
+                enableHaptics={true}
+                showQuantitySelector={true}
+              />
+            </View>
+          ))}
+
+          {itemsToShow.length > 5 && (
+            <View style={styles.moreItemsIndicator}>
+              <Text style={[styles.moreItemsText, { color: borderColor }]}>
+                +{itemsToShow.length - 5} more items
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
     );
   }, [
@@ -280,10 +377,11 @@ function EnhancedCalendarScreenCore({
     tintColor,
     textColor,
     borderColor,
-    handleMarkUsed,
-    handleExtendExpiry,
     onItemPress,
     onItemDelete,
+    handleMarkUsed,
+    handleOpenExtendModal,
+    formatExpiry,
   ]);
 
   const renderExpiringSoonItems = useCallback(() => {
@@ -308,18 +406,21 @@ function EnhancedCalendarScreenCore({
           </Text>
         </View>
 
-        {expiringSoonItems.slice(0, 5).map((item) => (
-          <EnhancedSwipeableItemCard
-            key={item.id}
-            item={item}
-            onMarkUsed={handleMarkUsed}
-            onExtendExpiry={handleExtendExpiry}
-            onPress={onItemPress}
-            onDelete={onItemDelete}
-            enableHaptics={true}
-            showQuantitySelector={true}
-          />
-        ))}
+        <View style={styles.itemsContainer}>
+          {expiringSoonItems.slice(0, 5).map((item) => (
+            <View key={item.id} style={styles.itemCardWrapper}>
+              <EnhancedSwipeableItemCard
+                item={item}
+                onMarkUsed={handleMarkUsed}
+                onExtendExpiry={handleExtendExpiry}
+                onPress={onItemPress}
+                onDelete={onItemDelete}
+                enableHaptics={true}
+                showQuantitySelector={true}
+              />
+            </View>
+          ))}
+        </View>
 
         {expiringSoonItems.length > 5 && (
           <View style={styles.moreItemsIndicator}>
@@ -460,51 +561,63 @@ const styles = StyleSheet.create({
   },
   calendarContainer: {
     marginBottom: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   calendarHeader: {
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 12,
+    marginBottom: 8,
   },
   calendarHeaderText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
   },
   itemsSection: {
-    marginBottom: 24,
+    marginBottom: 0,
+    paddingHorizontal: 0,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    marginBottom: 12,
   },
   sectionTitleContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 0,
   },
   sectionIndicator: {
-    width: 4,
-    height: 16,
-    borderRadius: 2,
+    width: 0,
+    height: 0,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#000000",
   },
   itemCount: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "400",
+    color: "#8E8E93",
   },
   moreItemsIndicator: {
     alignItems: "center",
     paddingVertical: 8,
-    marginHorizontal: 16,
+    marginHorizontal: 20,
   },
   moreItemsText: {
     fontSize: 14,
+    fontWeight: "400",
     fontStyle: "italic",
+  },
+  itemsContainer: {
+    paddingHorizontal: 20,
+  },
+  itemCardWrapper: {
+    marginBottom: 12,
   },
 });

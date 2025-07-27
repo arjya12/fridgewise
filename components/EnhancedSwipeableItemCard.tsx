@@ -7,7 +7,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useMemo } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
@@ -20,7 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useThemeColor } from "../hooks/useThemeColor";
 import { FoodItem } from "../lib/supabase";
-import RealisticFoodImage from "./RealisticFoodImage";
+import { useBreakpoint } from "../utils/responsiveUtils";
 
 // Helper function to get status text based on expiry date
 function getStatusText(expiryDate: string): string {
@@ -50,6 +50,7 @@ export interface EnhancedSwipeableItemCardProps {
   showQuantitySelector?: boolean;
   enableHaptics?: boolean;
   animationConfig?: SwipeAnimationConfig;
+  style?: ViewStyle | ViewStyle[];
 }
 
 export interface SwipeAnimationConfig {
@@ -108,6 +109,7 @@ export function EnhancedSwipeableItemCard({
   showQuantitySelector = true,
   enableHaptics = true,
   animationConfig = DEFAULT_ANIMATION_CONFIG,
+  style,
 }: EnhancedSwipeableItemCardProps) {
   // =============================================================================
   // THEME AND COLORS
@@ -117,6 +119,13 @@ export function EnhancedSwipeableItemCard({
   const textColor = useThemeColor({}, "text");
   const tintColor = useThemeColor({}, "tint");
   const borderColor = useThemeColor({}, "icon");
+
+  // =============================================================================
+  // RESPONSIVE BREAKPOINTS
+  // =============================================================================
+
+  const { isSmall, width } = useBreakpoint();
+  const isVerySmall = width < 350;
 
   // =============================================================================
   // ANIMATED VALUES
@@ -343,6 +352,19 @@ export function EnhancedSwipeableItemCard({
     }
   }, [itemStatus]);
 
+  const backgroundColorMap = useMemo(() => {
+    switch (itemStatus) {
+      case "expired":
+        return "#FECACA"; // Light red background like in Figma
+      case "expires-today":
+        return "#FED7AA"; // Light orange background
+      case "expires-soon":
+        return "#FEF3C7"; // Light yellow background like in Figma
+      default:
+        return "#D1FAE5"; // Light green background like in Figma
+    }
+  }, [itemStatus]);
+
   // =============================================================================
   // RENDER
   // =============================================================================
@@ -398,8 +420,7 @@ export function EnhancedSwipeableItemCard({
     });
 
   return (
-    // Root container with layered structure and exit animation
-    <Animated.View style={[styles.rootContainer, exitAnimationStyle]}>
+    <Animated.View style={[styles.rootContainer, exitAnimationStyle, style]}>
       <GestureDetector gesture={panGesture}>
         <View style={styles.gestureContainer}>
           {/* Left Swipe Action (Mark Used) */}
@@ -466,29 +487,23 @@ export function EnhancedSwipeableItemCard({
             style={[styles.foregroundCard, foregroundAnimatedStyle]}
           >
             <Animated.View
-              style={[styles.card, { backgroundColor }, cardAnimatedStyle]}
+              style={[
+                styles.card,
+                {
+                  backgroundColor: backgroundColorMap, // Use exact background colors from Figma
+                  borderColor: "transparent",
+                },
+                cardAnimatedStyle,
+              ]}
             >
               <View style={styles.cardContent} onTouchEnd={handlePress}>
-                {/* Left Border Indicator */}
-                <View
-                  style={[
-                    styles.leftBorderIndicator,
-                    { backgroundColor: statusColor },
-                  ]}
-                />
-
                 {/* Main Content Container */}
                 <View style={styles.mainContentContainer}>
-                  {/* Top Row: Food Icon + Name and Status */}
+                  {/* Top Row: Name and Status */}
                   <View style={styles.topRow}>
                     <View style={styles.leftSection}>
-                      <RealisticFoodImage
-                        foodName={item.name}
-                        style={styles.foodImage}
-                        size={24}
-                      />
                       <Text
-                        style={[styles.itemName, { color: textColor }]}
+                        style={[styles.itemName, { color: "#000000" }]}
                         numberOfLines={1}
                       >
                         {item.name}
@@ -499,10 +514,7 @@ export function EnhancedSwipeableItemCard({
                       <Text
                         style={[
                           styles.statusLabel,
-                          {
-                            color: statusColor,
-                            backgroundColor: `${statusColor}15`,
-                          },
+                          { backgroundColor: statusColor },
                         ]}
                       >
                         {getStatusText(item.expiry_date || "")}
@@ -510,26 +522,18 @@ export function EnhancedSwipeableItemCard({
                     </View>
                   </View>
 
-                  {/* Bottom Row: Location + Quantity and Arrow */}
+                  {/* Bottom Row: Location + Quantity */}
                   <View style={styles.bottomRow}>
                     <View style={styles.locationQuantityContainer}>
                       <Text
                         style={[
                           styles.locationQuantityText,
-                          { color: textColor },
+                          { color: "#666666" },
                         ]}
                       >
                         {item.location === "fridge" ? "Refrigerator" : "Shelf"}{" "}
                         • Qty: {item.quantity}
                       </Text>
-                    </View>
-
-                    <View style={styles.arrowIndicator}>
-                      <Ionicons
-                        name="chevron-forward-outline"
-                        size={16}
-                        color={borderColor}
-                      />
                     </View>
                   </View>
                 </View>
@@ -548,13 +552,7 @@ export function EnhancedSwipeableItemCard({
 
 const styles = StyleSheet.create({
   rootContainer: {
-    marginHorizontal: 16,
-    marginVertical: 8,
     position: "relative",
-  },
-  container: {
-    marginHorizontal: 16,
-    marginVertical: 8,
   },
   leftActionBackground: {
     position: "absolute",
@@ -562,9 +560,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "#22C55E", // Green background for Mark Used
+    backgroundColor: "#22C55E",
     borderRadius: 12,
-    opacity: 0, // Initially hidden
+    opacity: 0,
   },
   leftActionContent: {
     flexDirection: "row",
@@ -581,9 +579,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "#3B82F6", // Blue background for Extend Expiry
+    backgroundColor: "#3B82F6",
     borderRadius: 12,
-    opacity: 0, // Initially hidden
+    opacity: 0,
   },
   rightActionContent: {
     flexDirection: "row",
@@ -622,29 +620,37 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   card: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.1)",
-    shadowColor: "#000",
+    borderRadius: 8,
+    borderWidth: 0,
+    shadowColor: "transparent",
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 0,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    overflow: "hidden",
+    minHeight: 68,
+    marginBottom: 8,
   },
   cardContent: {
     position: "relative",
-    padding: 16,
-    minHeight: 64,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingLeft: 20,
+    minHeight: 68,
+    justifyContent: "center",
   },
   foodImage: {
     borderRadius: 8,
+    width: 0, // Hide the food image to match Figma design
+    height: 0,
   },
   itemName: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "500",
+    flex: 1,
   },
   actionContent: {
     flexDirection: "row",
@@ -660,25 +666,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   foregroundCard: {
-    // This will contain all the card content and handle swipe translation
     zIndex: 1,
   },
   gestureContainer: {
-    // Container for the GestureDetector to properly scope gesture handling
     flex: 1,
   },
   leftBorderIndicator: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
+    display: "none", // We'll use full background color instead
   },
   mainContentContainer: {
     flex: 1,
-    paddingLeft: 12, // Space for left border indicator
+    paddingLeft: 0, // Remove extra padding since we don't have the border indicator
+    justifyContent: "space-between",
+    paddingVertical: 4,
   },
   topRow: {
     flexDirection: "row",
@@ -690,19 +690,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 8,
+    gap: 0, // No gap since no image
   },
   rightSection: {
     alignItems: "flex-end",
+    marginLeft: 12,
   },
   statusLabel: {
     fontSize: 12,
-    fontWeight: "700",
-    paddingHorizontal: 8,
+    fontWeight: "600",
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 4,
     textAlign: "center",
-    minWidth: 60,
+    color: "white",
+    overflow: "hidden",
+    textTransform: "uppercase",
   },
   bottomRow: {
     flexDirection: "row",
@@ -715,9 +718,15 @@ const styles = StyleSheet.create({
   locationQuantityText: {
     fontSize: 14,
     opacity: 0.7,
+    fontWeight: "400",
   },
   arrowIndicator: {
-    opacity: 0.5,
+    display: "none", // Hide arrow to match Figma design
+  },
+  arrowText: {
+    fontSize: 20,
+    fontWeight: "600",
+    opacity: 0.3,
   },
 });
 

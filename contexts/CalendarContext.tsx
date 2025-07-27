@@ -12,6 +12,7 @@ import React, {
   useMemo,
   useReducer,
 } from "react";
+import { clearMonthDataCache } from "../hooks/useEnhancedCalendar";
 import { FoodItem } from "../lib/supabase";
 import { CalendarMonth } from "../types/calendar";
 import {
@@ -238,7 +239,10 @@ export function CalendarProvider({
   );
 
   const invalidateCache = useCallback(() => {
+    // Clear React context cache
     dispatch({ type: "INVALIDATE_CACHE" });
+    // Clear useEnhancedCalendar month data cache
+    clearMonthDataCache();
   }, []);
 
   // =============================================================================
@@ -248,6 +252,9 @@ export function CalendarProvider({
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
+
+      // Clear any existing caches to ensure fresh data
+      invalidateCache();
 
       if (foodItemsService && foodItemsService.getItems) {
         const items = await foodItemsService.getItems();
@@ -264,7 +271,7 @@ export function CalendarProvider({
     } finally {
       setLoading(false);
     }
-  }, [foodItemsService, setItems, setError, setLoading]);
+  }, [foodItemsService, setItems, setError, setLoading, invalidateCache]);
 
   // =============================================================================
   // COMPUTED VALUES
@@ -277,14 +284,12 @@ export function CalendarProvider({
 
   const expiringSoonItems = useMemo(() => {
     const today = new Date();
-    const threeDaysFromNow = new Date(
-      today.getTime() + 3 * 24 * 60 * 60 * 1000
-    );
-    const threeDaysFromNowStr = threeDaysFromNow.toISOString().split("T")[0];
+    const fiveDaysFromNow = new Date(today.getTime() + 5 * 24 * 60 * 60 * 1000);
+    const fiveDaysFromNowStr = fiveDaysFromNow.toISOString().split("T")[0];
 
     return state.items.filter((item) => {
       if (!item.expiry_date) return false;
-      return item.expiry_date <= threeDaysFromNowStr;
+      return item.expiry_date <= fiveDaysFromNowStr;
     });
   }, [state.items]);
 
