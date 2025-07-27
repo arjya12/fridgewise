@@ -1,24 +1,31 @@
 import { EnhancedCalendarScreen } from "@/components/EnhancedCalendarScreen";
+import { useCalendar } from "@/contexts/CalendarContext";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { foodItemsService } from "@/services/foodItems";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import React, { useCallback } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function CalendarScreen() {
+  // Get refresh function from CalendarContext
+  const { refresh } = useCalendar();
+
   // Theme colors
   const backgroundColor = useThemeColor(
     { light: "#FFFFFF", dark: "#000000" },
     "background"
   );
-  const surfaceColor = useThemeColor(
-    { light: "#F8F9FA", dark: "#1D1D1D" },
-    "background"
-  );
   const textColor = useThemeColor(
     { light: "#11181C", dark: "#ECEDEE" },
     "text"
+  );
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
   );
 
   // Handlers for item actions
@@ -51,32 +58,29 @@ export default function CalendarScreen() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
+      backgroundColor,
     },
     header: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: "#E5E7EB",
-      backgroundColor: surfaceColor,
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 0,
     },
     title: {
-      fontSize: 24,
-      fontWeight: "bold",
-      marginBottom: 8,
+      fontSize: 20,
+      fontWeight: "600",
       color: textColor,
+      marginBottom: 0,
     },
   });
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor }]}
-      edges={["top"]}
-    >
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* Simple Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Food Expiry Calendar</Text>
       </View>
-      {/* Enhanced Calendar Only */}
+
+      {/* Calendar Content */}
       <EnhancedCalendarScreen
         foodItemsService={foodItemsService}
         onItemPress={handleItemPress}
