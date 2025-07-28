@@ -25,7 +25,6 @@ import {
 } from "../hooks/useEnhancedCalendar";
 import { useThemeColor } from "../hooks/useThemeColor";
 import { FoodItem } from "../lib/supabase";
-import { formatExpiry } from "../utils/formatExpiry";
 import { EnhancedSwipeableItemCard } from "./EnhancedSwipeableItemCard";
 import ExtendExpiryModal from "./modals/ExtendExpiryModal";
 
@@ -295,95 +294,6 @@ function EnhancedCalendarScreenCore({
   // RENDER HELPERS
   // =============================================================================
 
-  const renderSelectedDateItems = useCallback(() => {
-    if (!selectedDate) {
-      return null;
-    }
-
-    // Calculate if this is a future date from today
-    const today = new Date().toISOString().split("T")[0];
-    const selectedDateObj = new Date(selectedDate);
-    const todayObj = new Date(today);
-    const diffTime = selectedDateObj.getTime() - todayObj.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    let itemsToShow: typeof selectedDateItems;
-    let titleText: string;
-
-    if (diffDays <= 0) {
-      // For today or past dates, show items for that specific date
-      itemsToShow = selectedDateItems;
-      titleText = `Items for ${formatExpiry(selectedDate)}`;
-    } else {
-      // For future dates, show all items expiring from today to that date
-      const rangeItems = selectedDateItems.filter((item) => {
-        if (!item.expiry_date) return false;
-        const itemDate = item.expiry_date;
-        return itemDate >= today && itemDate <= selectedDate;
-      });
-      itemsToShow = rangeItems;
-      titleText = `Items for ${formatExpiry(selectedDate)}`;
-    }
-
-    if (itemsToShow.length === 0) {
-      return null;
-    }
-
-    return (
-      <View style={styles.itemsSection}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleContainer}>
-            <View
-              style={[styles.sectionIndicator, { backgroundColor: tintColor }]}
-            />
-            <Text style={[styles.sectionTitle, { color: textColor }]}>
-              {titleText}
-            </Text>
-          </View>
-          <Text style={[styles.itemCount, { color: borderColor }]}>
-            {itemsToShow.length} item
-            {itemsToShow.length === 1 ? "" : "s"}
-          </Text>
-        </View>
-
-        <View style={styles.itemsContainer}>
-          {itemsToShow.slice(0, 5).map((item) => (
-            <View key={item.id} style={styles.itemCardWrapper}>
-              <EnhancedSwipeableItemCard
-                item={item}
-                onPress={onItemPress}
-                onDelete={onItemDelete}
-                onMarkUsed={handleMarkUsed}
-                onExtendExpiry={handleOpenExtendModal}
-                enableHaptics={true}
-                showQuantitySelector={true}
-              />
-            </View>
-          ))}
-
-          {itemsToShow.length > 5 && (
-            <View style={styles.moreItemsIndicator}>
-              <Text style={[styles.moreItemsText, { color: borderColor }]}>
-                +{itemsToShow.length - 5} more items
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  }, [
-    selectedDate,
-    selectedDateItems,
-    tintColor,
-    textColor,
-    borderColor,
-    onItemPress,
-    onItemDelete,
-    handleMarkUsed,
-    handleOpenExtendModal,
-    formatExpiry,
-  ]);
-
   const renderExpiringSoonItems = useCallback(() => {
     if (expiringSoonItems.length === 0) {
       return null;
@@ -407,8 +317,16 @@ function EnhancedCalendarScreenCore({
         </View>
 
         <View style={styles.itemsContainer}>
-          {expiringSoonItems.slice(0, 5).map((item) => (
-            <View key={item.id} style={styles.itemCardWrapper}>
+          {expiringSoonItems.slice(0, 5).map((item, index) => (
+            <View
+              key={item.id}
+              style={[
+                styles.itemCardWrapper,
+                index === expiringSoonItems.slice(0, 5).length - 1 && {
+                  marginBottom: 0,
+                },
+              ]}
+            >
               <EnhancedSwipeableItemCard
                 item={item}
                 onMarkUsed={handleMarkUsed}
@@ -511,9 +429,6 @@ function EnhancedCalendarScreenCore({
           </View>
         </GestureDetector>
 
-        {/* Selected Date Items */}
-        {renderSelectedDateItems()}
-
         {/* Expiring Soon Items */}
         {renderExpiringSoonItems()}
       </ScrollView>
@@ -583,7 +498,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionTitleContainer: {
     flexDirection: "row",
@@ -618,6 +533,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   itemCardWrapper: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
 });
