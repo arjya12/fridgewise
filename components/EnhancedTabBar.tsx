@@ -104,7 +104,7 @@ export function EnhancedTabBar({
     {
       id: "scan-barcode",
       label: "Scan Barcode",
-      icon: "barcode-outline",
+      icon: "qr-code-outline",
       color: "#8B5CF6",
       onPress: () => {
         router.push("/(tabs)/barcode-test");
@@ -243,17 +243,23 @@ export function EnhancedTabBar({
 
   return (
     <>
+      {/* Tab Bar Container with Absolute Positioning for Full Screen Extension */}
       <View
         style={[
-          styles.container,
+          styles.tabBarContainer,
           {
             backgroundColor,
             borderTopColor: borderColor,
-            paddingBottom: insets.bottom,
+            // Absolute positioning to ensure full screen coverage
+            bottom: 0,
+            left: 0,
+            right: 0,
+            // Total height: tab content + safe area
+            height: 64 + 24 + insets.bottom, // 64 (content) + 24 (padding) + safe area
           },
         ]}
       >
-        {/* Tab Bar Content */}
+        {/* Tab Bar Content - positioned with proper spacing from top */}
         <View style={styles.tabBarContent}>
           {/* Left tabs */}
           <View style={styles.tabSection}>
@@ -276,6 +282,9 @@ export function EnhancedTabBar({
               )}
           </View>
         </View>
+
+        {/* Safe Area Padding - ensures content doesn't get too close to screen edge */}
+        <View style={{ height: insets.bottom }} />
       </View>
 
       {/* Speed Dial */}
@@ -293,7 +302,9 @@ export function EnhancedTabBar({
 // =============================================================================
 
 const styles = StyleSheet.create({
-  container: {
+  // Main tab bar container with absolute positioning for full screen extension
+  tabBarContainer: {
+    position: "absolute",
     borderTopWidth: 1,
     elevation: 8,
     shadowColor: "#000",
@@ -303,13 +314,18 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.1,
     shadowRadius: 8,
+    // Top corners rounded for elevated appearance
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    // Ensure proper z-index for elevation
+    zIndex: 1000,
   },
   tabBarContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 16,
     minHeight: 64,
   },
