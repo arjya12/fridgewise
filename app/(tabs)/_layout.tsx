@@ -74,31 +74,21 @@ export default function TabLayout() {
         />
 
         <Tabs.Screen
-          name="notification-test"
-          options={{
-            title: "Test",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="notifications-outline" color={color} size={24} />
-            ),
-          }}
-        />
-
-        <Tabs.Screen
-          name="test"
-          options={{
-            title: "Debug",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="bug-outline" color={color} size={24} />
-            ),
-          }}
-        />
-
-        <Tabs.Screen
           name="barcode-test"
           options={{
             title: "Barcode",
             tabBarIcon: ({ color }) => (
               <Ionicons name="barcode-outline" color={color} size={24} />
+            ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="person-outline" color={color} size={24} />
             ),
           }}
         />

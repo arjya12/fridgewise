@@ -2,7 +2,6 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { useColorScheme } from "@/hooks/useColorScheme";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -25,8 +24,9 @@ import {
  */
 export default function ProfileScreen() {
   const { user, userProfile, updateUserProfile } = useAuth();
-  const theme = useColorScheme();
-  const isDark = theme === "dark";
+
+  // Fixed light theme - no system detection
+  const isDark = false;
 
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState(userProfile?.full_name || "");
@@ -36,14 +36,14 @@ export default function ProfileScreen() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Colors based on theme
-  const backgroundColor = isDark ? "#000000" : "#F9FAFB";
-  const cardBackgroundColor = isDark ? "#1C1C1E" : "#FFFFFF";
-  const cardBorderColor = isDark ? "#2C2C2E" : "#F3F4F6";
-  const textColor = isDark ? "#FFFFFF" : "#000000";
-  const subTextColor = isDark ? "#8E8E93" : "#666666";
-  const inputBackgroundColor = isDark ? "#2C2C2E" : "#F9FAFB";
-  const inputBorderColor = isDark ? "#3C3C3E" : "#E5E7EB";
+  // Fixed light theme colors
+  const backgroundColor = "#F9FAFB";
+  const cardBackgroundColor = "#FFFFFF";
+  const cardBorderColor = "#F3F4F6";
+  const textColor = "#000000";
+  const subTextColor = "#666666";
+  const inputBackgroundColor = "#F9FAFB";
+  const inputBorderColor = "#E5E7EB";
 
   // Request permission for image picker
   useEffect(() => {

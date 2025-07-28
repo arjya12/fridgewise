@@ -2,7 +2,6 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { useColorScheme } from "@/hooks/useColorScheme";
 import { foodItemsService } from "@/services/foodItems";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -19,11 +18,11 @@ import {
 export default function MenuScreen() {
   const { signOut, user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const theme = useColorScheme();
-  const isDark = theme === "dark";
-  const cardBackgroundColor = isDark ? "#1C1C1E" : "#FFFFFF";
-  const cardBorderColor = isDark ? "#2C2C2E" : "#F3F4F6";
-  const subTextColor = isDark ? "#8E8E93" : "#666666";
+  // Fixed light theme colors - no system detection
+  const isDark = false;
+  const cardBackgroundColor = "#FFFFFF";
+  const cardBorderColor = "#F3F4F6";
+  const subTextColor = "#666666";
   const primaryColor = "#22C55E"; // App's primary green color
 
   // Handle sign out

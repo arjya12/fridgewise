@@ -1,6 +1,5 @@
 import { EnhancedCalendarScreen } from "@/components/EnhancedCalendarScreen";
 import { useCalendar } from "@/contexts/CalendarContext";
-import { useThemeColor } from "@/hooks/useThemeColor";
 import { foodItemsService } from "@/services/foodItems";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback } from "react";
@@ -11,15 +10,9 @@ export default function CalendarScreen() {
   // Get refresh function from CalendarContext
   const { refresh } = useCalendar();
 
-  // Theme colors
-  const backgroundColor = useThemeColor(
-    { light: "#FFFFFF", dark: "#000000" },
-    "background"
-  );
-  const textColor = useThemeColor(
-    { light: "#11181C", dark: "#ECEDEE" },
-    "text"
-  );
+  // Fixed light theme colors - no system detection
+  const backgroundColor = "#FFFFFF";
+  const textColor = "#11181C";
 
   // Refresh data when screen comes into focus
   useFocusEffect(

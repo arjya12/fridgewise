@@ -433,8 +433,6 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: "transparent",
   },
   scannerFrame: {

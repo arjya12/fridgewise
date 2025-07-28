@@ -2,10 +2,8 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { useColorScheme } from "@/hooks/useColorScheme";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -22,8 +20,9 @@ import {
  */
 export default function ChangePasswordScreen() {
   const { user, signOut } = useAuth();
-  const theme = useColorScheme();
-  const isDark = theme === "dark";
+
+  // Fixed light theme - no system detection
+  const isDark = false;
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -33,14 +32,14 @@ export default function ChangePasswordScreen() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Colors based on theme
-  const backgroundColor = isDark ? "#000000" : "#F9FAFB";
-  const cardBackgroundColor = isDark ? "#1C1C1E" : "#FFFFFF";
-  const cardBorderColor = isDark ? "#2C2C2E" : "#F3F4F6";
-  const textColor = isDark ? "#FFFFFF" : "#000000";
-  const placeholderColor = isDark ? "#8E8E93" : "#9CA3AF";
-  const inputBackgroundColor = isDark ? "#2C2C2E" : "#F9FAFB";
-  const inputBorderColor = isDark ? "#3C3C3E" : "#E5E7EB";
+  // Fixed light theme colors
+  const backgroundColor = "#F9FAFB";
+  const cardBackgroundColor = "#FFFFFF";
+  const cardBorderColor = "#F3F4F6";
+  const textColor = "#000000";
+  const placeholderColor = "#9CA3AF";
+  const inputBackgroundColor = "#F9FAFB";
+  const inputBorderColor = "#E5E7EB";
 
   // Validate form inputs
   const validateForm = () => {
