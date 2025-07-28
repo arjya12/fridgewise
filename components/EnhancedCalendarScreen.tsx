@@ -25,7 +25,7 @@ import {
 import { useThemeColor } from "../hooks/useThemeColor";
 import { FoodItem } from "../lib/supabase";
 import { convertItemsToCardFormat } from "../utils/foodIconMapping";
-import { FoodItemCard } from "./FoodItemCard";
+import { EnhancedSwipeToExtendCard } from "./EnhancedSwipeToExtendCard";
 import ExtendExpiryModal from "./modals/ExtendExpiryModal";
 
 function getUrgencyColor(urgency: string) {
@@ -267,12 +267,16 @@ function EnhancedCalendarScreenCore({
     async (item: FoodItem, days: number) => {
       try {
         await extendExpiry(item.id, days);
+
+        // Refresh calendar data to update status dots immediately
+        await refresh();
+
         handleCloseExtendModal();
       } catch (error) {
         console.error("Failed to extend expiry:", error);
       }
     },
-    [extendExpiry, handleCloseExtendModal]
+    [extendExpiry, refresh, handleCloseExtendModal]
   );
 
   const handleRefresh = useCallback(async () => {
@@ -321,11 +325,14 @@ function EnhancedCalendarScreenCore({
 
         <View style={styles.itemsContainer}>
           {cardItems.slice(0, 5).map((item, index) => (
-            <FoodItemCard
+            <EnhancedSwipeToExtendCard
               key={item.id}
-              item={item}
+              item={expiringSoonItems[index]}
               onPress={() =>
                 onItemPress && onItemPress(expiringSoonItems[index])
+              }
+              onExtendExpiry={() =>
+                handleOpenExtendModal(expiringSoonItems[index])
               }
               style={[
                 styles.itemCardWrapper,
@@ -346,7 +353,13 @@ function EnhancedCalendarScreenCore({
         )}
       </View>
     );
-  }, [expiringSoonItems, textColor, borderColor, onItemPress]);
+  }, [
+    expiringSoonItems,
+    textColor,
+    borderColor,
+    onItemPress,
+    handleOpenExtendModal,
+  ]);
 
   // =============================================================================
   // RENDER

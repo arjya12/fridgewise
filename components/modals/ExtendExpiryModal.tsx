@@ -1,6 +1,7 @@
 /**
- * Extend Expiry Modal
+ * Enhanced Extend Expiry Modal
  * Allows users to extend the expiry date of food items with quick options or custom dates
+ * Features toast notifications, improved UI, and seamless user experience
  */
 
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -8,7 +9,6 @@ import * as Haptics from "expo-haptics";
 import React, { useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { FoodItem } from "../../lib/supabase";
+import { useToast } from "../ToastNotification";
 
 // =============================================================================
 // INTERFACES
@@ -44,6 +45,10 @@ export function ExtendExpiryModal({
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [isCustomDateMode, setIsCustomDateMode] = useState<boolean>(false);
+  const [isExtending, setIsExtending] = useState<boolean>(false);
+
+  // Toast notifications
+  const { showSuccess, showError, ToastComponent } = useToast();
 
   // Ref for focus management
   const firstButtonRef = useRef<any>(null);
@@ -69,12 +74,12 @@ export function ExtendExpiryModal({
 
   // Helper to determine if extend button should be enabled
   const isExtendButtonEnabled = useMemo(() => {
-    if (!item) return false;
+    if (!item || isExtending) return false;
     if (isCustomDateMode) {
       return customDate !== null;
     }
     return selectedDays > 0;
-  }, [item, isCustomDateMode, customDate, selectedDays]);
+  }, [item, isExtending, isCustomDateMode, customDate, selectedDays]);
 
   // Calculate new expiry date
   const newExpiryDate = useMemo(() => {
@@ -103,6 +108,7 @@ export function ExtendExpiryModal({
     if (!item) return;
 
     try {
+      setIsExtending(true);
       let daysToExtend: number;
 
       if (isCustomDateMode && customDate) {
@@ -113,23 +119,28 @@ export function ExtendExpiryModal({
 
       await onExtend(item, daysToExtend);
 
-      // Success feedback
+      // Success feedback with toast
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        "Success",
-        `Expiry extended by ${daysToExtend} day${
+
+      showSuccess(
+        `✅ Expiry extended by ${daysToExtend} day${
           daysToExtend !== 1 ? "s" : ""
-        } for ${item.name}`,
-        [{ text: "OK", style: "default" }]
+        } for ${item.name}`
       );
+
+      // Close modal after a short delay
+      setTimeout(() => {
+        onClose();
+        resetModalState();
+      }, 500);
     } catch (error) {
       console.error("Failed to extend expiry:", error);
 
-      // Error feedback
+      // Error feedback with toast
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", "Failed to extend expiry. Please try again.", [
-        { text: "OK", style: "default" },
-      ]);
+      showError("❌ Failed to extend expiry. Please try again.");
+    } finally {
+      setIsExtending(false);
     }
   };
 
@@ -137,10 +148,14 @@ export function ExtendExpiryModal({
     setIsCustomDateMode(false);
     setCustomDate(null);
     setSelectedDays(days);
+
+    // Light haptic feedback for selection
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleCustomDatePress = () => {
     setShowDatePicker(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleDatePickerChange = (event: any, selectedDate?: Date) => {
@@ -158,14 +173,17 @@ export function ExtendExpiryModal({
         setIsCustomDateMode(true);
         const days = calculateDaysFromCustomDate(selectedDate);
         setSelectedDays(days);
+
+        // Success haptic for valid date selection
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } else {
-        // Show error or reset to current date
-        console.warn("Selected date must be after current expiry date");
+        // Error haptic for invalid date
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showError("Please select a date after the current expiry date");
       }
     }
 
     if (Platform.OS === "ios") {
-      // iOS: Hide picker when done
       setShowDatePicker(false);
     }
   };
@@ -175,6 +193,14 @@ export function ExtendExpiryModal({
     setIsCustomDateMode(false);
     setCustomDate(null);
     setShowDatePicker(false);
+    setIsExtending(false);
+  };
+
+  const handleClose = () => {
+    if (!isExtending) {
+      onClose();
+      resetModalState();
+    }
   };
 
   // Reset state when modal closes or item changes
@@ -198,7 +224,7 @@ export function ExtendExpiryModal({
         if (firstButtonRef.current) {
           AccessibilityInfo.setAccessibilityFocus(firstButtonRef.current);
         }
-      }, 500); // Small delay to ensure modal is fully rendered
+      }, 500);
 
       return () => clearTimeout(focusTimeout);
     }
@@ -210,197 +236,243 @@ export function ExtendExpiryModal({
   }
 
   return (
-    <Modal
-      visible={isVisible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={onClose}
-      accessibilityViewIsModal={true}
-      supportedOrientations={["portrait", "landscape"]}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop}>
-          <TouchableWithoutFeedback>
-            <View style={styles.modalContent}>
-              {/* Header */}
-              <Text style={styles.header}>Extend Expiry for {item.name}</Text>
+    <>
+      <Modal
+        visible={isVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleClose}
+        accessibilityViewIsModal={true}
+        supportedOrientations={["portrait", "landscape"]}
+      >
+        <TouchableWithoutFeedback onPress={handleClose}>
+          <View style={styles.backdrop}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                {/* Header */}
+                <Text style={styles.header}>Extend Expiry for {item.name}</Text>
 
-              {/* Divider */}
-              <View style={styles.divider} />
+                {/* Divider */}
+                <View style={styles.divider} />
 
-              {/* Quick Options */}
-              <Text style={styles.sectionTitle}>Quick Options:</Text>
-              <View style={styles.quickOptionsContainer}>
-                <Pressable
-                  ref={firstButtonRef}
-                  style={[
-                    styles.quickOption,
-                    selectedDays === 1 && styles.quickOptionSelected,
-                  ]}
-                  onPress={() => handleQuickOption(1)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Extend by 1 day"
-                  accessibilityHint="Extends the expiry date by 1 day"
-                  accessibilityState={{
-                    selected: selectedDays === 1 && !isCustomDateMode,
-                  }}
-                >
-                  <Text
+                {/* Quick Options */}
+                <Text style={styles.sectionTitle}>Quick Options:</Text>
+                <View style={styles.quickOptionsContainer}>
+                  <Pressable
+                    ref={firstButtonRef}
                     style={[
-                      styles.quickOptionText,
-                      selectedDays === 1 && styles.quickOptionTextSelected,
+                      styles.quickOption,
+                      selectedDays === 1 &&
+                        !isCustomDateMode &&
+                        styles.quickOptionSelected,
                     ]}
+                    onPress={() => handleQuickOption(1)}
+                    disabled={isExtending}
+                    accessibilityRole="button"
+                    accessibilityLabel="Extend by 1 day"
+                    accessibilityHint="Extends the expiry date by 1 day"
+                    accessibilityState={{
+                      selected: selectedDays === 1 && !isCustomDateMode,
+                      disabled: isExtending,
+                    }}
                   >
-                    +1d
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={[
+                        styles.quickOptionText,
+                        selectedDays === 1 &&
+                          !isCustomDateMode &&
+                          styles.quickOptionTextSelected,
+                      ]}
+                    >
+                      +1d
+                    </Text>
+                  </Pressable>
 
-                <Pressable
-                  style={[
-                    styles.quickOption,
-                    selectedDays === 3 && styles.quickOptionSelected,
-                  ]}
-                  onPress={() => handleQuickOption(3)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Extend by 3 days"
-                  accessibilityHint="Extends the expiry date by 3 days"
-                  accessibilityState={{
-                    selected: selectedDays === 3 && !isCustomDateMode,
-                  }}
-                >
-                  <Text
+                  <Pressable
                     style={[
-                      styles.quickOptionText,
-                      selectedDays === 3 && styles.quickOptionTextSelected,
+                      styles.quickOption,
+                      selectedDays === 3 &&
+                        !isCustomDateMode &&
+                        styles.quickOptionSelected,
                     ]}
+                    onPress={() => handleQuickOption(3)}
+                    disabled={isExtending}
+                    accessibilityRole="button"
+                    accessibilityLabel="Extend by 3 days"
+                    accessibilityHint="Extends the expiry date by 3 days"
+                    accessibilityState={{
+                      selected: selectedDays === 3 && !isCustomDateMode,
+                      disabled: isExtending,
+                    }}
                   >
-                    +3d
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={[
+                        styles.quickOptionText,
+                        selectedDays === 3 &&
+                          !isCustomDateMode &&
+                          styles.quickOptionTextSelected,
+                      ]}
+                    >
+                      +3d
+                    </Text>
+                  </Pressable>
 
-                <Pressable
-                  style={[
-                    styles.quickOption,
-                    selectedDays === 7 && styles.quickOptionSelected,
-                  ]}
-                  onPress={() => handleQuickOption(7)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Extend by 1 week"
-                  accessibilityHint="Extends the expiry date by 7 days"
-                  accessibilityState={{
-                    selected: selectedDays === 7 && !isCustomDateMode,
-                  }}
-                >
-                  <Text
+                  <Pressable
                     style={[
-                      styles.quickOptionText,
-                      selectedDays === 7 && styles.quickOptionTextSelected,
+                      styles.quickOption,
+                      selectedDays === 7 &&
+                        !isCustomDateMode &&
+                        styles.quickOptionSelected,
                     ]}
+                    onPress={() => handleQuickOption(7)}
+                    disabled={isExtending}
+                    accessibilityRole="button"
+                    accessibilityLabel="Extend by 1 week"
+                    accessibilityHint="Extends the expiry date by 7 days"
+                    accessibilityState={{
+                      selected: selectedDays === 7 && !isCustomDateMode,
+                      disabled: isExtending,
+                    }}
                   >
-                    +1w
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={[
+                        styles.quickOptionText,
+                        selectedDays === 7 &&
+                          !isCustomDateMode &&
+                          styles.quickOptionTextSelected,
+                      ]}
+                    >
+                      +1w
+                    </Text>
+                  </Pressable>
 
-                <Pressable
-                  style={[
-                    styles.customOption,
-                    isCustomDateMode && styles.quickOptionSelected,
-                  ]}
-                  onPress={handleCustomDatePress}
-                  accessibilityRole="button"
-                  accessibilityLabel="Choose custom date"
-                  accessibilityHint="Opens date picker to select a custom expiry date"
-                  accessibilityState={{ selected: isCustomDateMode }}
-                >
-                  <Text
+                  <Pressable
                     style={[
-                      styles.customOptionText,
-                      isCustomDateMode && styles.quickOptionTextSelected,
+                      styles.customOption,
+                      isCustomDateMode && styles.customOptionSelected,
                     ]}
+                    onPress={handleCustomDatePress}
+                    disabled={isExtending}
+                    accessibilityRole="button"
+                    accessibilityLabel="Choose custom date"
+                    accessibilityHint="Opens date picker to select a custom expiry date"
+                    accessibilityState={{
+                      selected: isCustomDateMode,
+                      disabled: isExtending,
+                    }}
                   >
-                    Custom
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={[
+                        styles.customOptionText,
+                        isCustomDateMode && styles.customOptionTextSelected,
+                      ]}
+                    >
+                      Custom
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Preview */}
+                <View style={styles.previewContainer}>
+                  <Text style={styles.previewLabel}>New expiry:</Text>
+                  <Text style={styles.previewDate}>{newExpiryDate}</Text>
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.actionButtons}>
+                  <Pressable
+                    style={[
+                      styles.cancelButton,
+                      isExtending && styles.buttonDisabled,
+                    ]}
+                    onPress={handleClose}
+                    disabled={isExtending}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel"
+                    accessibilityHint="Closes the modal without extending expiry"
+                    accessibilityState={{ disabled: isExtending }}
+                  >
+                    <Text
+                      style={[
+                        styles.cancelButtonText,
+                        isExtending && styles.buttonTextDisabled,
+                      ]}
+                    >
+                      Cancel
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.extendButton,
+                      !isExtendButtonEnabled && styles.extendButtonDisabled,
+                    ]}
+                    onPress={handleExtend}
+                    disabled={!isExtendButtonEnabled}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      isCustomDateMode
+                        ? `Extend expiry to ${customDate?.toLocaleDateString()}`
+                        : `Extend expiry by ${selectedDays} day${
+                            selectedDays !== 1 ? "s" : ""
+                          }`
+                    }
+                    accessibilityHint="Confirms the expiry extension"
+                    accessibilityState={{
+                      disabled: !isExtendButtonEnabled,
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.extendButtonText,
+                        !isExtendButtonEnabled &&
+                          styles.extendButtonTextDisabled,
+                      ]}
+                    >
+                      {isExtending
+                        ? "Extending..."
+                        : isCustomDateMode
+                        ? `Extend to ${customDate?.toLocaleDateString()}`
+                        : `Extend by ${selectedDays} day${
+                            selectedDays !== 1 ? "s" : ""
+                          }`}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
 
-              {/* Preview */}
-              <View style={styles.previewContainer}>
-                <Text style={styles.previewLabel}>New expiry:</Text>
-                <Text style={styles.previewDate}>{newExpiryDate}</Text>
-              </View>
+        {/* DateTimePicker */}
+        {showDatePicker && item?.expiry_date && (
+          <DateTimePicker
+            value={
+              customDate ||
+              new Date(
+                new Date(item.expiry_date).getTime() + 24 * 60 * 60 * 1000
+              )
+            }
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={handleDatePickerChange}
+            minimumDate={
+              new Date(
+                new Date(item.expiry_date).getTime() + 24 * 60 * 60 * 1000
+              )
+            }
+          />
+        )}
+      </Modal>
 
-              {/* Action Buttons */}
-              <View style={styles.actionButtons}>
-                <Pressable
-                  style={styles.cancelButton}
-                  onPress={onClose}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel"
-                  accessibilityHint="Closes the modal without extending expiry"
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </Pressable>
-
-                <Pressable
-                  style={[
-                    styles.extendButton,
-                    !isExtendButtonEnabled && styles.extendButtonDisabled,
-                  ]}
-                  onPress={handleExtend}
-                  disabled={!isExtendButtonEnabled}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    isCustomDateMode
-                      ? `Extend expiry to ${customDate?.toLocaleDateString()}`
-                      : `Extend expiry by ${selectedDays} day${
-                          selectedDays !== 1 ? "s" : ""
-                        }`
-                  }
-                  accessibilityHint="Confirms the expiry extension"
-                  accessibilityState={{
-                    disabled: !isExtendButtonEnabled,
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.extendButtonText,
-                      !isExtendButtonEnabled && styles.extendButtonTextDisabled,
-                    ]}
-                  >
-                    {isCustomDateMode
-                      ? `Extend to ${customDate?.toLocaleDateString()}`
-                      : `Extend by ${selectedDays} day${
-                          selectedDays !== 1 ? "s" : ""
-                        }`}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-
-      {/* DateTimePicker */}
-      {showDatePicker && item?.expiry_date && (
-        <DateTimePicker
-          value={
-            customDate ||
-            new Date(new Date(item.expiry_date).getTime() + 24 * 60 * 60 * 1000)
-          }
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={handleDatePickerChange}
-          minimumDate={
-            new Date(new Date(item.expiry_date).getTime() + 24 * 60 * 60 * 1000)
-          }
-        />
-      )}
-    </Modal>
+      {/* Toast Component */}
+      <ToastComponent />
+    </>
   );
 }
 
 // =============================================================================
-// STYLES
+// ENHANCED STYLES
 // =============================================================================
 
 const styles = StyleSheet.create({
@@ -414,7 +486,15 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 24,
-    minHeight: 300,
+    minHeight: 320,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 20,
   },
   header: {
     fontSize: 20,
@@ -460,6 +540,7 @@ const styles = StyleSheet.create({
   },
   quickOptionTextSelected: {
     color: "#3B82F6",
+    fontWeight: "600",
   },
   customOption: {
     flex: 1,
@@ -468,19 +549,29 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: "#D1D5DB",
+  },
+  customOptionSelected: {
+    backgroundColor: "#EBF4FF",
+    borderColor: "#3B82F6",
   },
   customOptionText: {
     fontSize: 16,
     fontWeight: "500",
     color: "#374151",
   },
+  customOptionTextSelected: {
+    color: "#3B82F6",
+    fontWeight: "600",
+  },
   previewContainer: {
     backgroundColor: "#F9FAFB",
     padding: 16,
     borderRadius: 8,
     marginBottom: 24,
+    borderLeftWidth: 4,
+    borderLeftColor: "#3B82F6",
   },
   previewLabel: {
     fontSize: 14,
@@ -504,6 +595,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   cancelButtonText: {
     fontSize: 16,
@@ -517,6 +610,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#3B82F6",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   extendButtonText: {
     fontSize: 16,
@@ -526,8 +627,16 @@ const styles = StyleSheet.create({
   extendButtonDisabled: {
     backgroundColor: "#D1D5DB",
     opacity: 0.7,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   extendButtonTextDisabled: {
+    color: "#9CA3AF",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonTextDisabled: {
     color: "#9CA3AF",
   },
 });
