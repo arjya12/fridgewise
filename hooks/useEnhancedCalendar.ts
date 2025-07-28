@@ -345,7 +345,7 @@ export function useEnhancedCalendar(
   // DATA MANAGEMENT
   // =============================================================================
 
-  // Memoized derived data to prevent expensive recalculations
+  // Enhanced marked dates with priority-based single dot logic
   const markedDates = useMemo(() => {
     if (!data.itemsByDate || Object.keys(data.itemsByDate).length === 0) {
       return {};
@@ -355,32 +355,69 @@ export function useEnhancedCalendar(
 
     Object.entries(data.itemsByDate).forEach(([date, items]) => {
       if (items.length > 0) {
-        const urgencyCounts = { critical: 0, warning: 0, soon: 0, safe: 0 };
+        // Enhanced status priority system: Critical > Warning > Soon > Safe
+        let mostCriticalStatus = "safe";
+        let mostCriticalColor = "#22C55E"; // Safe (green)
 
         items.forEach((item) => {
           if (item.expiry_date) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const expiryDate = new Date(item.expiry_date);
+            expiryDate.setHours(0, 0, 0, 0);
+
             const daysUntilExpiry = Math.ceil(
-              (new Date(item.expiry_date).getTime() - new Date().getTime()) /
-                (1000 * 60 * 60 * 24)
+              (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
             );
 
-            if (daysUntilExpiry < 0) urgencyCounts.critical++;
-            else if (daysUntilExpiry === 0) urgencyCounts.warning++;
-            else if (daysUntilExpiry <= 3) urgencyCounts.soon++;
-            else urgencyCounts.safe++;
+            // Priority-based status determination
+            let itemStatus = "safe";
+            let itemColor = "#22C55E";
+
+            if (daysUntilExpiry <= 0) {
+              // Critical: expires today/overdue
+              itemStatus = "critical";
+              itemColor = "#EF4444"; // Red
+            } else if (daysUntilExpiry >= 1 && daysUntilExpiry <= 3) {
+              // Warning: expires 1-3 days
+              itemStatus = "warning";
+              itemColor = "#F97316"; // Orange
+            } else if (daysUntilExpiry >= 4 && daysUntilExpiry <= 7) {
+              // Soon: expires 4-7 days
+              itemStatus = "soon";
+              itemColor = "#EAB308"; // Yellow
+            }
+            // Safe: expires 8+ days (default)
+
+            // Update most critical status based on priority
+            const statusPriority = {
+              critical: 0,
+              warning: 1,
+              soon: 2,
+              safe: 3,
+            };
+
+            if (
+              statusPriority[itemStatus as keyof typeof statusPriority] <
+              statusPriority[mostCriticalStatus as keyof typeof statusPriority]
+            ) {
+              mostCriticalStatus = itemStatus;
+              mostCriticalColor = itemColor;
+            }
           }
         });
 
-        // Create dots based on urgency
-        const dots = [];
-        if (urgencyCounts.critical > 0) dots.push({ color: "#DC2626" });
-        if (urgencyCounts.warning > 0) dots.push({ color: "#EA580C" });
-        if (urgencyCounts.soon > 0) dots.push({ color: "#D97706" });
-        if (urgencyCounts.safe > 0) dots.push({ color: "#16A34A" });
-
+        // Create single dot representing most critical status
         marked[date] = {
           marked: true,
-          dots: dots.slice(0, 3), // Limit to 3 dots for performance
+          dots: [
+            {
+              key: mostCriticalStatus,
+              color: mostCriticalColor,
+              selectedDotColor: "#FFFFFF", // White dot when date is selected
+            },
+          ],
         };
       }
     });

@@ -1,15 +1,12 @@
+import TestNewCards from "@/components/TestNewCards";
 import React from "react";
-import { StyleSheet } from "react-native";
-import AppHeader from "../../components/AppHeader";
-import SafeAreaWrapper from "../../components/SafeAreaWrapper";
-import TestComponent from "../../components/TestComponent";
+import { StyleSheet, View } from "react-native";
 
-export default function TestScreen() {
+export default function TabTwoScreen() {
   return (
-    <SafeAreaWrapper>
-      <AppHeader title="Test Screen" />
-      <TestComponent />
-    </SafeAreaWrapper>
+    <View style={styles.container}>
+      <TestNewCards />
+    </View>
   );
 }
 

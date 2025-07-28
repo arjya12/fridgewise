@@ -10,8 +10,8 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { getFoodIcon } from "../utils/foodIconMapping";
 import ItemEntryCard from "./ItemEntryCard";
-import RealisticFoodImage from "./RealisticFoodImage";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === "android") {
@@ -265,7 +265,7 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
           accessibilityLabel={expanded ? "Collapse item" : "Expand item"}
         >
           <View style={styles.iconContainer}>
-            <RealisticFoodImage foodName={itemName} size={40} />
+            <Text style={styles.emojiIcon}>{getFoodIcon(itemName)}</Text>
             {/* Add a status indicator dot */}
             <View
               style={[styles.statusDot, { backgroundColor: getExpiryColor() }]}
@@ -387,6 +387,9 @@ const styles = StyleSheet.create({
   iconContainer: {
     position: "relative",
     marginRight: 12,
+  },
+  emojiIcon: {
+    fontSize: 24,
   },
   statusDot: {
     position: "absolute",

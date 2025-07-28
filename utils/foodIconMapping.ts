@@ -1,219 +1,224 @@
-// Utility to map food items to appropriate Material icons
+// =============================================================================
+// FOOD ICON MAPPING UTILITY
+// =============================================================================
 
-type IconMap = {
-  name: string; // Icon name from Material Icons
-  color: string; // Icon color
-  background: string; // Background color for the icon container
+/**
+ * Maps food item names/categories to appropriate emoji icons
+ */
+const FOOD_ICON_MAP: Record<string, string> = {
+  // Dairy Products
+  milk: "🥛",
+  cheese: "🧀",
+  butter: "🧈",
+  yogurt: "🥛",
+  cream: "🥛",
+
+  // Vegetables
+  lettuce: "🥬",
+  spinach: "🥬",
+  carrot: "🥕",
+  tomato: "🍅",
+  potato: "🥔",
+  onion: "🧅",
+  garlic: "🧄",
+  broccoli: "🥦",
+  cucumber: "🥒",
+  pepper: "🌶️",
+  "bell pepper": "🫑",
+  mushroom: "🍄",
+  corn: "🌽",
+  cabbage: "🥬",
+
+  // Fruits
+  apple: "🍎",
+  banana: "🍌",
+  orange: "🍊",
+  grape: "🍇",
+  strawberry: "🍓",
+  lemon: "🍋",
+  lime: "🍋",
+  watermelon: "🍉",
+  peach: "🍑",
+  pear: "🍐",
+  pineapple: "🍍",
+  kiwi: "🥝",
+  mango: "🥭",
+  avocado: "🥑",
+
+  // Meat & Protein
+  chicken: "🍗",
+  beef: "🥩",
+  pork: "🥩",
+  fish: "🐟",
+  salmon: "🐟",
+  tuna: "🐟",
+  egg: "🥚",
+  eggs: "🥚",
+  bacon: "🥓",
+
+  // Bread & Grains
+  bread: "🍞",
+  rice: "🍚",
+  pasta: "🍝",
+  noodles: "🍜",
+  cereal: "🥣",
+  crackers: "🍪",
+
+  // Beverages
+  water: "💧",
+  juice: "🧃",
+  soda: "🥤",
+  coffee: "☕",
+  tea: "🍵",
+  wine: "🍷",
+  beer: "🍺",
+
+  // Snacks & Desserts
+  cookie: "🍪",
+  cake: "🍰",
+  chocolate: "🍫",
+  candy: "🍬",
+  "ice cream": "🍦",
+  chips: "🍟",
+  nuts: "🥜",
+
+  // Condiments & Sauces
+  ketchup: "🍅",
+  mustard: "🌶️",
+  mayo: "🥄",
+  sauce: "🥄",
+  oil: "🫒",
+  vinegar: "🫒",
+
+  // Default fallbacks by category
+  dairy: "🥛",
+  meat: "🥩",
+  vegetable: "🥬",
+  fruit: "🍎",
+  beverage: "🥤",
+  snack: "🍿",
+  frozen: "🧊",
+  condiment: "🥄",
 };
 
 /**
- * Returns the appropriate Material icon info for a food item based on its name
- * @param itemName The name of the food item
- * @returns Object containing icon name, color and background color
+ * Get emoji icon for a food item based on name or category
  */
-export function getFoodIconInfo(itemName: string): IconMap {
-  const name = itemName.toLowerCase();
+export function getFoodIcon(name: string, category?: string): string {
+  const lowercaseName = name.toLowerCase();
 
-  // Dairy products
-  if (name.includes("milk") || name.includes("cream")) {
-    return {
-      name: "water-drop",
-      color: "#3b82f6",
-      background: "#eff6ff",
-    };
+  // Try exact name match first
+  if (FOOD_ICON_MAP[lowercaseName]) {
+    return FOOD_ICON_MAP[lowercaseName];
   }
 
-  // Bread and baked goods
-  if (
-    name.includes("bread") ||
-    name.includes("toast") ||
-    name.includes("bun")
-  ) {
-    return {
-      name: "breakfast-dining",
-      color: "#d97706",
-      background: "#fff7ed",
-    };
+  // Try partial name matches
+  for (const [key, icon] of Object.entries(FOOD_ICON_MAP)) {
+    if (lowercaseName.includes(key) || key.includes(lowercaseName)) {
+      return icon;
+    }
   }
 
-  // Eggs
-  if (name.includes("egg")) {
-    return {
-      name: "egg",
-      color: "#eab308",
-      background: "#fefce8",
-    };
+  // Try category match if provided
+  if (category) {
+    const lowercaseCategory = category.toLowerCase();
+    if (FOOD_ICON_MAP[lowercaseCategory]) {
+      return FOOD_ICON_MAP[lowercaseCategory];
+    }
   }
 
-  // Meat products
-  if (
-    name.includes("meat") ||
-    name.includes("beef") ||
-    name.includes("chicken") ||
-    name.includes("pork") ||
-    name.includes("steak")
-  ) {
-    return {
-      name: "restaurant",
-      color: "#ef4444",
-      background: "#fee2e2",
-    };
-  }
+  // Default fallback
+  return "🍽️";
+}
 
-  // Fish and seafood
-  if (
-    name.includes("fish") ||
-    name.includes("seafood") ||
-    name.includes("shrimp")
-  ) {
-    return {
-      name: "water",
-      color: "#0ea5e9",
-      background: "#e0f2fe",
-    };
-  }
+/**
+ * Determine expiry status based on expiry date
+ */
+export function getExpiryStatus(
+  expiryDate: Date | string
+): "EXPIRED" | "WARNING" | "SAFE" {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // Fruits
-  if (
-    name.includes("fruit") ||
-    name.includes("apple") ||
-    name.includes("banana") ||
-    name.includes("orange") ||
-    name.includes("berry")
-  ) {
-    return {
-      name: "nutrition",
-      color: "#f97316",
-      background: "#fff7ed",
-    };
-  }
+  const expiry = new Date(expiryDate);
+  expiry.setHours(0, 0, 0, 0);
 
-  // Vegetables
-  if (
-    name.includes("vegetable") ||
-    name.includes("carrot") ||
-    name.includes("broccoli") ||
-    name.includes("lettuce") ||
-    name.includes("tomato")
-  ) {
-    return {
-      name: "eco",
-      color: "#22c55e",
-      background: "#ecfdf5",
-    };
-  }
+  const daysUntilExpiry = Math.ceil(
+    (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
 
-  // Cheese
-  if (name.includes("cheese")) {
-    return {
-      name: "rectangle",
-      color: "#facc15",
-      background: "#fefce8",
-    };
+  if (daysUntilExpiry <= 0) {
+    return "EXPIRED";
+  } else if (daysUntilExpiry <= 3) {
+    return "WARNING";
+  } else {
+    return "SAFE";
   }
+}
 
-  // Pasta and noodles
-  if (
-    name.includes("pasta") ||
-    name.includes("noodle") ||
-    name.includes("spaghetti")
-  ) {
-    return {
-      name: "ramen-dining",
-      color: "#f59e0b",
-      background: "#fffbeb",
-    };
-  }
+/**
+ * Convert existing FoodItem to new FoodItemCard format
+ */
+export function convertToCardFormat(existingItem: {
+  id: string;
+  name: string;
+  location: string;
+  quantity: number;
+  expiry_date?: string;
+  category?: string;
+}): {
+  id: string;
+  name: string;
+  icon: string;
+  location: string;
+  quantity: number;
+  status: "EXPIRED" | "WARNING" | "SAFE";
+  expiryDate: Date;
+} {
+  const expiryDate = existingItem.expiry_date
+    ? new Date(existingItem.expiry_date)
+    : new Date();
 
-  // Rice and grains
-  if (
-    name.includes("rice") ||
-    name.includes("grain") ||
-    name.includes("cereal")
-  ) {
-    return {
-      name: "grain",
-      color: "#d97706",
-      background: "#fff7ed",
-    };
-  }
-
-  // Soup and stews
-  if (name.includes("soup") || name.includes("stew")) {
-    return {
-      name: "soup-kitchen",
-      color: "#ea580c",
-      background: "#fff7ed",
-    };
-  }
-
-  // Desserts and sweets
-  if (
-    name.includes("cake") ||
-    name.includes("dessert") ||
-    name.includes("sweet") ||
-    name.includes("chocolate") ||
-    name.includes("ice cream")
-  ) {
-    return {
-      name: "cake",
-      color: "#ec4899",
-      background: "#fdf2f8",
-    };
-  }
-
-  // Sauces and condiments
-  if (
-    name.includes("sauce") ||
-    name.includes("ketchup") ||
-    name.includes("condiment") ||
-    name.includes("mayo") ||
-    name.includes("mustard")
-  ) {
-    return {
-      name: "local-drink",
-      color: "#ef4444",
-      background: "#fee2e2",
-    };
-  }
-
-  // Beverages
-  if (
-    name.includes("juice") ||
-    name.includes("drink") ||
-    name.includes("beverage") ||
-    name.includes("soda") ||
-    name.includes("water")
-  ) {
-    return {
-      name: "local-bar",
-      color: "#3b82f6",
-      background: "#eff6ff",
-    };
-  }
-
-  // Frozen food
-  if (name.includes("frozen")) {
-    return {
-      name: "ac-unit",
-      color: "#0ea5e9",
-      background: "#e0f2fe",
-    };
-  }
-
-  // Canned foods
-  if (name.includes("can") || name.includes("canned") || name.includes("tin")) {
-    return {
-      name: "inventory-2",
-      color: "#6b7280",
-      background: "#f3f4f6",
-    };
-  }
-
-  // Default for unrecognized items
   return {
-    name: "restaurant-menu",
-    color: "#6b7280",
-    background: "#f3f4f6",
+    id: existingItem.id,
+    name: existingItem.name,
+    icon: getFoodIcon(existingItem.name, existingItem.category),
+    location: existingItem.location,
+    quantity: existingItem.quantity,
+    status: existingItem.expiry_date
+      ? getExpiryStatus(existingItem.expiry_date)
+      : "SAFE",
+    expiryDate: expiryDate,
   };
 }
+
+/**
+ * Convert array of existing food items to card format
+ */
+export function convertItemsToCardFormat(
+  existingItems: Array<{
+    id: string;
+    name: string;
+    location: string;
+    quantity: number;
+    expiry_date?: string;
+    category?: string;
+  }>
+): Array<{
+  id: string;
+  name: string;
+  icon: string;
+  location: string;
+  quantity: number;
+  status: "EXPIRED" | "WARNING" | "SAFE";
+  expiryDate: Date;
+}> {
+  return existingItems.map(convertToCardFormat);
+}
+
+export default {
+  getFoodIcon,
+  getExpiryStatus,
+  convertToCardFormat,
+  convertItemsToCardFormat,
+};

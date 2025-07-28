@@ -1,16 +1,15 @@
 // components/SelectableItemsList.tsx
-import FoodIcon from "@/components/FoodIcon";
 import { FoodItemWithUrgency } from "@/services/foodItems";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   Animated,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { getFoodIcon } from "../utils/foodIconMapping";
 
 interface SelectableItemsListProps {
   items: FoodItemWithUrgency[];
@@ -167,10 +166,7 @@ export default function SelectableItemsList({
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor }]}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={[styles.container, { backgroundColor }]}>
       {groupedItems.map((group) => {
         const isExpanded = expandedGroups.has(group.title);
         const selectionProgress = getSelectionProgress(group.items);
@@ -271,7 +267,7 @@ export default function SelectableItemsList({
           </View>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -355,7 +351,9 @@ function SelectableItemCard({
 
         {/* Food Icon */}
         <View style={styles.itemIcon}>
-          <FoodIcon category={item.category} name={item.name} size={32} />
+          <Text style={styles.emojiIcon}>
+            {getFoodIcon(item.name, item.category)}
+          </Text>
         </View>
 
         {/* Item Info */}
@@ -520,5 +518,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "bold",
+  },
+  emojiIcon: {
+    fontSize: 24,
   },
 });

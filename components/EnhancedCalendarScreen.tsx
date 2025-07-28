@@ -1,9 +1,9 @@
 /**
- * Enhanced Calendar Screen
- * Main integration component combining all enhanced calendar features
- * Based on Phase 2 implementation progress
+ * Enhanced Calendar Screen with food expiry tracking
+ * Displays calendar with marked dates and expiring items
  */
 
+import { CalendarProvider } from "@/contexts/CalendarContext";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RefreshControl,
@@ -18,14 +18,14 @@ import {
   GestureDetector,
   PanGestureHandlerEventPayload,
 } from "react-native-gesture-handler";
-import { CalendarProvider } from "../contexts/CalendarContext";
 import {
   useCalendarPerformance,
   useEnhancedCalendar,
 } from "../hooks/useEnhancedCalendar";
 import { useThemeColor } from "../hooks/useThemeColor";
 import { FoodItem } from "../lib/supabase";
-import { EnhancedSwipeableItemCard } from "./EnhancedSwipeableItemCard";
+import { convertItemsToCardFormat } from "../utils/foodIconMapping";
+import { FoodItemCard } from "./FoodItemCard";
 import ExtendExpiryModal from "./modals/ExtendExpiryModal";
 
 function getUrgencyColor(urgency: string) {
@@ -299,6 +299,9 @@ function EnhancedCalendarScreenCore({
       return null;
     }
 
+    // Convert existing food items to new card format with emoji icons
+    const cardItems = convertItemsToCardFormat(expiringSoonItems);
+
     return (
       <View style={styles.itemsSection}>
         <View style={styles.sectionHeader}>
@@ -317,26 +320,20 @@ function EnhancedCalendarScreenCore({
         </View>
 
         <View style={styles.itemsContainer}>
-          {expiringSoonItems.slice(0, 5).map((item, index) => (
-            <View
+          {cardItems.slice(0, 5).map((item, index) => (
+            <FoodItemCard
               key={item.id}
+              item={item}
+              onPress={() =>
+                onItemPress && onItemPress(expiringSoonItems[index])
+              }
               style={[
                 styles.itemCardWrapper,
-                index === expiringSoonItems.slice(0, 5).length - 1 && {
-                  marginBottom: 0,
-                },
+                index === cardItems.slice(0, 5).length - 1
+                  ? { marginBottom: 0 }
+                  : {},
               ]}
-            >
-              <EnhancedSwipeableItemCard
-                item={item}
-                onMarkUsed={handleMarkUsed}
-                onExtendExpiry={handleExtendExpiry}
-                onPress={onItemPress}
-                onDelete={onItemDelete}
-                enableHaptics={true}
-                showQuantitySelector={true}
-              />
-            </View>
+            />
           ))}
         </View>
 
@@ -349,15 +346,7 @@ function EnhancedCalendarScreenCore({
         )}
       </View>
     );
-  }, [
-    expiringSoonItems,
-    textColor,
-    borderColor,
-    handleMarkUsed,
-    handleExtendExpiry,
-    onItemPress,
-    onItemDelete,
-  ]);
+  }, [expiringSoonItems, textColor, borderColor, onItemPress]);
 
   // =============================================================================
   // RENDER
@@ -489,7 +478,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   itemsSection: {
-    marginBottom: 0,
+    marginBottom: 30, // Added bottom spacing for natural scroll completion
     paddingHorizontal: 0,
   },
   sectionHeader: {
