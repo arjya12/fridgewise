@@ -1,11 +1,10 @@
 /**
  * More Screen
  * Consolidates secondary features and administrative functions
- * Provides access to Settings, Profile, Reports, Help, and other features
+ * Provides access to Settings, Reports, Help, and other features
  */
 
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
-import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
@@ -47,13 +46,14 @@ interface MenuItem {
 export default function MoreScreen() {
   const { user, signOut } = useAuth();
 
-  // Fixed light theme colors
-  const backgroundColor = "#F9FAFB";
+  // Updated color scheme - minimalist grey/greyscale
+  const backgroundColor = "#FAFAFA";
   const cardBackgroundColor = "#FFFFFF";
-  const cardBorderColor = "#F3F4F6";
-  const textColor = "#1F2937";
+  const cardBorderColor = "#E5E7EB";
+  const textColor = "#111827";
   const subTextColor = "#6B7280";
-  const primaryColor = "#22C55E";
+  const dividerColor = "#E5E7EB";
+  const profileBorderColor = "#D1D5DB";
 
   // =============================================================================
   // NAVIGATION ACTIONS
@@ -135,15 +135,6 @@ export default function MoreScreen() {
       title: "Account",
       items: [
         {
-          id: "profile",
-          title: "Profile",
-          description: "Manage your account and preferences",
-          icon: "person-outline",
-          iconType: "ionicons",
-          action: navigateToProfile,
-          showChevron: true,
-        },
-        {
           id: "settings",
           title: "Settings",
           description: "App preferences and configuration",
@@ -209,20 +200,6 @@ export default function MoreScreen() {
         },
       ],
     },
-    {
-      title: "",
-      items: [
-        {
-          id: "sign-out",
-          title: "Sign Out",
-          description: "Sign out of your account",
-          icon: "log-out-outline",
-          iconType: "ionicons",
-          action: handleSignOut,
-          destructive: true,
-        },
-      ],
-    },
   ];
 
   // =============================================================================
@@ -233,7 +210,7 @@ export default function MoreScreen() {
     <TouchableOpacity
       key={item.id}
       style={[
-        styles.menuItem,
+        styles.menuCard,
         {
           backgroundColor: cardBackgroundColor,
           borderColor: cardBorderColor,
@@ -244,37 +221,21 @@ export default function MoreScreen() {
     >
       <View style={styles.menuItemContent}>
         {/* Icon */}
-        <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: item.destructive ? "#FEE2E2" : "#F0FDF4" },
-          ]}
-        >
+        <View style={[styles.iconContainer, { backgroundColor: "#F9FAFB" }]}>
           {item.iconType === "ionicons" ? (
-            <Ionicons
-              name={item.icon as any}
-              size={24}
-              color={item.destructive ? "#DC2626" : primaryColor}
-            />
+            <Ionicons name={item.icon as any} size={22} color={subTextColor} />
           ) : (
             <MaterialIcons
               name={item.icon as any}
-              size={24}
-              color={item.destructive ? "#DC2626" : primaryColor}
+              size={22}
+              color={subTextColor}
             />
           )}
         </View>
 
         {/* Content */}
         <View style={styles.menuItemInfo}>
-          <Text
-            style={[
-              styles.menuItemTitle,
-              {
-                color: item.destructive ? "#DC2626" : textColor,
-              },
-            ]}
-          >
+          <Text style={[styles.menuItemTitle, { color: textColor }]}>
             {item.title}
           </Text>
           <Text style={[styles.menuItemDescription, { color: subTextColor }]}>
@@ -284,7 +245,7 @@ export default function MoreScreen() {
 
         {/* Chevron */}
         {item.showChevron && (
-          <Ionicons name="chevron-forward" size={20} color={subTextColor} />
+          <Ionicons name="chevron-forward" size={18} color={subTextColor} />
         )}
       </View>
     </TouchableOpacity>
@@ -297,30 +258,64 @@ export default function MoreScreen() {
           {section.title.toUpperCase()}
         </Text>
       )}
-      <View style={styles.sectionContent}>
-        {section.items.map((item, index) => (
-          <View key={item.id}>
-            {renderMenuItem(item)}
-            {index < section.items.length - 1 && (
-              <View
-                style={[styles.separator, { backgroundColor: cardBorderColor }]}
-              />
-            )}
-          </View>
-        ))}
+      <View style={styles.sectionCards}>
+        {section.items.map((item) => renderMenuItem(item))}
       </View>
     </View>
+  );
+
+  const renderSignOutCard = () => (
+    <TouchableOpacity
+      style={[
+        styles.signOutCard,
+        {
+          backgroundColor: cardBackgroundColor,
+          borderColor: cardBorderColor,
+        },
+      ]}
+      onPress={handleSignOut}
+      activeOpacity={0.7}
+    >
+      <View style={styles.menuItemContent}>
+        {/* Icon */}
+        <View style={[styles.iconContainer, { backgroundColor: "#FEF2F2" }]}>
+          <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+        </View>
+
+        {/* Content */}
+        <View style={styles.menuItemInfo}>
+          <Text style={[styles.menuItemTitle, { color: "#EF4444" }]}>
+            Sign Out
+          </Text>
+          <Text style={[styles.menuItemDescription, { color: subTextColor }]}>
+            Sign out of your account
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
     <SafeAreaWrapper usePadding edges={["top"]}>
       <ThemedView style={[styles.container, { backgroundColor }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <ThemedText style={styles.title}>More</ThemedText>
-          <Text style={[styles.subtitle, { color: subTextColor }]}>
-            {user?.email || "Settings and additional features"}
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          {/* Large circular profile picture placeholder */}
+          <TouchableOpacity
+            style={[styles.profilePicture, { borderColor: profileBorderColor }]}
+            onPress={navigateToProfile}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="person-outline" size={40} color={subTextColor} />
+          </TouchableOpacity>
+
+          {/* User email */}
+          <Text style={[styles.userEmail, { color: textColor }]}>
+            {user?.email || "user@example.com"}
           </Text>
+
+          {/* Horizontal divider */}
+          <View style={[styles.divider, { backgroundColor: dividerColor }]} />
         </View>
 
         {/* Menu Sections */}
@@ -330,6 +325,15 @@ export default function MoreScreen() {
           showsVerticalScrollIndicator={false}
         >
           {menuSections.map(renderSection)}
+
+          {/* Sign Out Card - Visually separated destructive action */}
+          <View style={styles.signOutSection}>
+            {/* Subtle divider for extra separation */}
+            <View
+              style={[styles.signOutDivider, { backgroundColor: dividerColor }]}
+            />
+            {renderSignOutCard()}
+          </View>
         </ScrollView>
       </ThemedView>
     </SafeAreaWrapper>
@@ -344,54 +348,80 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    padding: 20,
-    paddingBottom: 16,
+  profileHeader: {
+    alignItems: "center",
+    paddingTop: 20,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginBottom: 4,
+  profilePicture: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 16,
   },
-  subtitle: {
+  userEmail: {
     fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 24,
+  },
+  divider: {
+    height: 1,
+    width: "100%",
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,
+    paddingTop: 24,
     paddingBottom: 40,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
-    letterSpacing: 0.4,
-    marginBottom: 12,
+    letterSpacing: 0.8,
+    marginBottom: 16,
     marginLeft: 4,
   },
-  sectionContent: {
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
+  sectionCards: {
+    gap: 12,
   },
-  menuItem: {
+  menuCard: {
+    borderRadius: 12,
+    borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
+  },
+  signOutSection: {
+    marginTop: 20,
+  },
+  signOutDivider: {
+    height: 1,
+    width: "100%",
+    marginBottom: 12,
+  },
+  signOutCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   menuItemContent: {
     flexDirection: "row",
     alignItems: "center",
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -406,9 +436,6 @@ const styles = StyleSheet.create({
   },
   menuItemDescription: {
     fontSize: 14,
-  },
-  separator: {
-    height: 1,
-    marginLeft: 68,
+    lineHeight: 20,
   },
 });

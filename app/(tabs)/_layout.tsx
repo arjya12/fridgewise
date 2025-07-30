@@ -15,7 +15,7 @@ export default function TabLayout() {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={["right", "left", "bottom"]}>
+    <SafeAreaView style={{ flex: 1 }} edges={["right", "left"]}>
       <Tabs
         screenOptions={{
           headerShown: false,
