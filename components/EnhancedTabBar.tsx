@@ -314,9 +314,9 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    // Top corners rounded for elevated appearance
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    // Reduced top corners radius to minimize content overlap
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
     // Ensure proper z-index for elevation
     zIndex: 1000,
   },

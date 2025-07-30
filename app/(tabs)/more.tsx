@@ -327,13 +327,7 @@ export default function MoreScreen() {
           {menuSections.map(renderSection)}
 
           {/* Sign Out Card - Visually separated destructive action */}
-          <View style={styles.signOutSection}>
-            {/* Subtle divider for extra separation */}
-            <View
-              style={[styles.signOutDivider, { backgroundColor: dividerColor }]}
-            />
-            {renderSignOutCard()}
-          </View>
+          <View style={styles.signOutSection}>{renderSignOutCard()}</View>
         </ScrollView>
       </ThemedView>
     </SafeAreaWrapper>
@@ -379,7 +373,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 40,
+    paddingBottom: 130,
   },
   section: {
     marginBottom: 24,
@@ -401,12 +395,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   signOutSection: {
-    marginTop: 20,
-  },
-  signOutDivider: {
-    height: 1,
-    width: "100%",
-    marginBottom: 12,
+    marginTop: 12,
   },
   signOutCard: {
     borderRadius: 12,
