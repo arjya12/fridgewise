@@ -83,36 +83,6 @@ export default function MoreScreen() {
     );
   };
 
-  const generateShoppingList = () => {
-    router.push("/(tabs)/shopping-list");
-  };
-
-  const exportData = () => {
-    Alert.alert("Export Data", "Choose export format:", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "CSV",
-        onPress: () => {
-          Alert.alert(
-            "Export CSV",
-            "Your inventory data would be exported as a CSV file for use in spreadsheet applications.",
-            [{ text: "OK" }]
-          );
-        },
-      },
-      {
-        text: "PDF",
-        onPress: () => {
-          Alert.alert(
-            "Export PDF",
-            "Your inventory data would be exported as a formatted PDF report.",
-            [{ text: "OK" }]
-          );
-        },
-      },
-    ]);
-  };
-
   const showHelpCenter = () => {
     Alert.alert(
       "Help Center",
@@ -203,29 +173,6 @@ export default function MoreScreen() {
           icon: "pie-chart",
           iconType: "material",
           action: generateConsumptionReport,
-          showChevron: true,
-        },
-      ],
-    },
-    {
-      title: "Tools",
-      items: [
-        {
-          id: "shopping-list",
-          title: "Generate Shopping List",
-          description: "Create a list from low stock items",
-          icon: "basket-outline",
-          iconType: "ionicons",
-          action: generateShoppingList,
-          showChevron: true,
-        },
-        {
-          id: "export-data",
-          title: "Export Data",
-          description: "Export your inventory data",
-          icon: "download-outline",
-          iconType: "ionicons",
-          action: exportData,
           showChevron: true,
         },
       ],
