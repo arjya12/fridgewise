@@ -391,6 +391,7 @@ function EnhancedCalendarScreenCore({
     <View style={[styles.container, { backgroundColor }, style]}>
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={handleRefresh} />
         }
@@ -475,6 +476,9 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 130,
   },
   calendarContainer: {
     marginBottom: 16,
