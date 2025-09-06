@@ -28,6 +28,7 @@ import {
   View,
 } from "react-native";
 
+import { useCalendar } from "@/contexts/CalendarContext";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -89,6 +90,9 @@ export default function AddItemScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const insets = useSafeAreaInsets();
   const quantityInputRef = useRef<TextInput>(null);
+
+  // Calendar context for real-time updates after save
+  const { refresh, invalidateCache } = useCalendar();
 
   // Add icon requires
   const fridgeIcon = require("../assets/images/icons/fridge_icon.png");
@@ -229,6 +233,11 @@ export default function AddItemScreen() {
 
       if (isEditing) {
         await foodItemsService.updateItem(params.id!, itemData);
+        // Immediately propagate changes to calendar/state
+        try {
+          invalidateCache();
+          await refresh();
+        } catch {}
         setShowSuccess(true);
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -241,6 +250,11 @@ export default function AddItemScreen() {
         });
       } else {
         await foodItemsService.addItem(itemData);
+        // Immediately propagate new item to calendar/state
+        try {
+          invalidateCache();
+          await refresh();
+        } catch {}
         setShowSuccess(true);
         Animated.timing(fadeAnim, {
           toValue: 0,

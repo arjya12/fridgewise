@@ -3,16 +3,19 @@ import React from "react";
 import BarcodeScanner from "../BarcodeScanner";
 
 // Mock the expo-camera module
-jest.mock("expo-camera", () => ({
-  CameraView: jest.fn().mockImplementation(({ children, onBarcodeScanned }) => {
-    // Simulate a mock camera view
-    return React.createElement("View", { testID: "camera-view" }, children);
-  }),
-  useCameraPermissions: jest.fn(() => [
-    { granted: true, status: "granted" },
-    jest.fn().mockResolvedValue({ granted: true }),
-  ]),
-}));
+jest.mock("expo-camera", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  return {
+    CameraView: jest.fn().mockImplementation(({ children }) => {
+      return React.createElement(View, { testID: "camera-view" }, children);
+    }),
+    useCameraPermissions: jest.fn(() => [
+      { granted: true, status: "granted" },
+      jest.fn().mockResolvedValue({ granted: true }),
+    ]),
+  };
+});
 
 // Mock expo-haptics
 jest.mock("expo-haptics", () => ({

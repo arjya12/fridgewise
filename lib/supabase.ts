@@ -69,3 +69,96 @@ export interface UserProfile {
   created_at: string;
   updated_at: string;
 }
+
+// Enhanced Analytics Types
+export interface WasteAnalytics {
+  totalWasted: number;
+  wasteValue: number;
+  wasteByCategory: Record<string, number>;
+  wasteTrends: WasteTrendData[];
+  mostWastedItems: ItemWasteData[];
+  wasteReductionProgress: number;
+}
+
+export interface ConsumptionAnalytics {
+  mostConsumedItems: ItemConsumptionData[];
+  shoppingPatterns: ShoppingPattern[];
+  budgetAnalysis: BudgetAnalysis;
+  nutritionalInsights: NutritionalData[];
+  cookingVsEatingOut: ConsumptionPattern;
+  mealPlanningEffectiveness: number;
+}
+
+export interface WasteTrendData {
+  date: string;
+  wasteCount: number;
+  wasteValue: number;
+}
+
+export interface ItemWasteData {
+  name: string;
+  count: number;
+  value: number;
+  category: string;
+}
+
+export interface ItemConsumptionData {
+  name: string;
+  count: number;
+  frequency: number;
+  category: string;
+}
+
+export interface ShoppingPattern {
+  category: string;
+  frequency: number;
+  averageQuantity: number;
+  seasonalTrend: number;
+}
+
+export interface BudgetAnalysis {
+  plannedBudget: number;
+  actualSpending: number;
+  variance: number;
+  categoryBreakdown: Record<string, number>;
+}
+
+export interface NutritionalData {
+  category: string;
+  consumptionScore: number;
+  recommendations: string[];
+}
+
+export interface ConsumptionPattern {
+  cookingFrequency: number;
+  eatingOutFrequency: number;
+  homeVsOutRatio: number;
+}
+
+// Achievement System Types
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  type: 'waste_reduction' | 'consumption' | 'streak' | 'milestone';
+  threshold: number;
+  progress: number;
+  unlocked: boolean;
+  unlockedAt?: string;
+}
+
+export interface UserAchievements {
+  userId: string;
+  achievements: Achievement[];
+  currentStreak: number;
+  bestStreak: number;
+  totalPoints: number;
+  level: number;
+}
+
+// Enhanced Food Item with cost data
+export interface FoodItemWithCost extends FoodItem {
+  cost?: number;
+  estimatedCost?: number;
+}

@@ -79,6 +79,7 @@ export default function CalendarScreen() {
         onItemPress={handleItemPress}
         onItemEdit={handleItemPress}
         onItemDelete={(item) => handleDeleteItem(item.id)}
+        onAddItem={() => router.push("/(tabs)/add")}
         enablePerformanceMonitoring={true}
       />
     </SafeAreaView>

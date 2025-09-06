@@ -154,6 +154,32 @@ export default function TabLayout() {
             ),
           }}
         />
+
+        {/* ANALYTICS & REPORTS - Accessible via More menu */}
+
+        {/* Enhanced Waste Report */}
+        <Tabs.Screen
+          name="waste-report"
+          options={{
+            title: "Waste Report",
+            href: null, // Hide from tab bar - accessible via More
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="bar-chart-outline" color={color} size={24} />
+            ),
+          }}
+        />
+
+        {/* Enhanced Consumption Report */}
+        <Tabs.Screen
+          name="consumption-report"
+          options={{
+            title: "Consumption Report",
+            href: null, // Hide from tab bar - accessible via More
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="pie-chart-outline" color={color} size={24} />
+            ),
+          }}
+        />
       </Tabs>
     </SafeAreaView>
   );

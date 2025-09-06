@@ -11,12 +11,12 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
 import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 // =============================================================================
@@ -68,19 +68,11 @@ export default function MoreScreen() {
   };
 
   const generateWasteReport = () => {
-    Alert.alert(
-      "Waste Report",
-      "Food waste report functionality would be implemented here. This would analyze your usage patterns and provide insights on reducing waste.",
-      [{ text: "OK" }]
-    );
+    router.push("/(tabs)/waste-report");
   };
 
   const generateConsumptionReport = () => {
-    Alert.alert(
-      "Consumption Report",
-      "Consumption analysis would show your most used items, consumption patterns, and optimization suggestions.",
-      [{ text: "OK" }]
-    );
+    router.push("/(tabs)/consumption-report");
   };
 
   const showHelpCenter = () => {

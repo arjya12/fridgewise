@@ -1,6 +1,16 @@
 // jest.setup.js
 import "@testing-library/jest-native/extend-expect";
 
+// Force deterministic timezone for all date logic
+process.env.TZ = "UTC";
+
+// Stabilize Date.now without affecting timers
+const __fixedNow = Date.parse("2024-01-10T12:00:00.000Z");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const __realDateNow: any = Date.now;
+// @ts-ignore
+Date.now = jest.fn(() => __fixedNow);
+
 // Mock ColorSchemeProvider and related hooks globally
 global.__mockColorSchemeContext = {
   colorScheme: {
@@ -123,3 +133,88 @@ jest.mock("react-native/Libraries/Utilities/Dimensions", () => ({
   addEventListener: jest.fn(),
   removeEventListener: jest.fn(),
 }));
+
+// Mock PixelRatio to avoid RN StyleSheet accessing native modules
+jest.mock("react-native/Libraries/Utilities/PixelRatio", () => {
+  const PixelRatio = {
+    get: jest.fn(() => 2),
+    getFontScale: jest.fn(() => 1),
+    roundToNearestPixel: jest.fn((v) => v),
+    getPixelSizeForLayoutSize: jest.fn((v) => v),
+  };
+  return { __esModule: true, default: PixelRatio, ...PixelRatio };
+});
+
+// Basic mock for expo-camera to prevent test-local out-of-scope factory errors
+jest.mock("expo-camera", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  return {
+    CameraView: ({ children }) =>
+      React.createElement(View, { testID: "camera-view" }, children),
+    useCameraPermissions: () => [
+      { granted: true, status: "granted" },
+      jest.fn(),
+    ],
+    Camera: { Type: { back: "back" } },
+  };
+});
+
+// Silence/neutralize TurboModules that are not present in Jest
+jest.mock("react-native/Libraries/TurboModule/TurboModuleRegistry", () => ({
+  get: jest.fn(() => ({})),
+  getEnforcing: jest.fn(() => ({})),
+}));
+
+// Mock NativeEventEmitter base to avoid warnings/errors
+jest.mock("react-native/Libraries/EventEmitter/NativeEventEmitter", () => {
+  const { EventEmitter } = require("events");
+  return EventEmitter;
+});
+
+// Provide iOS platform constants used by Platform.ios
+jest.mock(
+  "react-native/Libraries/Utilities/NativePlatformConstantsIOS",
+  () => ({
+    __esModule: true,
+    default: {
+      getConstants: () => ({
+        interfaceIdiom: "phone",
+        isTesting: true,
+        osVersion: "17.0",
+      }),
+    },
+  })
+);
+
+jest.mock("react-native/Libraries/ReactNative/I18nManager", () => ({
+  __esModule: true,
+  default: {
+    getConstants: () => ({
+      isRTL: false,
+      doLeftAndRightSwapInRTL: false,
+      allowRTL: false,
+      forceRTL: false,
+    }),
+  },
+}));
+
+jest.mock("react-native/Libraries/Settings/NativeSettingsManager", () => ({
+  __esModule: true,
+  default: {
+    getConstants: () => ({ settings: {} }),
+  },
+}));
+
+// Override Dimensions on the public react-native export
+jest.mock("react-native", () => {
+  const RN = jest.requireActual("react-native");
+  return {
+    ...RN,
+    Dimensions: {
+      get: jest.fn(() => ({ width: 375, height: 812 })),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    },
+  };
+});

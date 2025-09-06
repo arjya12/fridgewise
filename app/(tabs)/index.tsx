@@ -560,7 +560,7 @@ export default function InventoryScreen() {
                 />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search your inventory.."
+                  placeholder="Search your inventory..."
                   placeholderTextColor="#BBBBBB"
                   value={searchText}
                   onChangeText={setSearchText}
@@ -663,7 +663,7 @@ export default function InventoryScreen() {
                     ? "Fridge"
                     : ""
                 } Items Found`}
-                message={`You don&apos;t have any items in your ${
+                message={`You don't have any items on your ${
                   filter === "shelf"
                     ? "shelf"
                     : filter === "fridge"

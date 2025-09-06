@@ -1,954 +1,502 @@
-// services/enhancedNotificationService.ts
-import { analyzeMealPlanning } from "@/utils/mealPlanningUtils";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Notifications from "expo-notifications";
-import { FoodItemWithUrgency } from "./foodItems";
+// Enhanced Notification Service
+// Provides smart notifications based on analytics data and user behavior patterns
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WasteAnalytics, ConsumptionAnalytics } from '@/lib/supabase';
+import AchievementService from './achievementService';
+import AnalyticsService from './analyticsService';
 
-export interface NotificationPreferences {
-  enabled: boolean;
-  expiryAlerts: {
-    enabled: boolean;
-    criticalHours: number; // Hours before expiry for critical alerts
-    warningHours: number; // Hours before expiry for warning alerts
-    dailyReminder: boolean;
-    dailyReminderTime: string; // HH:MM format
-  };
-  mealSuggestions: {
-    enabled: boolean;
-    breakfast: boolean;
-    lunch: boolean;
-    dinner: boolean;
-    beforeMealMinutes: number; // Minutes before typical meal time
-  };
-  shoppingReminders: {
-    enabled: boolean;
-    lowStockThreshold: number;
-    weeklyReminder: boolean;
-    reminderDay: number; // 0 = Sunday, 1 = Monday, etc.
-  };
-  wasteReduction: {
-    enabled: boolean;
-    aggressiveMode: boolean; // More frequent notifications when waste is high
-  };
-  quietHours: {
-    enabled: boolean;
-    startTime: string; // HH:MM format
-    endTime: string; // HH:MM format
-  };
-}
+// =============================================================================
+// NOTIFICATION TYPES AND INTERFACES
+// =============================================================================
 
-export interface UserPattern {
+interface SmartNotification {
   id: string;
-  type: "meal_time" | "shopping_day" | "cooking_frequency" | "waste_level";
-  value: any;
-  confidence: number; // 0-1 scale
-  lastUpdated: string;
-  occurrences: number;
-}
-
-export interface NotificationContext {
-  currentTime: Date;
-  dayOfWeek: number;
-  isWeekend: boolean;
-  weatherCondition?: string;
-  userLocation?: string;
-  recentActivity?: string[];
-}
-
-export interface SmartNotification {
-  id: string;
-  type:
-    | "expiry_alert"
-    | "meal_suggestion"
-    | "shopping_reminder"
-    | "waste_warning"
-    | "achievement";
   title: string;
   body: string;
-  data: any;
-  scheduledTime?: Date;
-  priority: "low" | "normal" | "high" | "critical";
-  category: string;
-  actions?: NotificationAction[];
-  contextualRelevance: number; // 0-1 score
+  data?: any;
+  trigger: NotificationTriggerInput;
+  priority: 'high' | 'normal' | 'low';
+  category: 'achievement' | 'insight' | 'reminder' | 'alert';
 }
 
-export interface NotificationAction {
-  id: string;
-  title: string;
-  options?: {
-    foreground?: boolean;
-    destructive?: boolean;
-    authenticationRequired?: boolean;
-  };
+interface NotificationTriggerInput {
+  seconds?: number;
+  repeats?: boolean;
+  weekday?: number;
+  hour?: number;
+  minute?: number;
 }
 
-class EnhancedNotificationService {
-  private readonly STORAGE_KEYS = {
-    PREFERENCES: "notification_preferences",
-    USER_PATTERNS: "user_patterns",
-    NOTIFICATION_HISTORY: "notification_history",
-    INTERACTION_STATS: "notification_interaction_stats",
-  };
+interface NotificationPreferences {
+  achievementsEnabled: boolean;
+  insightsEnabled: boolean;
+  reminderTime: string; // HH:MM format
+  frequency: 'daily' | 'weekly' | 'monthly';
+  budgetAlerts: boolean;
+  wasteAlerts: boolean;
+  lastNotificationDate?: string;
+}
 
-  private readonly DEFAULT_PREFERENCES: NotificationPreferences = {
-    enabled: true,
-    expiryAlerts: {
-      enabled: true,
-      criticalHours: 24,
-      warningHours: 48,
-      dailyReminder: true,
-      dailyReminderTime: "09:00",
-    },
-    mealSuggestions: {
-      enabled: true,
-      breakfast: true,
-      lunch: true,
-      dinner: true,
-      beforeMealMinutes: 30,
-    },
-    shoppingReminders: {
-      enabled: true,
-      lowStockThreshold: 3,
-      weeklyReminder: true,
-      reminderDay: 0, // Sunday
-    },
-    wasteReduction: {
-      enabled: true,
-      aggressiveMode: false,
-    },
-    quietHours: {
-      enabled: true,
-      startTime: "22:00",
-      endTime: "07:00",
-    },
-  };
+// =============================================================================
+// ENHANCED NOTIFICATION SERVICE
+// =============================================================================
 
-  private readonly TYPICAL_MEAL_TIMES = {
-    breakfast: { hour: 8, minute: 0 },
-    lunch: { hour: 12, minute: 30 },
-    dinner: { hour: 18, minute: 30 },
-  };
+export class EnhancedNotificationService {
+  private static readonly PREFERENCES_KEY = 'notification_preferences';
+  private static readonly LAST_ANALYTICS_KEY = 'last_analytics_notification';
 
-  /**
-   * Initialize the notification service
-   */
-  async initialize(): Promise<void> {
-    // Request permissions
-    const { status: existingStatus } =
-      await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+  // ===========================================================================
+  // INITIALIZATION AND PERMISSIONS
+  // ===========================================================================
 
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== "granted") {
-      console.warn("Notification permissions not granted");
-      return;
-    }
-
-    // Set up notification categories
-    await this.setupNotificationCategories();
-
-    // Initialize user patterns if first time
-    const patterns = await this.getUserPatterns();
-    if (patterns.length === 0) {
-      await this.initializeDefaultPatterns();
-    }
-  }
-
-  /**
-   * Set up notification categories with actions
-   */
-  private async setupNotificationCategories(): Promise<void> {
-    await Notifications.setNotificationCategoryAsync("expiry_alert", [
-      {
-        identifier: "mark_used",
-        buttonTitle: "Mark as Used",
-        options: { foreground: true },
-      },
-      {
-        identifier: "extend_expiry",
-        buttonTitle: "Extend Expiry",
-        options: { foreground: true },
-      },
-      {
-        identifier: "snooze",
-        buttonTitle: "Remind Later",
-        options: { foreground: false },
-      },
-    ]);
-
-    await Notifications.setNotificationCategoryAsync("meal_suggestion", [
-      {
-        identifier: "view_recipe",
-        buttonTitle: "View Recipe",
-        options: { foreground: true },
-      },
-      {
-        identifier: "mark_ingredients_used",
-        buttonTitle: "Use Ingredients",
-        options: { foreground: true },
-      },
-    ]);
-
-    await Notifications.setNotificationCategoryAsync("shopping_reminder", [
-      {
-        identifier: "add_to_list",
-        buttonTitle: "Add to List",
-        options: { foreground: true },
-      },
-      {
-        identifier: "dismiss",
-        buttonTitle: "Not Now",
-        options: { foreground: false },
-      },
-    ]);
-  }
-
-  /**
-   * Initialize default user patterns
-   */
-  private async initializeDefaultPatterns(): Promise<void> {
-    const defaultPatterns: UserPattern[] = [
-      {
-        id: "breakfast_time",
-        type: "meal_time",
-        value: this.TYPICAL_MEAL_TIMES.breakfast,
-        confidence: 0.5,
-        lastUpdated: new Date().toISOString(),
-        occurrences: 1,
-      },
-      {
-        id: "lunch_time",
-        type: "meal_time",
-        value: this.TYPICAL_MEAL_TIMES.lunch,
-        confidence: 0.5,
-        lastUpdated: new Date().toISOString(),
-        occurrences: 1,
-      },
-      {
-        id: "dinner_time",
-        type: "meal_time",
-        value: this.TYPICAL_MEAL_TIMES.dinner,
-        confidence: 0.5,
-        lastUpdated: new Date().toISOString(),
-        occurrences: 1,
-      },
-      {
-        id: "cooking_frequency",
-        type: "cooking_frequency",
-        value: "moderate", // low, moderate, high
-        confidence: 0.3,
-        lastUpdated: new Date().toISOString(),
-        occurrences: 1,
-      },
-      {
-        id: "waste_level",
-        type: "waste_level",
-        value: "low", // low, moderate, high
-        confidence: 0.3,
-        lastUpdated: new Date().toISOString(),
-        occurrences: 1,
-      },
-    ];
-
-    await AsyncStorage.setItem(
-      this.STORAGE_KEYS.USER_PATTERNS,
-      JSON.stringify(defaultPatterns)
-    );
-  }
-
-  /**
-   * Get user notification preferences
-   */
-  async getPreferences(): Promise<NotificationPreferences> {
+  static async initialize(): Promise<boolean> {
     try {
-      const stored = await AsyncStorage.getItem(this.STORAGE_KEYS.PREFERENCES);
+      // Configure notification behavior
+      await Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+
+      // Request permissions
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') {
+        const { status: newStatus } = await Notifications.requestPermissionsAsync();
+        return newStatus === 'granted';
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error initializing notifications:', error);
+      return false;
+    }
+  }
+
+  // ===========================================================================
+  // PREFERENCES MANAGEMENT
+  // ===========================================================================
+
+  static async getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+    try {
+      const stored = await AsyncStorage.getItem(`${this.PREFERENCES_KEY}_${userId}`);
+      
       if (stored) {
-        return { ...this.DEFAULT_PREFERENCES, ...JSON.parse(stored) };
+        return JSON.parse(stored);
       }
+
+      // Default preferences
+      const defaultPreferences: NotificationPreferences = {
+        achievementsEnabled: true,
+        insightsEnabled: true,
+        reminderTime: '09:00',
+        frequency: 'weekly',
+        budgetAlerts: true,
+        wasteAlerts: true
+      };
+
+      await this.saveNotificationPreferences(userId, defaultPreferences);
+      return defaultPreferences;
     } catch (error) {
-      console.error("Error loading notification preferences:", error);
+      console.error('Error getting notification preferences:', error);
+      return {
+        achievementsEnabled: false,
+        insightsEnabled: false,
+        reminderTime: '09:00',
+        frequency: 'weekly',
+        budgetAlerts: false,
+        wasteAlerts: false
+      };
     }
-    return this.DEFAULT_PREFERENCES;
   }
 
-  /**
-   * Update notification preferences
-   */
-  async updatePreferences(
-    preferences: Partial<NotificationPreferences>
+  static async saveNotificationPreferences(
+    userId: string, 
+    preferences: NotificationPreferences
   ): Promise<void> {
     try {
-      const current = await this.getPreferences();
-      const updated = { ...current, ...preferences };
       await AsyncStorage.setItem(
-        this.STORAGE_KEYS.PREFERENCES,
-        JSON.stringify(updated)
+        `${this.PREFERENCES_KEY}_${userId}`,
+        JSON.stringify(preferences)
       );
     } catch (error) {
-      console.error("Error saving notification preferences:", error);
+      console.error('Error saving notification preferences:', error);
     }
   }
 
-  /**
-   * Get user patterns
-   */
-  async getUserPatterns(): Promise<UserPattern[]> {
-    try {
-      const stored = await AsyncStorage.getItem(
-        this.STORAGE_KEYS.USER_PATTERNS
-      );
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      console.error("Error loading user patterns:", error);
-      return [];
-    }
-  }
+  // ===========================================================================
+  // SMART NOTIFICATION GENERATION
+  // ===========================================================================
 
-  /**
-   * Update user pattern based on behavior
-   */
-  async updateUserPattern(
-    patternId: string,
-    newValue: any,
-    confidence?: number
+  static async scheduleAnalyticsNotifications(
+    userId: string,
+    wasteAnalytics?: WasteAnalytics,
+    consumptionAnalytics?: ConsumptionAnalytics
   ): Promise<void> {
     try {
-      const patterns = await this.getUserPatterns();
-      const existingIndex = patterns.findIndex((p) => p.id === patternId);
+      const preferences = await this.getNotificationPreferences(userId);
+      
+      if (!preferences.insightsEnabled) return;
 
-      if (existingIndex >= 0) {
-        const existing = patterns[existingIndex];
-        patterns[existingIndex] = {
-          ...existing,
-          value: newValue,
-          confidence: confidence ?? Math.min(existing.confidence + 0.1, 1.0),
-          lastUpdated: new Date().toISOString(),
-          occurrences: existing.occurrences + 1,
-        };
-      } else {
-        patterns.push({
-          id: patternId,
-          type: patternId.includes("time") ? "meal_time" : "cooking_frequency",
-          value: newValue,
-          confidence: confidence ?? 0.6,
-          lastUpdated: new Date().toISOString(),
-          occurrences: 1,
-        });
+      // Check if we should send analytics notifications (based on frequency)
+      const shouldSend = await this.shouldSendAnalyticsNotification(userId, preferences);
+      if (!shouldSend) return;
+
+      const notifications: SmartNotification[] = [];
+
+      // Generate waste-based notifications
+      if (wasteAnalytics && preferences.wasteAlerts) {
+        notifications.push(...this.generateWasteNotifications(wasteAnalytics));
       }
 
-      await AsyncStorage.setItem(
-        this.STORAGE_KEYS.USER_PATTERNS,
-        JSON.stringify(patterns)
-      );
+      // Generate consumption-based notifications
+      if (consumptionAnalytics && preferences.budgetAlerts) {
+        notifications.push(...this.generateConsumptionNotifications(consumptionAnalytics));
+      }
+
+      // Schedule the notifications
+      for (const notification of notifications) {
+        await this.scheduleNotification(notification);
+      }
+
+      // Update last notification date
+      await this.updateLastAnalyticsNotification(userId);
+
     } catch (error) {
-      console.error("Error updating user pattern:", error);
+      console.error('Error scheduling analytics notifications:', error);
     }
   }
 
-  /**
-   * Learn from user behavior (when they cook, shop, etc.)
-   */
-  async learnFromBehavior(
-    action: string,
-    context: NotificationContext
+  static async scheduleAchievementNotifications(
+    userId: string,
+    newAchievements: any[]
   ): Promise<void> {
-    const { currentTime, dayOfWeek } = context;
-    const hour = currentTime.getHours();
-    const minute = currentTime.getMinutes();
+    try {
+      const preferences = await this.getNotificationPreferences(userId);
+      
+      if (!preferences.achievementsEnabled || newAchievements.length === 0) return;
 
-    switch (action) {
-      case "cook_breakfast":
-        await this.updateUserPattern("breakfast_time", { hour, minute });
-        break;
-      case "cook_lunch":
-        await this.updateUserPattern("lunch_time", { hour, minute });
-        break;
-      case "cook_dinner":
-        await this.updateUserPattern("dinner_time", { hour, minute });
-        break;
-      case "shop_groceries":
-        await this.updateUserPattern("shopping_day", dayOfWeek);
-        break;
-      case "use_item":
-        await this.updateUserPattern("cooking_frequency", "high");
-        break;
-      case "waste_item":
-        await this.updateUserPattern("waste_level", "high");
-        break;
-    }
-  }
-
-  /**
-   * Generate context-aware notifications
-   */
-  async generateSmartNotifications(
-    items: FoodItemWithUrgency[],
-    context: NotificationContext
-  ): Promise<SmartNotification[]> {
-    const preferences = await this.getPreferences();
-    const patterns = await this.getUserPatterns();
-    const notifications: SmartNotification[] = [];
-
-    if (
-      !preferences.enabled ||
-      this.isQuietHours(context.currentTime, preferences)
-    ) {
-      return notifications;
-    }
-
-    // Expiry alerts
-    if (preferences.expiryAlerts.enabled) {
-      notifications.push(
-        ...(await this.generateExpiryAlerts(items, context, preferences))
-      );
-    }
-
-    // Meal suggestions
-    if (preferences.mealSuggestions.enabled) {
-      notifications.push(
-        ...(await this.generateMealSuggestions(
-          items,
-          context,
-          preferences,
-          patterns
-        ))
-      );
-    }
-
-    // Shopping reminders
-    if (preferences.shoppingReminders.enabled) {
-      notifications.push(
-        ...(await this.generateShoppingReminders(items, context, preferences))
-      );
-    }
-
-    // Waste reduction alerts
-    if (preferences.wasteReduction.enabled) {
-      notifications.push(
-        ...(await this.generateWasteReductionAlerts(
-          items,
-          context,
-          preferences
-        ))
-      );
-    }
-
-    // Sort by priority and contextual relevance
-    return notifications.sort((a, b) => {
-      const priorityOrder = { critical: 4, high: 3, normal: 2, low: 1 };
-      const priorityDiff =
-        priorityOrder[b.priority] - priorityOrder[a.priority];
-      if (priorityDiff !== 0) return priorityDiff;
-      return b.contextualRelevance - a.contextualRelevance;
-    });
-  }
-
-  /**
-   * Generate expiry alerts
-   */
-  private async generateExpiryAlerts(
-    items: FoodItemWithUrgency[],
-    context: NotificationContext,
-    preferences: NotificationPreferences
-  ): Promise<SmartNotification[]> {
-    const notifications: SmartNotification[] = [];
-    const now = context.currentTime;
-
-    const criticalItems = items.filter(
-      (item) => item.urgency.level === "critical"
-    );
-    const warningItems = items.filter(
-      (item) => item.urgency.level === "warning"
-    );
-
-    // Critical items (expired or expiring today)
-    if (criticalItems.length > 0) {
-      notifications.push({
-        id: `critical_expiry_${now.getTime()}`,
-        type: "expiry_alert",
-        title: `🚨 ${criticalItems.length} item${
-          criticalItems.length > 1 ? "s" : ""
-        } need immediate attention!`,
-        body: `${criticalItems
-          .slice(0, 3)
-          .map((item) => item.name)
-          .join(", ")}${
-          criticalItems.length > 3
-            ? ` and ${criticalItems.length - 3} more`
-            : ""
-        } ${
-          criticalItems.length > 1 ? "are" : "is"
-        } expired or expiring today.`,
-        data: { itemIds: criticalItems.map((item) => item.id) },
-        priority: "critical",
-        category: "expiry_alert",
-        contextualRelevance: 0.95,
-        actions: [
-          { id: "mark_used", title: "Mark as Used" },
-          { id: "extend_expiry", title: "Extend Expiry" },
-        ],
-      });
-    }
-
-    // Warning items (expiring in 1-2 days)
-    if (warningItems.length > 0 && context.currentTime.getHours() >= 9) {
-      notifications.push({
-        id: `warning_expiry_${now.getTime()}`,
-        type: "expiry_alert",
-        title: `⚠️ ${warningItems.length} item${
-          warningItems.length > 1 ? "s" : ""
-        } expiring soon`,
-        body: `${warningItems
-          .slice(0, 3)
-          .map((item) => item.name)
-          .join(", ")} ${
-          warningItems.length > 1 ? "are" : "is"
-        } expiring within 2 days. Consider using ${
-          warningItems.length > 1 ? "them" : "it"
-        } soon!`,
-        data: { itemIds: warningItems.map((item) => item.id) },
-        priority: "high",
-        category: "expiry_alert",
-        contextualRelevance: 0.8,
-        actions: [
-          { id: "view_recipe", title: "View Recipe Ideas" },
-          { id: "snooze", title: "Remind Later" },
-        ],
-      });
-    }
-
-    return notifications;
-  }
-
-  /**
-   * Generate meal suggestions
-   */
-  private async generateMealSuggestions(
-    items: FoodItemWithUrgency[],
-    context: NotificationContext,
-    preferences: NotificationPreferences,
-    patterns: UserPattern[]
-  ): Promise<SmartNotification[]> {
-    const notifications: SmartNotification[] = [];
-    const analysis = analyzeMealPlanning(items);
-
-    if (analysis.recommendations.priority.length === 0) {
-      return notifications;
-    }
-
-    const currentHour = context.currentTime.getHours();
-    const currentMinute = context.currentTime.getMinutes();
-
-    // Determine if it's near a meal time
-    const mealTimes = {
-      breakfast:
-        this.getMealTimeFromPatterns(patterns, "breakfast_time") ||
-        this.TYPICAL_MEAL_TIMES.breakfast,
-      lunch:
-        this.getMealTimeFromPatterns(patterns, "lunch_time") ||
-        this.TYPICAL_MEAL_TIMES.lunch,
-      dinner:
-        this.getMealTimeFromPatterns(patterns, "dinner_time") ||
-        this.TYPICAL_MEAL_TIMES.dinner,
-    };
-
-    const beforeMealMinutes = preferences.mealSuggestions.beforeMealMinutes;
-
-    for (const [mealType, mealTime] of Object.entries(mealTimes)) {
-      if (
-        !preferences.mealSuggestions[
-          mealType as keyof typeof preferences.mealSuggestions
-        ]
-      ) {
-        continue;
-      }
-
-      const targetTime = new Date(context.currentTime);
-      targetTime.setHours(mealTime.hour, mealTime.minute, 0, 0);
-
-      const timeDiff = targetTime.getTime() - context.currentTime.getTime();
-      const minutesUntilMeal = timeDiff / (1000 * 60);
-
-      // Suggest meals 30 minutes before typical meal time
-      if (minutesUntilMeal > 0 && minutesUntilMeal <= beforeMealMinutes) {
-        const relevantSuggestions = analysis.recommendations.priority.filter(
-          (suggestion) =>
-            suggestion.type === mealType ||
-            (mealType === "lunch" && suggestion.type === "snack") ||
-            (mealType === "dinner" && suggestion.estimatedPrepTime <= 30)
-        );
-
-        if (relevantSuggestions.length > 0) {
-          const topSuggestion = relevantSuggestions[0];
-
-          notifications.push({
-            id: `meal_suggestion_${mealType}_${context.currentTime.getTime()}`,
-            type: "meal_suggestion",
-            title: `🍳 Perfect time for ${topSuggestion.title}!`,
-            body: `Use ${topSuggestion.ingredients.length} ingredients expiring soon. Prep time: ${topSuggestion.estimatedPrepTime} minutes.`,
-            data: {
-              recipeId: topSuggestion.id,
-              mealType,
-              ingredients: topSuggestion.ingredients,
-            },
-            priority: topSuggestion.urgencyScore >= 75 ? "high" : "normal",
-            category: "meal_suggestion",
-            contextualRelevance:
-              0.85 + (topSuggestion.urgencyScore / 100) * 0.15,
-            actions: [
-              { id: "view_recipe", title: "View Recipe" },
-              { id: "mark_ingredients_used", title: "Use Ingredients" },
-            ],
-          });
-        }
-      }
-    }
-
-    return notifications;
-  }
-
-  /**
-   * Generate shopping reminders
-   */
-  private async generateShoppingReminders(
-    items: FoodItemWithUrgency[],
-    context: NotificationContext,
-    preferences: NotificationPreferences
-  ): Promise<SmartNotification[]> {
-    const notifications: SmartNotification[] = [];
-
-    const lowStockCount = items.filter(
-      (item) => item.quantity <= preferences.shoppingReminders.lowStockThreshold
-    ).length;
-
-    // Weekly shopping reminder
-    if (
-      preferences.shoppingReminders.weeklyReminder &&
-      context.dayOfWeek === preferences.shoppingReminders.reminderDay &&
-      context.currentTime.getHours() === 10
-    ) {
-      notifications.push({
-        id: `weekly_shopping_${context.currentTime.getTime()}`,
-        type: "shopping_reminder",
-        title: "🛒 Time for your weekly grocery run!",
-        body:
-          lowStockCount > 0
-            ? `You have ${lowStockCount} items running low. Perfect time to restock!`
-            : "Consider restocking your favorite items.",
-        data: { lowStockCount },
-        priority: lowStockCount > 5 ? "high" : "normal",
-        category: "shopping_reminder",
-        contextualRelevance: 0.7,
-        actions: [
-          { id: "add_to_list", title: "Add to List" },
-          { id: "dismiss", title: "Not Now" },
-        ],
-      });
-    }
-
-    // Low stock alert
-    if (lowStockCount >= preferences.shoppingReminders.lowStockThreshold * 2) {
-      notifications.push({
-        id: `low_stock_${context.currentTime.getTime()}`,
-        type: "shopping_reminder",
-        title: `📦 ${lowStockCount} items running low`,
-        body: "Several items in your inventory are running low. Consider adding them to your shopping list.",
-        data: { lowStockCount },
-        priority: "normal",
-        category: "shopping_reminder",
-        contextualRelevance: 0.6,
-        actions: [{ id: "add_to_list", title: "Add to List" }],
-      });
-    }
-
-    return notifications;
-  }
-
-  /**
-   * Generate waste reduction alerts
-   */
-  private async generateWasteReductionAlerts(
-    items: FoodItemWithUrgency[],
-    context: NotificationContext,
-    preferences: NotificationPreferences
-  ): Promise<SmartNotification[]> {
-    const notifications: SmartNotification[] = [];
-
-    const analysis = analyzeMealPlanning(items);
-    const wasteRisk = analysis.unusedCritical.length;
-
-    if (
-      wasteRisk > 0 &&
-      (preferences.wasteReduction.aggressiveMode ||
-        context.currentTime.getHours() === 18)
-    ) {
-      notifications.push({
-        id: `waste_warning_${context.currentTime.getTime()}`,
-        type: "waste_warning",
-        title: `♻️ ${wasteRisk} item${
-          wasteRisk > 1 ? "s" : ""
-        } at risk of being wasted`,
-        body: `${analysis.unusedCritical
-          .slice(0, 2)
-          .map((item) => item.name)
-          .join(", ")} ${wasteRisk > 2 ? `and ${wasteRisk - 2} more` : ""} ${
-          wasteRisk > 1 ? "are" : "is"
-        } expiring but not used in any meal plans.`,
-        data: { unusedItems: analysis.unusedCritical },
-        priority: "high",
-        category: "waste_warning",
-        contextualRelevance: 0.9,
-        actions: [
-          { id: "find_recipes", title: "Find Recipes" },
-          { id: "mark_used", title: "Mark as Used" },
-        ],
-      });
-    }
-
-    return notifications;
-  }
-
-  /**
-   * Schedule notifications
-   */
-  async scheduleNotifications(
-    notifications: SmartNotification[]
-  ): Promise<void> {
-    // Cancel existing scheduled notifications
-    await Notifications.cancelAllScheduledNotificationsAsync();
-
-    for (const notification of notifications) {
-      try {
-        const scheduledTime =
-          notification.scheduledTime || new Date(Date.now() + 5000); // Default 5 seconds
-
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: notification.title,
-            body: notification.body,
-            data: notification.data,
-            categoryIdentifier: notification.category,
+      for (const achievement of newAchievements) {
+        const notification: SmartNotification = {
+          id: `achievement_${achievement.id}_${Date.now()}`,
+          title: '🏆 Achievement Unlocked!',
+          body: `Congratulations! You've earned "${achievement.title}"`,
+          data: { 
+            type: 'achievement',
+            achievementId: achievement.id,
+            screen: 'achievements'
           },
-          trigger: scheduledTime,
-        });
-      } catch (error) {
-        console.error("Error scheduling notification:", error);
+          trigger: { seconds: 1 },
+          priority: 'high',
+          category: 'achievement'
+        };
+
+        await this.scheduleNotification(notification);
       }
+    } catch (error) {
+      console.error('Error scheduling achievement notifications:', error);
     }
   }
 
-  /**
-   * Send immediate notification
-   */
-  async sendImmediateNotification(
-    notification: SmartNotification
-  ): Promise<void> {
+  // ===========================================================================
+  // NOTIFICATION GENERATORS
+  // ===========================================================================
+
+  private static generateWasteNotifications(analytics: WasteAnalytics): SmartNotification[] {
+    const notifications: SmartNotification[] = [];
+
+    // High waste alert
+    if (analytics.wasteValue > 30) {
+      notifications.push({
+        id: `waste_alert_${Date.now()}`,
+        title: '💸 High Food Waste Alert',
+        body: `You've wasted $${analytics.wasteValue.toFixed(0)} worth of food recently. Check your waste report for tips to improve!`,
+        data: { 
+          type: 'waste_alert',
+          screen: 'waste-report'
+        },
+        trigger: { seconds: 10 },
+        priority: 'high',
+        category: 'alert'
+      });
+    }
+
+    // Waste reduction celebration
+    if (analytics.wasteReductionProgress > 20) {
+      notifications.push({
+        id: `waste_improvement_${Date.now()}`,
+        title: '🌱 Great Progress!',
+        body: `You've reduced food waste by ${analytics.wasteReductionProgress.toFixed(0)}%! Keep up the excellent work.`,
+        data: { 
+          type: 'celebration',
+          screen: 'waste-report'
+        },
+        trigger: { seconds: 5 },
+        priority: 'normal',
+        category: 'insight'
+      });
+    }
+
+    // Category-specific waste tip
+    const topWasteCategory = Object.entries(analytics.wasteByCategory)
+      .sort(([,a], [,b]) => b - a)[0];
+    
+    if (topWasteCategory && topWasteCategory[1] > 3) {
+      notifications.push({
+        id: `category_tip_${Date.now()}`,
+        title: `🥬 ${topWasteCategory[0]} Waste Tip`,
+        body: `You're wasting a lot of ${topWasteCategory[0].toLowerCase()}. Try meal planning or buying smaller quantities.`,
+        data: { 
+          type: 'tip',
+          category: topWasteCategory[0],
+          screen: 'waste-report'
+        },
+        trigger: { seconds: 30 },
+        priority: 'normal',
+        category: 'insight'
+      });
+    }
+
+    return notifications;
+  }
+
+  private static generateConsumptionNotifications(analytics: ConsumptionAnalytics): SmartNotification[] {
+    const notifications: SmartNotification[] = [];
+
+    // Budget alert
+    if (analytics.budgetAnalysis.variance > 20) {
+      notifications.push({
+        id: `budget_alert_${Date.now()}`,
+        title: '💳 Budget Alert',
+        body: `You're $${analytics.budgetAnalysis.variance.toFixed(0)} over budget this period. Review your consumption report for savings tips.`,
+        data: { 
+          type: 'budget_alert',
+          screen: 'consumption-report'
+        },
+        trigger: { seconds: 15 },
+        priority: 'high',
+        category: 'alert'
+      });
+    }
+
+    // Budget success
+    if (analytics.budgetAnalysis.variance < -10) {
+      notifications.push({
+        id: `budget_success_${Date.now()}`,
+        title: '💰 Budget Champion!',
+        body: `You're $${Math.abs(analytics.budgetAnalysis.variance).toFixed(0)} under budget! Excellent financial management.`,
+        data: { 
+          type: 'celebration',
+          screen: 'consumption-report'
+        },
+        trigger: { seconds: 20 },
+        priority: 'normal',
+        category: 'insight'
+      });
+    }
+
+    // Healthy eating encouragement
+    const healthyCategories = analytics.nutritionalInsights
+      .filter(item => ['fruits', 'vegetables'].includes(item.category.toLowerCase()));
+    
+    if (healthyCategories.length > 0) {
+      const avgHealthyScore = healthyCategories.reduce((sum, item) => sum + item.consumptionScore, 0) / healthyCategories.length;
+      
+      if (avgHealthyScore > 80) {
+        notifications.push({
+          id: `healthy_eating_${Date.now()}`,
+          title: '🥗 Healthy Eating Star!',
+          body: 'You\'re doing amazing with fruits and vegetables! Keep prioritizing nutritious foods.',
+          data: { 
+            type: 'celebration',
+            screen: 'consumption-report'
+          },
+          trigger: { seconds: 25 },
+          priority: 'low',
+          category: 'insight'
+        });
+      }
+    }
+
+    // Meal planning tip
+    if (analytics.mealPlanningEffectiveness < 60) {
+      notifications.push({
+        id: `meal_planning_tip_${Date.now()}`,
+        title: '📅 Meal Planning Tip',
+        body: 'Your meal planning could be more effective. Try planning meals around items that expire soon!',
+        data: { 
+          type: 'tip',
+          screen: 'consumption-report'
+        },
+        trigger: { seconds: 35 },
+        priority: 'normal',
+        category: 'insight'
+      });
+    }
+
+    return notifications;
+  }
+
+  // ===========================================================================
+  // WEEKLY SUMMARY NOTIFICATIONS
+  // ===========================================================================
+
+  static async scheduleWeeklySummary(userId: string): Promise<void> {
+    try {
+      const preferences = await this.getNotificationPreferences(userId);
+      
+      if (!preferences.insightsEnabled || preferences.frequency !== 'weekly') return;
+
+      // Parse reminder time
+      const [hour, minute] = preferences.reminderTime.split(':').map(Number);
+
+      // Schedule for next Sunday at the specified time
+      const now = new Date();
+      const nextSunday = new Date();
+      const daysUntilSunday = (7 - now.getDay()) % 7;
+      nextSunday.setDate(now.getDate() + daysUntilSunday);
+      nextSunday.setHours(hour, minute, 0, 0);
+
+      const notification: SmartNotification = {
+        id: `weekly_summary_${userId}`,
+        title: '📊 Your Weekly Food Report',
+        body: 'Check out your latest analytics and see how you\'re doing with food management this week!',
+        data: { 
+          type: 'weekly_summary',
+          screen: 'waste-report'
+        },
+        trigger: {
+          weekday: 1, // Sunday
+          hour,
+          minute,
+          repeats: true
+        },
+        priority: 'normal',
+        category: 'reminder'
+      };
+
+      await this.scheduleNotification(notification);
+    } catch (error) {
+      console.error('Error scheduling weekly summary:', error);
+    }
+  }
+
+  // ===========================================================================
+  // HELPER METHODS
+  // ===========================================================================
+
+  private static async scheduleNotification(notification: SmartNotification): Promise<void> {
     try {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: notification.title,
           body: notification.body,
           data: notification.data,
-          categoryIdentifier: notification.category,
+          sound: notification.priority === 'high' ? 'default' : undefined,
         },
-        trigger: null, // Send immediately
+        trigger: notification.trigger,
+        identifier: notification.id,
       });
     } catch (error) {
-      console.error("Error sending immediate notification:", error);
+      console.error('Error scheduling notification:', error);
     }
   }
 
-  /**
-   * Handle notification response
-   */
-  async handleNotificationResponse(
-    actionIdentifier: string,
-    notification: Notifications.Notification
-  ): Promise<void> {
-    const data = notification.request.content.data;
-
-    // Learn from user interaction
-    await this.recordInteraction(actionIdentifier, data);
-
-    // Handle specific actions
-    switch (actionIdentifier) {
-      case "mark_used":
-        // Handle marking items as used
-        if (data.itemIds) {
-          console.log("Marking items as used:", data.itemIds);
-        }
-        break;
-      case "extend_expiry":
-        // Handle extending expiry
-        if (data.itemIds) {
-          console.log("Extending expiry for items:", data.itemIds);
-        }
-        break;
-      case "view_recipe":
-        // Handle viewing recipe
-        if (data.recipeId) {
-          console.log("Viewing recipe:", data.recipeId);
-        }
-        break;
-      case "snooze":
-        // Reschedule for later
-        await this.snoozeNotification(notification, 2 * 60 * 60 * 1000); // 2 hours
-        break;
-    }
-  }
-
-  /**
-   * Record user interaction for learning
-   */
-  private async recordInteraction(action: string, data: any): Promise<void> {
-    try {
-      const stored = await AsyncStorage.getItem(
-        this.STORAGE_KEYS.INTERACTION_STATS
-      );
-      const stats = stored ? JSON.parse(stored) : {};
-
-      const key = `${action}_${new Date().toISOString().split("T")[0]}`;
-      stats[key] = (stats[key] || 0) + 1;
-
-      await AsyncStorage.setItem(
-        this.STORAGE_KEYS.INTERACTION_STATS,
-        JSON.stringify(stats)
-      );
-    } catch (error) {
-      console.error("Error recording interaction:", error);
-    }
-  }
-
-  /**
-   * Snooze notification
-   */
-  private async snoozeNotification(
-    notification: Notifications.Notification,
-    delayMs: number
-  ): Promise<void> {
-    const scheduleTime = new Date(Date.now() + delayMs);
-
-    await Notifications.scheduleNotificationAsync({
-      content: notification.request.content,
-      trigger: scheduleTime,
-    });
-  }
-
-  /**
-   * Check if current time is in quiet hours
-   */
-  private isQuietHours(
-    currentTime: Date,
+  private static async shouldSendAnalyticsNotification(
+    userId: string, 
     preferences: NotificationPreferences
-  ): boolean {
-    if (!preferences.quietHours.enabled) return false;
+  ): Promise<boolean> {
+    try {
+      const lastNotificationDate = await AsyncStorage.getItem(`${this.LAST_ANALYTICS_KEY}_${userId}`);
+      
+      if (!lastNotificationDate) return true;
 
-    const currentHour = currentTime.getHours();
-    const currentMinute = currentTime.getMinutes();
-    const currentTotalMinutes = currentHour * 60 + currentMinute;
+      const lastDate = new Date(lastNotificationDate);
+      const now = new Date();
+      const daysSinceLastNotification = (now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
 
-    const [startHour, startMinute] = preferences.quietHours.startTime
-      .split(":")
-      .map(Number);
-    const [endHour, endMinute] = preferences.quietHours.endTime
-      .split(":")
-      .map(Number);
-
-    const startTotalMinutes = startHour * 60 + startMinute;
-    const endTotalMinutes = endHour * 60 + endMinute;
-
-    if (startTotalMinutes <= endTotalMinutes) {
-      // Same day quiet hours
-      return (
-        currentTotalMinutes >= startTotalMinutes &&
-        currentTotalMinutes <= endTotalMinutes
-      );
-    } else {
-      // Overnight quiet hours
-      return (
-        currentTotalMinutes >= startTotalMinutes ||
-        currentTotalMinutes <= endTotalMinutes
-      );
+      switch (preferences.frequency) {
+        case 'daily':
+          return daysSinceLastNotification >= 1;
+        case 'weekly':
+          return daysSinceLastNotification >= 7;
+        case 'monthly':
+          return daysSinceLastNotification >= 30;
+        default:
+          return false;
+      }
+    } catch (error) {
+      console.error('Error checking notification frequency:', error);
+      return false;
     }
   }
 
-  /**
-   * Get meal time from user patterns
-   */
-  private getMealTimeFromPatterns(
-    patterns: UserPattern[],
-    patternId: string
-  ): { hour: number; minute: number } | null {
-    const pattern = patterns.find(
-      (p) => p.id === patternId && p.confidence > 0.6
-    );
-    return pattern ? pattern.value : null;
+  private static async updateLastAnalyticsNotification(userId: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(
+        `${this.LAST_ANALYTICS_KEY}_${userId}`,
+        new Date().toISOString()
+      );
+    } catch (error) {
+      console.error('Error updating last notification date:', error);
+    }
   }
 
-  /**
-   * Get notification statistics
-   */
-  async getNotificationStats(): Promise<{
-    totalSent: number;
-    interactionRate: number;
-    topActions: Array<{ action: string; count: number }>;
-    patternConfidence: number;
-  }> {
+  // ===========================================================================
+  // NOTIFICATION MANAGEMENT
+  // ===========================================================================
+
+  static async cancelAllNotifications(): Promise<void> {
     try {
-      const interactions = await AsyncStorage.getItem(
-        this.STORAGE_KEYS.INTERACTION_STATS
-      );
-      const patterns = await this.getUserPatterns();
-
-      const stats = interactions ? JSON.parse(interactions) : {};
-      const totalInteractions = Object.values(stats).reduce(
-        (sum: number, count: number) => sum + count,
-        0
-      );
-
-      const topActions = Object.entries(stats)
-        .map(([key, count]) => ({
-          action: key.split("_")[0],
-          count: count as number,
-        }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
-
-      const avgConfidence =
-        patterns.length > 0
-          ? patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length
-          : 0;
-
-      return {
-        totalSent: totalInteractions,
-        interactionRate: totalInteractions > 0 ? totalInteractions / 100 : 0, // Placeholder calculation
-        topActions,
-        patternConfidence: avgConfidence,
-      };
+      await Notifications.cancelAllScheduledNotificationsAsync();
     } catch (error) {
-      console.error("Error getting notification stats:", error);
-      return {
-        totalSent: 0,
-        interactionRate: 0,
-        topActions: [],
-        patternConfidence: 0,
-      };
+      console.error('Error canceling notifications:', error);
+    }
+  }
+
+  static async cancelNotificationsByCategory(category: string): Promise<void> {
+    try {
+      const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+      
+      for (const notification of scheduledNotifications) {
+        if (notification.content.data?.category === category) {
+          await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+        }
+      }
+    } catch (error) {
+      console.error('Error canceling notifications by category:', error);
+    }
+  }
+
+  // ===========================================================================
+  // INTEGRATION METHODS
+  // ===========================================================================
+
+  static async handleAnalyticsUpdate(
+    userId: string,
+    wasteAnalytics?: WasteAnalytics,
+    consumptionAnalytics?: ConsumptionAnalytics
+  ): Promise<void> {
+    // Schedule smart notifications based on analytics
+    await this.scheduleAnalyticsNotifications(userId, wasteAnalytics, consumptionAnalytics);
+
+    // Check for new achievements and notify
+    if (wasteAnalytics && consumptionAnalytics) {
+      const newAchievements = await AchievementService.updateAchievementsFromAnalytics(
+        userId,
+        wasteAnalytics,
+        consumptionAnalytics
+      );
+      
+      if (newAchievements.length > 0) {
+        await this.scheduleAchievementNotifications(userId, newAchievements);
+      }
     }
   }
 }
 
-export const enhancedNotificationService = new EnhancedNotificationService();
+export default EnhancedNotificationService;

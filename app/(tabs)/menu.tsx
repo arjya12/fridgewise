@@ -2,17 +2,16 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { foodItemsService } from "@/services/foodItems";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function MenuScreen() {
@@ -44,53 +43,13 @@ export default function MenuScreen() {
     ]);
   };
 
-  // Generate reports
+  // Navigate to enhanced reports
   const generateWasteReport = async () => {
-    setLoading(true);
-    try {
-      // Get the current date
-      const today = new Date();
-
-      // Get the date from 30 days ago
-      const lastMonth = new Date();
-      lastMonth.setDate(today.getDate() - 30);
-
-      // Get usage stats
-      const stats = await foodItemsService.getUsageStats(lastMonth, today);
-
-      Alert.alert(
-        "Waste Report (Last 30 Days)",
-        `Total Used: ${stats.totalUsed} items\nExpired: ${
-          stats.totalExpired
-        } items\nWasted: ${
-          stats.totalWasted
-        } items\n\nWaste Percentage: ${stats.wastePercentage.toFixed(1)}%`,
-        [{ text: "OK" }]
-      );
-    } catch (error) {
-      console.error("Error generating waste report:", error);
-      Alert.alert("Error", "Failed to generate waste report");
-    } finally {
-      setLoading(false);
-    }
+    router.push("/(tabs)/waste-report");
   };
 
   const generateConsumptionReport = async () => {
-    setLoading(true);
-    try {
-      // In a real app, this would fetch actual consumption data
-      // For now, we'll show a placeholder
-      Alert.alert(
-        "Consumption Report",
-        "Your most consumed items in the last 30 days:\n\n1. Milk (8 units)\n2. Eggs (6 units)\n3. Bread (5 units)\n4. Cheese (4 units)\n5. Yogurt (3 units)",
-        [{ text: "OK" }]
-      );
-    } catch (error) {
-      console.error("Error generating consumption report:", error);
-      Alert.alert("Error", "Failed to generate consumption report");
-    } finally {
-      setLoading(false);
-    }
+    router.push("/(tabs)/consumption-report");
   };
 
   // Generate shopping list
