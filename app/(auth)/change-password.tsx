@@ -4,10 +4,12 @@ import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -20,6 +22,8 @@ import {
  */
 export default function ChangePasswordScreen() {
   const { user, signOut } = useAuth();
+  // Use Expo Router consistently; avoid mixing APIs
+  const router = useRouter();
 
   // Fixed light theme - no system detection
   const isDark = false;
@@ -113,6 +117,22 @@ export default function ChangePasswordScreen() {
     }
   };
 
+  const onBack = useCallback(() => {
+    try {
+      router.back();
+    } catch {
+      router.replace("/(tabs)/settings");
+    }
+  }, [router]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onBack]);
+
   return (
     <SafeAreaWrapper>
       <ThemedView style={[styles.container, { backgroundColor }]}>
@@ -120,7 +140,8 @@ export default function ChangePasswordScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={onBack}
+            accessibilityLabel="Go back"
           >
             <Ionicons
               name="arrow-back"

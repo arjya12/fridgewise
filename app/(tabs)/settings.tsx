@@ -178,8 +178,7 @@ export default function SettingsScreen() {
     setLowStockAlerts,
     helpfulTips,
     setHelpfulTips,
-    appUpdates,
-    setAppUpdates,
+    // removed appUpdates
     analytics,
     setAnalytics,
     crashReports,
@@ -396,27 +395,7 @@ export default function SettingsScreen() {
               />
             </View>
 
-            {/* App Updates */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="download-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>App Updates</ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Notify about new app versions
-                </ThemedText>
-              </View>
-              <Switch
-                value={appUpdates}
-                onValueChange={setAppUpdates}
-                trackColor={{ false: "#D1D5DB", true: primaryColor }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#D1D5DB"
-              />
-            </View>
+            {/* App Updates removed per requirements */}
           </View>
 
           {/* Data & Privacy Section */}
@@ -523,30 +502,7 @@ export default function SettingsScreen() {
               </View>
             </View>
 
-            {/* Terms of Service */}
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() =>
-                Alert.alert(
-                  "Terms of Service",
-                  "Terms of Service will be available in a future update."
-                )
-              }
-            >
-              <View style={styles.settingIconContainer}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Terms of Service
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#BBBBBB" />
-            </TouchableOpacity>
+            {/* Terms of Service removed per requirements */}
 
             {/* Privacy Policy */}
             <TouchableOpacity

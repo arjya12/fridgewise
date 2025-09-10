@@ -72,7 +72,9 @@ const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
   // Get responsive values
   const responsivePadding = useResponsiveValue(padding || { default: "md" });
   const responsiveMargin = useResponsiveValue(margin || { default: "none" });
-  const responsiveMaxWidth = useResponsiveValue(maxWidth);
+  const responsiveMaxWidth = useResponsiveValue(
+    maxWidth || { default: undefined as unknown as number }
+  );
 
   const containerStyle = useMemo((): ViewStyle => {
     const styles: ViewStyle = {
@@ -232,8 +234,8 @@ const ResponsiveStack: React.FC<ResponsiveStackProps> = ({
   const stackStyle = useMemo(
     (): ViewStyle => ({
       flexDirection: responsiveDirection,
-      alignItems: responsiveAlign,
-      justifyContent: responsiveJustify,
+      alignItems: responsiveAlign as any,
+      justifyContent: responsiveJustify as any,
       flexWrap: wrap ? "wrap" : "nowrap",
     }),
     [responsiveDirection, responsiveAlign, responsiveJustify, wrap]
@@ -303,7 +305,7 @@ const ResponsiveSection: React.FC<ResponsiveSectionProps> = ({
   );
 
   const headerTextStyle = useMemo(
-    (): ViewStyle => ({
+    (): any => ({
       textAlign: titleAlign,
       marginBottom: subtitle ? getSpacing("sm") : getSpacing("md"),
     }),
@@ -311,7 +313,7 @@ const ResponsiveSection: React.FC<ResponsiveSectionProps> = ({
   );
 
   const subtitleTextStyle = useMemo(
-    (): ViewStyle => ({
+    (): any => ({
       textAlign: titleAlign,
       marginBottom: getSpacing("md"),
       opacity: 0.7,

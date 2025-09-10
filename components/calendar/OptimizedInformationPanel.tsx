@@ -20,12 +20,8 @@ import {
   OptimizedInformationPanelProps,
   PanelLayoutMode,
 } from "../../types/calendar-enhanced";
-import {
-  calculateExpiryStatistics,
-  groupItemsByCategory,
-  groupItemsByLocation,
-} from "../../utils/calendarEnhancedDataUtils";
-import { RealisticFoodImage } from "../RealisticFoodImage";
+import { calculateExpiryStatistics } from "../../utils/calendarEnhancedDataUtils";
+import RealisticFoodImage from "../RealisticFoodImage";
 import { useCalendarColorScheme } from "./ColorSchemeProvider";
 import ItemCountIndicator from "./ItemCountIndicator";
 
@@ -74,7 +70,7 @@ const OptimizedInformationPanel: React.FC<OptimizedInformationPanelProps> = ({
   );
   const borderColor = useThemeColor(
     { light: "#E5E7EB", dark: "#374151" },
-    "text"
+    "background"
   );
   const surfaceColor = useThemeColor(
     { light: "#F8F9FA", dark: "#2C2C2E" },
@@ -94,10 +90,17 @@ const OptimizedInformationPanel: React.FC<OptimizedInformationPanelProps> = ({
 
   // Group items by category and location
   const groupedData = useMemo(() => {
-    return {
-      byCategory: groupItemsByCategory(selectedDateItems),
-      byLocation: groupItemsByLocation(selectedDateItems),
-    };
+    const byCategory: Record<string, FoodItem[]> = {};
+    const byLocation: Record<string, FoodItem[]> = {};
+    selectedDateItems.forEach((it) => {
+      const c = it.category || "Uncategorized";
+      byCategory[c] = byCategory[c] || [];
+      byCategory[c].push(it);
+      const l = it.location || "Unknown";
+      byLocation[l] = byLocation[l] || [];
+      byLocation[l].push(it);
+    });
+    return { byCategory, byLocation };
   }, [selectedDateItems]);
 
   // Determine layout mode
@@ -248,7 +251,6 @@ const OptimizedInformationPanel: React.FC<OptimizedInformationPanelProps> = ({
       style={[containerStyle, style]}
       testID={testID}
       accessible={true}
-      accessibilityRole="region"
       accessibilityLabel={`Information panel for ${selectedDate || "calendar"}`}
     >
       {layoutMode === "expanded" ? (
@@ -651,11 +653,7 @@ const ItemRow: React.FC<ItemRowProps> = ({
       accessibilityLabel={`${item.name}, expires ${item.expiry_date}`}
     >
       <View style={styles.itemIcon}>
-        <RealisticFoodImage
-          category={item.category}
-          name={item.name}
-          style={styles.foodImage}
-        />
+        <RealisticFoodImage foodName={item.name} style={styles.foodImage} />
       </View>
       <View style={styles.itemContent}>
         <Text

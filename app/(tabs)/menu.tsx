@@ -6,12 +6,12 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function MenuScreen() {
@@ -48,9 +48,7 @@ export default function MenuScreen() {
     router.push("/(tabs)/waste-report");
   };
 
-  const generateConsumptionReport = async () => {
-    router.push("/(tabs)/consumption-report");
-  };
+  // Removed Consumption Report per requirements
 
   // Generate shopping list
   const generateShoppingList = async () => {
@@ -107,59 +105,11 @@ export default function MenuScreen() {
       description: "View your food waste statistics",
       onPress: generateWasteReport,
     },
-    {
-      title: "Consumption Report",
-      icon: "pie-chart",
-      iconType: "material",
-      description: "See what items you use most",
-      onPress: generateConsumptionReport,
-    },
   ];
 
-  const toolsMenuItems = [
-    {
-      title: "Generate Shopping List",
-      icon: "cart-outline",
-      iconType: "ionicon",
-      description: "Create a list from low stock items",
-      onPress: generateShoppingList,
-    },
-    {
-      title: "Export Data",
-      icon: "download-outline",
-      iconType: "ionicon",
-      description: "Export your inventory data",
-      onPress: exportData,
-    },
-  ];
+  const toolsMenuItems: any[] = [];
 
   const supportMenuItems = [
-    {
-      title: "Help Center",
-      icon: "help-circle-outline",
-      iconType: "ionicon",
-      description: "Find answers to common questions",
-      onPress: () => {
-        Alert.alert(
-          "Help Center",
-          "This would open a help center with FAQs and guides in a real implementation.",
-          [{ text: "OK" }]
-        );
-      },
-    },
-    {
-      title: "Send Feedback",
-      icon: "chatbox-outline",
-      iconType: "ionicon",
-      description: "Help us improve FridgeWise",
-      onPress: () => {
-        Alert.alert(
-          "Send Feedback",
-          "This would open a feedback form in a real implementation.",
-          [{ text: "OK" }]
-        );
-      },
-    },
     {
       title: "About FridgeWise",
       icon: "information-circle-outline",
@@ -244,57 +194,63 @@ export default function MenuScreen() {
             </View>
           </View>
 
-          {/* Tools Section */}
-          <View
-            style={[
-              styles.section,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name="build-outline"
-                size={18}
-                color={subTextColor}
-                style={styles.sectionIcon}
-              />
-              <ThemedText style={styles.sectionTitle}>Tools</ThemedText>
+          {/* Tools Section (removed) */}
+          {toolsMenuItems.length > 0 && (
+            <View
+              style={[
+                styles.section,
+                {
+                  backgroundColor: cardBackgroundColor,
+                  borderColor: cardBorderColor,
+                },
+              ]}
+            >
+              <View style={styles.sectionHeader}>
+                <Ionicons
+                  name="build-outline"
+                  size={18}
+                  color={subTextColor}
+                  style={styles.sectionIcon}
+                />
+                <ThemedText style={styles.sectionTitle}>Tools</ThemedText>
+              </View>
+              <View>
+                {toolsMenuItems.map((item, index) =>
+                  renderMenuItem(item, index)
+                )}
+              </View>
             </View>
-            <View>
-              {toolsMenuItems.map((item, index) => renderMenuItem(item, index))}
-            </View>
-          </View>
+          )}
 
           {/* Support & Info Section */}
-          <View
-            style={[
-              styles.section,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name="help-buoy-outline"
-                size={18}
-                color={subTextColor}
-                style={styles.sectionIcon}
-              />
-              <ThemedText style={styles.sectionTitle}>
-                Support & Info
-              </ThemedText>
+          {supportMenuItems.length > 0 && (
+            <View
+              style={[
+                styles.section,
+                {
+                  backgroundColor: cardBackgroundColor,
+                  borderColor: cardBorderColor,
+                },
+              ]}
+            >
+              <View style={styles.sectionHeader}>
+                <Ionicons
+                  name="help-buoy-outline"
+                  size={18}
+                  color={subTextColor}
+                  style={styles.sectionIcon}
+                />
+                <ThemedText style={styles.sectionTitle}>
+                  Support & Info
+                </ThemedText>
+              </View>
+              <View>
+                {supportMenuItems.map((item, index) =>
+                  renderMenuItem(item, index)
+                )}
+              </View>
             </View>
-            <View>
-              {supportMenuItems.map((item, index) =>
-                renderMenuItem(item, index)
-              )}
-            </View>
-          </View>
+          )}
 
           <View style={styles.signOutSection}>
             <TouchableOpacity

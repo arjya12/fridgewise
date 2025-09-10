@@ -244,7 +244,7 @@ export default function InventoryScreen() {
           refreshTip();
         }
       } else {
-        router.replace("/(auth)/login");
+        router.replace({ pathname: "/(auth)/welcome" });
       }
     }, [user, filter, userProfile, helpfulTips])
   );

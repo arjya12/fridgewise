@@ -27,7 +27,7 @@ import {
   VirtualWindow,
 } from "../../types/calendar-enhanced";
 import EmptyStateView from "../EmptyStateView";
-import { ItemEntryCard } from "../ItemEntryCard";
+import ItemEntryCard from "../ItemEntryCard";
 
 // =============================================================================
 // CONSTANTS
@@ -123,17 +123,20 @@ const VirtualizedItem: React.FC<VirtualizedItemProps> = memo(
     return (
       <View style={[styles.virtualizedItemContainer, style]}>
         <ItemEntryCard
-          item={item}
-          onPress={onPress}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onMarkUsed={onMarkUsed}
-          compact={true}
+          quantity={item.quantity}
+          expiryDate={item.expiry_date}
+          onDecrement={() => {}}
+          onIncrement={() => {}}
+          onUseAll={() => {}}
+          onEditPress={onEdit ? () => onEdit(item) : undefined}
+          onDeletePress={onDelete ? () => onDelete(item) : undefined}
+          onOptionsPress={onPress ? () => onPress(item) : undefined}
         />
       </View>
     );
   }
 );
+VirtualizedItem.displayName = "VirtualizedItem";
 
 // =============================================================================
 // PLACEHOLDER COMPONENT
@@ -166,6 +169,7 @@ const PlaceholderItem: React.FC<PlaceholderItemProps> = memo(
     );
   }
 );
+PlaceholderItem.displayName = "PlaceholderItem";
 
 // =============================================================================
 // MAIN COMPONENT
@@ -307,8 +311,8 @@ const VirtualizedCalendarList: React.FC<VirtualizedCalendarListProps> = ({
         <EmptyStateView
           title="No Items"
           message="No food items found for the selected criteria."
-          actionText="Add Item"
-          onActionPress={() => console.log("Add item pressed")}
+          actionLabel="Add Item"
+          onAction={() => console.log("Add item pressed")}
         />
       </View>
     );
@@ -330,8 +334,6 @@ const VirtualizedCalendarList: React.FC<VirtualizedCalendarListProps> = ({
         scrollEventThrottle={SCROLL_THROTTLE}
         showsVerticalScrollIndicator={enableScrollIndicator}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={21}
         accessible={true}
         accessibilityRole="list"
         accessibilityLabel={`Food items list with ${items.length} items`}
@@ -404,6 +406,7 @@ const PlaceholderOverlay: React.FC<PlaceholderOverlayProps> = memo(
     return <View style={styles.placeholderOverlay}>{placeholders}</View>;
   }
 );
+PlaceholderOverlay.displayName = "PlaceholderOverlay";
 
 // =============================================================================
 // SCROLL INDICATORS
@@ -448,6 +451,7 @@ const ScrollIndicators: React.FC<ScrollIndicatorsProps> = memo(
     );
   }
 );
+ScrollIndicators.displayName = "ScrollIndicators";
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -579,10 +583,4 @@ const styles = StyleSheet.create({
 VirtualizedCalendarList.displayName = "VirtualizedCalendarList";
 
 export default VirtualizedCalendarList;
-export {
-  calculateOptimalItemHeight,
-  PlaceholderItem,
-  precalculateItemPositions,
-  VirtualizationManager,
-  VirtualizedItem,
-};
+export { PlaceholderItem, VirtualizationManager, VirtualizedItem };

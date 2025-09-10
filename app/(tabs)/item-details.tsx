@@ -181,15 +181,15 @@ export default function ItemDetailsScreen() {
   const handleUpdateItem = (updatedItemData: {
     name: string;
     quantity: number;
-    daysUntilExpiry: number;
+    expiryDate: string;
     location: string;
+    category: string;
+    notes: string;
   }) => {
     if (!currentEditItem) return;
 
     // Calculate new expiry date
-    const today = new Date();
-    const expiryDate = new Date(today);
-    expiryDate.setDate(today.getDate() + updatedItemData.daysUntilExpiry);
+    const expiryDate = new Date(updatedItemData.expiryDate);
 
     // Update item name if changed
     if (updatedItemData.name !== itemName) {
@@ -287,7 +287,14 @@ export default function ItemDetailsScreen() {
           onClose={() => setEditModalVisible(false)}
           onUpdate={handleUpdateItem}
           onDelete={handleDeleteFromModal}
-          itemData={currentEditItem}
+          itemData={{
+            name: currentEditItem.name,
+            quantity: currentEditItem.quantity,
+            expiryDate: new Date().toISOString(),
+            location: currentEditItem.location,
+            category: "Other",
+            notes: "",
+          }}
         />
       )}
     </SafeAreaView>

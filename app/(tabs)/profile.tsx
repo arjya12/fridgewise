@@ -131,7 +131,7 @@ export default function ProfileScreen() {
       // Update the user profile using the AuthContext method
       const updatedProfile = await updateUserProfile({
         full_name: fullName,
-        avatar_url: avatarUrl,
+        avatar_url: avatarUrl ?? undefined,
       });
 
       if (!updatedProfile) {

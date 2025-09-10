@@ -8,7 +8,7 @@ import {
   ViewStyle,
 } from "react-native";
 
-interface EmptyStateViewProps {
+export interface EmptyStateViewProps {
   title: string;
   message: string;
   icon?: keyof typeof Ionicons.glyphMap;

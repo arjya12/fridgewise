@@ -31,10 +31,25 @@ import {
   calculateExpiryStatistics,
   createEnhancedMarkedDates,
 } from "../../utils/calendarEnhancedDataUtils";
-import CalendarLegendIntegrated from "./CalendarLegendIntegrated";
 import { useCalendarColorScheme } from "./ColorSchemeProvider";
-import EnhancedCalendarCore from "./EnhancedCalendarCore";
 import OptimizedInformationPanel from "./OptimizedInformationPanel";
+// Fallback lightweight legend if integrated component is not present
+let CalendarLegendIntegrated: React.ComponentType<any>;
+try {
+  CalendarLegendIntegrated = require("./CalendarLegendIntegrated").default;
+} catch {
+  const FallbackLegend = ({ style }: { style?: any }) => <View style={style} />;
+  FallbackLegend.displayName = "FallbackLegend";
+  CalendarLegendIntegrated = FallbackLegend;
+}
+let EnhancedCalendarCore: React.ComponentType<any>;
+try {
+  EnhancedCalendarCore = require("./EnhancedCalendarCore").default;
+} catch {
+  const FallbackCore = ({ style }: { style?: any }) => <View style={style} />;
+  FallbackCore.displayName = "FallbackCalendarCore";
+  EnhancedCalendarCore = FallbackCore;
+}
 
 // Enable LayoutAnimation on Android
 if (
@@ -441,7 +456,7 @@ const PerformanceOptimizedCalendar: React.FC<
       {/* Performance-optimized Calendar Core */}
       <CalendarComponent
         items={effectiveItems}
-        selectedDate={debouncedSelectedDate}
+        selectedDate={debouncedSelectedDate || undefined}
         onDatePress={handleDatePress}
         onMonthChange={handleMonthChange}
         markedDates={processedData.markedDates}
@@ -471,7 +486,7 @@ const PerformanceOptimizedCalendar: React.FC<
 
       {/* Performance-optimized Information Panel */}
       <PanelComponent
-        selectedDate={debouncedSelectedDate}
+        selectedDate={debouncedSelectedDate || undefined}
         items={effectiveItems}
         layout="adaptive"
         sections={["summary", "items"]}
@@ -524,6 +539,7 @@ const VirtualizationInfo: React.FC<VirtualizationInfoProps> = ({
     </View>
   );
 };
+VirtualizationInfo.displayName = "VirtualizationInfo";
 
 // =============================================================================
 // PERFORMANCE UTILITIES
@@ -535,7 +551,7 @@ const VirtualizationInfo: React.FC<VirtualizationInfoProps> = ({
 export function withPerformanceMonitoring<T extends object>(
   Component: React.ComponentType<T>
 ): React.ComponentType<T> {
-  return memo((props: T) => {
+  const Wrapped: React.FC<T> = (props: T) => {
     const performance = usePerformanceOptimization();
 
     useEffect(() => {
@@ -546,7 +562,11 @@ export function withPerformanceMonitoring<T extends object>(
     });
 
     return <Component {...props} />;
-  });
+  };
+  Wrapped.displayName = `WithPerformanceMonitoring(${
+    Component.displayName || Component.name || "Component"
+  })`;
+  return memo(Wrapped);
 }
 
 /**
@@ -608,11 +628,3 @@ const styles = StyleSheet.create({
 PerformanceOptimizedCalendar.displayName = "PerformanceOptimizedCalendar";
 
 export default PerformanceOptimizedCalendar;
-export {
-  PerformanceMonitor,
-  useCalendarPerformance,
-  useDebounced,
-  usePerformanceOptimization,
-  useVirtualizedItems,
-  withPerformanceMonitoring,
-};

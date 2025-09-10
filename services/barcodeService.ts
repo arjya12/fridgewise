@@ -72,21 +72,11 @@ export const barcodeService = {
   async lookupBarcodeFallback(
     barcode: string
   ): Promise<BarcodeProductResponse> {
-    try {
-      // This is a placeholder for a fallback API implementation
-      // Would be implemented if the free API proves insufficient
-
-      // For now, just return an error
-      return {
-        success: false,
-        error: "Fallback API not implemented",
-      };
-    } catch (error) {
-      console.error("Error in fallback barcode lookup:", error);
-      return {
-        success: false,
-        error: "Failed to lookup barcode with fallback API",
-      };
-    }
+    // Placeholder: no external call yet; return a consistent error response
+    const _ = barcode; // keep signature used
+    return Promise.resolve({
+      success: false,
+      error: "Fallback API not implemented",
+    });
   },
 };

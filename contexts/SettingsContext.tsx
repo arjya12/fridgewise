@@ -10,8 +10,6 @@ interface SettingsContextType {
   setLowStockAlerts: (enabled: boolean) => void;
   helpfulTips: boolean;
   setHelpfulTips: (enabled: boolean) => void;
-  appUpdates: boolean;
-  setAppUpdates: (enabled: boolean) => void;
 
   // Privacy settings
   analytics: boolean;
@@ -25,7 +23,7 @@ const STORAGE_KEYS = {
   EXPIRY_ALERTS: "settings.expiryAlerts",
   LOW_STOCK_ALERTS: "settings.lowStockAlerts",
   HELPFUL_TIPS: "settings.helpfulTips",
-  APP_UPDATES: "settings.appUpdates",
+  // APP_UPDATES removed (migration cleans old key)
   ANALYTICS: "settings.analytics",
   CRASH_REPORTS: "settings.crashReports",
 };
@@ -38,8 +36,6 @@ const SettingsContext = createContext<SettingsContextType>({
   setLowStockAlerts: () => {},
   helpfulTips: true,
   setHelpfulTips: () => {},
-  appUpdates: false,
-  setAppUpdates: () => {},
   analytics: true,
   setAnalytics: () => {},
   crashReports: true,
@@ -52,7 +48,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [expiryAlerts, setExpiryAlertsState] = useState(true);
   const [lowStockAlerts, setLowStockAlertsState] = useState(true);
   const [helpfulTips, setHelpfulTipsState] = useState(true);
-  const [appUpdates, setAppUpdatesState] = useState(false);
   const [analytics, setAnalyticsState] = useState(true);
   const [crashReports, setCrashReportsState] = useState(true);
 
@@ -82,12 +77,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           setHelpfulTipsState(savedHelpfulTips === "true");
         }
 
-        const savedAppUpdates = await AsyncStorage.getItem(
-          STORAGE_KEYS.APP_UPDATES
-        );
-        if (savedAppUpdates !== null) {
-          setAppUpdatesState(savedAppUpdates === "true");
-        }
+        // Remove legacy app updates key if present (migration)
+        try {
+          await AsyncStorage.removeItem("settings.appUpdates");
+        } catch {}
 
         // Load privacy settings
         const savedAnalytics = await AsyncStorage.getItem(
@@ -141,14 +134,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setAppUpdates = async (enabled: boolean) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.APP_UPDATES, String(enabled));
-      setAppUpdatesState(enabled);
-    } catch (error) {
-      console.error("Failed to save app updates setting:", error);
-    }
-  };
+  // setAppUpdates removed
 
   const setAnalytics = async (enabled: boolean) => {
     try {
@@ -176,8 +162,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setLowStockAlerts,
     helpfulTips,
     setHelpfulTips,
-    appUpdates,
-    setAppUpdates,
     analytics,
     setAnalytics,
     crashReports,

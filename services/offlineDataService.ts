@@ -225,7 +225,7 @@ class OfflineDataService {
       id: actionId,
       timestamp: new Date().toISOString(),
       retryCount: 0,
-      maxRetries: this.config.maxRetries,
+      // ensure single source of truth after spread
       ...action,
     };
 
@@ -373,7 +373,7 @@ class OfflineDataService {
       if (this.isOnline && this.config.autoSync) {
         this.processPendingActions();
       }
-    }, this.config.retryDelay * 1000);
+    }, this.config.retryDelay * 1000) as unknown as NodeJS.Timeout;
   }
 
   /**
@@ -428,6 +428,7 @@ class OfflineDataService {
         recordId: entry.key.split("_")[1],
         data: entry.data,
         priority: "high",
+        maxRetries: this.config.maxRetries,
       });
     }
 

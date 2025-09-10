@@ -1,10 +1,8 @@
 // components/NotificationPreferencesPanel.tsx
 import { useThemeColor } from "@/hooks/useThemeColor";
-import {
-  enhancedNotificationService,
-  NotificationPreferences,
-} from "@/services/enhancedNotificationService";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -19,6 +17,39 @@ import {
 
 interface NotificationPreferencesPanelProps {
   onPreferencesChange?: (preferences: NotificationPreferences) => void;
+}
+
+interface NotificationPreferences {
+  enabled: boolean;
+  expiryAlerts: {
+    enabled: boolean;
+    criticalHours: number;
+    warningHours: number;
+    dailyReminder: boolean;
+    dailyReminderTime: string;
+  };
+  mealSuggestions: {
+    enabled: boolean;
+    breakfast: boolean;
+    lunch: boolean;
+    dinner: boolean;
+    beforeMealMinutes: number;
+  };
+  shoppingReminders: {
+    enabled: boolean;
+    lowStockThreshold: number;
+    weeklyReminder: boolean;
+    reminderDay: number; // 0-6 (Sun-Sat)
+  };
+  wasteReduction: {
+    enabled: boolean;
+    aggressiveMode: boolean;
+  };
+  quietHours: {
+    enabled: boolean;
+    startTime: string; // HH:MM
+    endTime: string; // HH:MM
+  };
 }
 
 const NotificationPreferencesPanel: React.FC<
@@ -51,10 +82,48 @@ const NotificationPreferencesPanel: React.FC<
     loadPreferences();
   }, []);
 
+  const STORAGE_KEY = "notification.preferences.v1";
+
+  const getDefaultPreferences = (): NotificationPreferences => ({
+    enabled: true,
+    expiryAlerts: {
+      enabled: true,
+      criticalHours: 2,
+      warningHours: 24,
+      dailyReminder: false,
+      dailyReminderTime: "09:00",
+    },
+    mealSuggestions: {
+      enabled: true,
+      breakfast: false,
+      lunch: true,
+      dinner: true,
+      beforeMealMinutes: 30,
+    },
+    shoppingReminders: {
+      enabled: false,
+      lowStockThreshold: 1,
+      weeklyReminder: false,
+      reminderDay: 6,
+    },
+    wasteReduction: {
+      enabled: true,
+      aggressiveMode: false,
+    },
+    quietHours: {
+      enabled: true,
+      startTime: "22:00",
+      endTime: "07:00",
+    },
+  });
+
   const loadPreferences = async () => {
     try {
-      const prefs = await enhancedNotificationService.getPreferences();
-      setPreferences(prefs);
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      const parsed: NotificationPreferences = stored
+        ? JSON.parse(stored)
+        : getDefaultPreferences();
+      setPreferences(parsed);
     } catch (error) {
       console.error("Error loading preferences:", error);
       Alert.alert("Error", "Failed to load notification preferences");
@@ -66,7 +135,7 @@ const NotificationPreferencesPanel: React.FC<
   const savePreferences = async (newPreferences: NotificationPreferences) => {
     setSaving(true);
     try {
-      await enhancedNotificationService.updatePreferences(newPreferences);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newPreferences));
       setPreferences(newPreferences);
       onPreferencesChange?.(newPreferences);
     } catch (error) {
@@ -77,9 +146,9 @@ const NotificationPreferencesPanel: React.FC<
     }
   };
 
-  const updatePreference = <T extends keyof NotificationPreferences>(
-    section: T,
-    field: keyof NotificationPreferences[T],
+  const updatePreference = (
+    section: keyof NotificationPreferences,
+    field: string,
     value: any
   ) => {
     if (!preferences) return;
@@ -87,7 +156,7 @@ const NotificationPreferencesPanel: React.FC<
     const updated = {
       ...preferences,
       [section]: {
-        ...preferences[section],
+        ...(preferences as any)[section],
         [field]: value,
       },
     };
@@ -514,15 +583,17 @@ const NotificationPreferencesPanel: React.FC<
           style={[styles.testButton, { backgroundColor: primaryColor }]}
           onPress={async () => {
             try {
-              await enhancedNotificationService.sendImmediateNotification({
-                id: "test",
-                type: "expiry_alert",
-                title: "🧪 Test Notification",
-                body: "This is a test notification to check your settings.",
-                data: {},
-                priority: "normal",
-                category: "expiry_alert",
-                contextualRelevance: 1.0,
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "🧪 Test Notification",
+                  body: "This is a test notification to check your settings.",
+                },
+                trigger: {
+                  type: Notifications.SchedulableTriggerInputTypes
+                    .TIME_INTERVAL,
+                  seconds: 1,
+                  repeats: false,
+                } as Notifications.TimeIntervalTriggerInput,
               });
               Alert.alert("Success", "Test notification sent!");
             } catch (error) {

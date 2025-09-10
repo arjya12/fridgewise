@@ -106,7 +106,7 @@ const ExtendExpiryModal: React.FC<ExtendExpiryModalProps> = ({
   );
   const borderColor = useThemeColor(
     { light: "#E5E7EB", dark: "#3C3C3E" },
-    "border"
+    "text"
   );
   const surfaceColor = useThemeColor(
     { light: "#F8F9FA", dark: "#2C2C2E" },
@@ -284,7 +284,6 @@ const ExtendExpiryModal: React.FC<ExtendExpiryModalProps> = ({
         <Animated.View
           style={[styles.modalContainer, { backgroundColor }, modalStyle]}
           accessible={accessibilityEnabled}
-          accessibilityRole="dialog"
           accessibilityLabel={`Extend expiry for ${item.name}`}
         >
           {/* Header */}

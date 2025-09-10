@@ -1,0 +1,21 @@
+diff --git a/node_modules/recyclerlistview/dist/reactnative/core/services/ComponentCompat.js b/node_modules/recyclerlistview/dist/reactnative/core/services/ComponentCompat.js
+index 6c6e3f7..3d2f7c4 100644
+--- a/node_modules/recyclerlistview/dist/reactnative/core/services/ComponentCompat.js
++++ b/node_modules/recyclerlistview/dist/reactnative/core/services/ComponentCompat.js
+@@ -1,6 +1,6 @@
+ Object.defineProperty(exports, "__esModule", { value: true });
+-var react_1 = require("react");
+-var ComponentCompat = (function () {
++var React = require("react");
++var ComponentCompat = (function () {
+     function ComponentCompat() {
+     }
+     ComponentCompat.prototype.createView = function (viewRenderer, key) {
+@@ -8,7 +8,7 @@ var ComponentCompat = (function () {
+     };
+     return ComponentCompat;
+ }());
+-ComponentCompat.View = react_1.Component;
++ComponentCompat.View = React.Component;
+ exports.default = ComponentCompat;
+ //# sourceMappingURL=ComponentCompat.js.map

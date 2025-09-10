@@ -17,13 +17,7 @@ import { Platform, View, ViewStyle } from "react-native";
 
 interface AccessibilityWrapperProps {
   children: ReactNode;
-  semanticType?:
-    | "header"
-    | "list"
-    | "listitem"
-    | "section"
-    | "navigation"
-    | "main";
+  semanticType?: "header" | "list" | "listitem" | "section" | "navigation";
   level?: number; // For headers
   accessibilityContent?: AccessibilityContent;
   enableHaptics?: boolean;
@@ -253,7 +247,7 @@ const KeyboardNavigation: React.FC<KeyboardNavigationProps> = ({
   const accessibilityProps = isAccessibilityModeActive
     ? {
         accessible: true,
-        accessibilityRole: "group" as const,
+        accessibilityRole: "none" as const,
         accessibilityActions: [
           { name: "activate", label: "Activate" },
           { name: "increment", label: "Next item" },

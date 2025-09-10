@@ -1,4 +1,4 @@
-import LoginScreen from "@/app/(auth)/login";
+import WelcomeScreen from "@/app/(auth)/welcome";
 import { useAuth } from "@/contexts/AuthContext";
 import { NavigationContainer } from "@react-navigation/native";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
@@ -56,7 +56,7 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 
-describe("LoginScreen", () => {
+describe("WelcomeScreen (login flow)", () => {
   let mockSignIn: jest.Mock;
 
   beforeEach(() => {
@@ -73,7 +73,7 @@ describe("LoginScreen", () => {
 
     const { getByPlaceholderText, getByText } = render(
       <NavigationContainer>
-        <LoginScreen />
+        <WelcomeScreen />
       </NavigationContainer>
     );
 
@@ -97,7 +97,7 @@ describe("LoginScreen", () => {
 
     const { getByPlaceholderText, getByText } = render(
       <NavigationContainer>
-        <LoginScreen />
+        <WelcomeScreen />
       </NavigationContainer>
     );
 

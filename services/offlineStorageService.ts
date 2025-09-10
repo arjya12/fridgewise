@@ -321,7 +321,7 @@ class OfflineStorageService {
           this.moveToFailedActions(action);
         }
       });
-    }, delay);
+    }, delay) as unknown as NodeJS.Timeout;
 
     this.retryTimeouts.set(action.id, timeoutId);
   }

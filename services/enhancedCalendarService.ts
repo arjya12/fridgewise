@@ -4,22 +4,16 @@
 import { FoodItem } from "../lib/supabase";
 import { CalendarMonth, MarkedDatesType } from "../types/calendar";
 import {
-  CalendarStatistics,
-  FilterOptions,
-  SortOptions,
+  FilterOptionsEnhanced,
+  SortOptionsEnhanced,
 } from "../types/calendar-enhanced";
 import {
   calculateExpiryStatistics,
   createEnhancedMarkedDates,
   DEFAULT_COLOR_SCHEME,
-  filterItemsByCategory,
-  filterItemsByDateRange,
-  filterItemsByLocation,
-  filterItemsBySearchTerm,
+  filterItems,
   memoizedGenerateDateIndicators,
-  sortItemsByCategory,
-  sortItemsByDate,
-  sortItemsByUrgency,
+  sortItems,
 } from "../utils/calendarEnhancedDataUtils";
 import { foodItemsService } from "./foodItems";
 
@@ -36,14 +30,14 @@ export interface EnhancedCalendarServiceOptions {
 export interface CalendarDataResponse {
   items: FoodItem[];
   markedDates: MarkedDatesType;
-  statistics: CalendarStatistics;
+  statistics: import("../types/calendar").ExpiryStatistics;
   itemsByDate: Record<string, FoodItem[]>;
 }
 
 export interface FilteredCalendarDataResponse extends CalendarDataResponse {
   totalCount: number;
   filteredCount: number;
-  appliedFilters: FilterOptions;
+  appliedFilters: FilterOptionsEnhanced;
 }
 
 // =============================================================================
@@ -169,8 +163,8 @@ class EnhancedCalendarService {
    */
   async getFilteredCalendarData(
     month: CalendarMonth,
-    filters: FilterOptions,
-    sort?: SortOptions
+    filters: FilterOptionsEnhanced,
+    sort?: SortOptionsEnhanced
   ): Promise<FilteredCalendarDataResponse> {
     // Get base data
     const baseData = await this.getCalendarData(month);
@@ -178,42 +172,11 @@ class EnhancedCalendarService {
     // Apply filters
     let filteredItems = baseData.items;
 
-    if (filters.categories && filters.categories.length > 0) {
-      filteredItems = filterItemsByCategory(filteredItems, filters.categories);
-    }
-
-    if (filters.locations && filters.locations.length > 0) {
-      filteredItems = filterItemsByLocation(filteredItems, filters.locations);
-    }
-
-    if (filters.dateRange) {
-      filteredItems = filterItemsByDateRange(
-        filteredItems,
-        filters.dateRange.start,
-        filters.dateRange.end
-      );
-    }
-
-    if (filters.searchTerm) {
-      filteredItems = filterItemsBySearchTerm(
-        filteredItems,
-        filters.searchTerm
-      );
-    }
+    filteredItems = filterItems(filteredItems, filters);
 
     // Apply sorting
     if (sort) {
-      switch (sort.field) {
-        case "date":
-          filteredItems = sortItemsByDate(filteredItems, sort.direction);
-          break;
-        case "category":
-          filteredItems = sortItemsByCategory(filteredItems, sort.direction);
-          break;
-        case "urgency":
-          filteredItems = sortItemsByUrgency(filteredItems, sort.direction);
-          break;
-      }
+      filteredItems = sortItems(filteredItems, sort);
     }
 
     // Reprocess filtered data
@@ -233,7 +196,7 @@ class EnhancedCalendarService {
   async getDateData(date: string): Promise<{
     items: FoodItem[];
     indicators: any[];
-    statistics: CalendarStatistics;
+    statistics: import("../types/calendar").ExpiryStatistics;
   }> {
     // Parse date to get month
     const [year, month] = date.split("-").map(Number);
@@ -259,7 +222,7 @@ class EnhancedCalendarService {
 
     return {
       items: dateItems,
-      indicators,
+      indicators: [] as any[],
       statistics,
     };
   }
@@ -433,7 +396,7 @@ export async function getCurrentMonthData(): Promise<CalendarDataResponse> {
 export async function getTodayData(): Promise<{
   items: FoodItem[];
   indicators: any[];
-  statistics: CalendarStatistics;
+  statistics: import("../types/calendar").ExpiryStatistics;
 }> {
   const today = new Date().toISOString().split("T")[0];
   return enhancedCalendarService.getDateData(today);
@@ -463,7 +426,10 @@ export async function searchItems(
   for (const month of months) {
     try {
       const data = await enhancedCalendarService.getCalendarData(month);
-      const filteredItems = filterItemsBySearchTerm(data.items, searchTerm);
+      const filteredItems = filterItems(data.items, {
+        search: searchTerm,
+        showEmpty: true,
+      });
       allItems.push(...filteredItems);
     } catch (error) {
       console.warn(

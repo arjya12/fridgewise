@@ -312,6 +312,7 @@ const ItemGroupCard: React.FC<ItemGroupCardProps> = ({
               accessibilityLabel={`Add more ${itemName}`}
             >
               <Ionicons name="add-circle-outline" size={18} color="#9CA3AF" />
+              <Text style={styles.addMoreButtonText}>Add More</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity

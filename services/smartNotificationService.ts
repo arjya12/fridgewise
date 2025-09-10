@@ -1,11 +1,21 @@
 // services/smartNotificationService.ts
 import { FoodItemWithUrgency } from "@/services/foodItems";
-import {
-  generateMealSuggestions,
-  getBestMealForTime,
-} from "@/utils/mealPlanningUtils";
+import { getMealSuggestions as generateMealSuggestions } from "@/utils/mealPlanningUtils";
 import { UrgencyLevel } from "@/utils/urgencyUtils";
 import * as Notifications from "expo-notifications";
+const getBestMealForTime = (
+  items: FoodItemWithUrgency[],
+  timeOfDay: "morning" | "midday" | "evening"
+) => {
+  const type =
+    timeOfDay === "morning"
+      ? ("breakfast" as const)
+      : timeOfDay === "midday"
+      ? ("lunch" as const)
+      : ("dinner" as const);
+  const suggestions = generateMealSuggestions(items, type);
+  return suggestions[0];
+};
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -103,6 +113,8 @@ class SmartNotificationService {
           shouldShowAlert: true,
           shouldPlaySound: true,
           shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
         }),
       });
 
@@ -118,55 +130,34 @@ class SmartNotificationService {
    * Set up notification categories with action buttons
    */
   private async setupNotificationCategories(): Promise<void> {
-    await Notifications.setNotificationCategoryAsync("EXPIRY_WARNING", {
-      actions: [
-        {
-          identifier: "MARK_USED",
-          buttonTitle: "Mark as Used",
-          options: { foreground: false },
-        },
-        {
-          identifier: "EXTEND_EXPIRY",
-          buttonTitle: "Extend Date",
-          options: { foreground: true },
-        },
-        {
-          identifier: "VIEW_RECIPES",
-          buttonTitle: "See Recipes",
-          options: { foreground: true },
-        },
-      ],
-    });
+    await Notifications.setNotificationCategoryAsync("EXPIRY_WARNING", [
+      {
+        identifier: "MARK_USED",
+        buttonTitle: "Mark as Used",
+        options: { foreground: false },
+      },
+      {
+        identifier: "EXTEND_EXPIRY",
+        buttonTitle: "Extend Date",
+        options: { foreground: true },
+      },
+    ] as any);
 
-    await Notifications.setNotificationCategoryAsync("MEAL_SUGGESTION", {
-      actions: [
-        {
-          identifier: "VIEW_RECIPE",
-          buttonTitle: "View Recipe",
-          options: { foreground: true },
-        },
-        {
-          identifier: "DISMISS",
-          buttonTitle: "Not Now",
-          options: { foreground: false },
-        },
-      ],
-    });
+    await Notifications.setNotificationCategoryAsync("MEAL_SUGGESTION", [
+      {
+        identifier: "VIEW_RECIPE",
+        buttonTitle: "View Recipe",
+        options: { foreground: true },
+      },
+    ] as any);
 
-    await Notifications.setNotificationCategoryAsync("PLANNING_REMINDER", {
-      actions: [
-        {
-          identifier: "OPEN_CALENDAR",
-          buttonTitle: "Open Calendar",
-          options: { foreground: true },
-        },
-        {
-          identifier: "VIEW_EXPIRING",
-          buttonTitle: "Expiring Soon",
-          options: { foreground: true },
-        },
-      ],
-    });
+    await Notifications.setNotificationCategoryAsync("PLANNING_REMINDER", [
+      {
+        identifier: "OPEN_CALENDAR",
+        buttonTitle: "Open Calendar",
+        options: { foreground: true },
+      },
+    ] as any);
   }
 
   /**
@@ -236,8 +227,10 @@ class SmartNotificationService {
       if (urgencyLevel === "critical") {
         // Critical items: notify immediately and every 4 hours
         trigger = {
-          seconds: 1, // Immediate
-        };
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+          repeats: false,
+        } as any;
         await Notifications.scheduleNotificationAsync({
           content: notification,
           trigger,
@@ -246,8 +239,10 @@ class SmartNotificationService {
         // Schedule follow-up notifications every 4 hours
         for (let i = 1; i <= 3; i++) {
           trigger = {
-            seconds: i * 4 * 60 * 60, // 4, 8, 12 hours
-          };
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: i * 4 * 60 * 60,
+            repeats: false,
+          } as any;
           await Notifications.scheduleNotificationAsync({
             content: {
               ...notification,
@@ -265,10 +260,11 @@ class SmartNotificationService {
         // Warning items: notify at optimal time
         const optimalTime = this.getOptimalNotificationTime();
         trigger = {
+          type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
           hour: optimalTime.hour,
           minute: optimalTime.minute,
           repeats: false,
-        };
+        } as any;
         await Notifications.scheduleNotificationAsync({
           content: notification,
           trigger,
@@ -277,10 +273,11 @@ class SmartNotificationService {
         // Soon items: notify once at user's preferred time
         const preferredTime = this.getUserPreferredTime();
         trigger = {
+          type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
           hour: preferredTime.hour,
           minute: preferredTime.minute,
           repeats: false,
-        };
+        } as any;
         await Notifications.scheduleNotificationAsync({
           content: notification,
           trigger,
@@ -295,7 +292,7 @@ class SmartNotificationService {
   private createExpiryNotification(
     item: FoodItemWithUrgency,
     urgencyLevel: UrgencyLevel
-  ): Notifications.NotificationContent {
+  ): Notifications.NotificationContentInput {
     const urgencyEmoji = {
       critical: "🚨",
       warning: "⚠️",
@@ -329,7 +326,7 @@ class SmartNotificationService {
   private async scheduleMealSuggestions(
     items: FoodItemWithUrgency[]
   ): Promise<void> {
-    const suggestions = generateMealSuggestions(items, 3);
+    const suggestions = generateMealSuggestions(items, "dinner");
 
     if (suggestions.length === 0) return;
 
@@ -344,9 +341,9 @@ class SmartNotificationService {
       const bestMeal = getBestMealForTime(items, timeOfDay);
 
       if (bestMeal) {
-        const notification: Notifications.NotificationContent = {
+        const notification: Notifications.NotificationContentInput = {
           title: `🍽️ Recipe Suggestion: ${bestMeal.title}`,
-          body: `Perfect for ${timeOfDay}! Uses: ${bestMeal.items
+          body: `Perfect for ${timeOfDay}! Uses: ${bestMeal.ingredients
             .slice(0, 3)
             .map((item) => item.name)
             .join(", ")}`,
@@ -361,10 +358,11 @@ class SmartNotificationService {
         await Notifications.scheduleNotificationAsync({
           content: notification,
           trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
             hour,
             minute,
             repeats: true,
-          },
+          } as any,
         });
       }
     }
@@ -385,7 +383,7 @@ class SmartNotificationService {
 
     if (criticalCount === 0 && warningCount === 0) return;
 
-    const notification: Notifications.NotificationContent = {
+    const notification: Notifications.NotificationContentInput = {
       title: "🌅 Good Morning! Food Check",
       body: `You have ${criticalCount} critical and ${warningCount} warning items to review today.`,
       categoryIdentifier: "PLANNING_REMINDER",
@@ -399,10 +397,11 @@ class SmartNotificationService {
     await Notifications.scheduleNotificationAsync({
       content: notification,
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         hour: 8,
         minute: 0,
         repeats: true,
-      },
+      } as any,
     });
   }
 
@@ -418,7 +417,7 @@ class SmartNotificationService {
 
     if (expiringTomorrow.length === 0) return;
 
-    const notification: Notifications.NotificationContent = {
+    const notification: Notifications.NotificationContentInput = {
       title: "🌙 Plan Tomorrow's Meals",
       body: `${expiringTomorrow.length} items expire tomorrow. Plan your meals now!`,
       categoryIdentifier: "PLANNING_REMINDER",
@@ -431,10 +430,11 @@ class SmartNotificationService {
     await Notifications.scheduleNotificationAsync({
       content: notification,
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         hour: 19,
         minute: 0,
         repeats: true,
-      },
+      } as any,
     });
   }
 

@@ -35,7 +35,7 @@ const OfflineStatusBar: React.FC<OfflineStatusBarProps> = ({
   );
   const borderColor = useThemeColor(
     { light: "#E5E7EB", dark: "#4B5563" },
-    "border"
+    "text"
   );
 
   useEffect(() => {
@@ -185,7 +185,7 @@ const OfflineStatusBar: React.FC<OfflineStatusBarProps> = ({
           disabled={syncStatus.syncInProgress}
         >
           <Ionicons
-            name={syncStatus.isOnline ? "sync" : "refresh"}
+            name={syncStatus.isOnline ? ("sync" as any) : ("refresh" as any)}
             size={14}
             color="#FFFFFF"
           />
@@ -348,7 +348,7 @@ export const OfflineSyncPanel: React.FC<{
           </Text>
           <View style={styles.statusRow}>
             <Ionicons
-              name={syncStatus?.isOnline ? "wifi" : "wifi-off"}
+              name={(syncStatus?.isOnline ? "wifi" : "warning") as any}
               size={20}
               color={syncStatus?.isOnline ? "#10B981" : "#EF4444"}
             />

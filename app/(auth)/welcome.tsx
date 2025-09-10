@@ -44,7 +44,6 @@ export default function WelcomeScreen() {
     if (params?.login === "1" && !showLogin) {
       handleLogin();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params?.login]);
 
   function handleCreateAccount() {
