@@ -48,13 +48,13 @@ logs/
 Thumbs.db
 desktop.ini
 
-# Environment files (keep .env.example committed)
+# Environment files (ignore all .env variants and examples)
 .env
 .env.local
 .env.production
 .env.*.local
 .env.*
-!.env.example
+.env.example
 
 # typescript
 *.tsbuildinfo
@@ -71,3 +71,15 @@ temp/
 
 # Tooling caches
 .eslintcache
+
+# Project config and tooling to keep local-only
+/app.json
+/eas.json
+/jest.config.js
+/jest.setup.js
+/metro.config.js
+/package-lock.json
+/settings-feature-plan.md
+/shelf_fridge_tracker_mvp_plan.md
+/test-utils.tsx
+/tsconfig.json
