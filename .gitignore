@@ -83,3 +83,7 @@ temp/
 /shelf_fridge_tracker_mvp_plan.md
 /test-utils.tsx
 /tsconfig.json
+
+# Repo-level folders to keep local-only
+/.github/
+/__tests__/
