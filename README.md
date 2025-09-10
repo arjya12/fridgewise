@@ -6,19 +6,21 @@
 
 ---
 
-![Welcome screen](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475409.png)
-
-![Create Account](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475424.png)
-
-![Sign In](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475437.png)
-
-![Home Dashboard](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475457.png)
-
-![Food Expiry Calendar](docs/screenshots/calendar.png)
-
-![Shopping List](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475466.png)
-
-![More / Profile](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475468.png)
+<table>
+<tr>
+<td><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475409.png" alt="Welcome screen" width="200" /></td>
+<td><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475424.png" alt="Create Account" width="200" /></td>
+<td><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475437.png" alt="Sign In" width="200" /></td>
+</tr>
+<tr>
+<td><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475457.png" alt="Home Dashboard" width="200" /></td>
+<td><img src="docs/screenshots/calendar.png" alt="Food Expiry Calendar" width="200" /></td>
+<td><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475466.png" alt="Shopping List" width="200" /></td>
+</tr>
+<tr>
+<td colspan="3"><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475468.png" alt="More / Profile" width="200" /></td>
+</tr>
+</table>
 
 ---
 
@@ -124,7 +126,7 @@ npm run web
 ### Usage
 
 - Authentication: Sign in/up (Supabase) from the auth screens.
-- Add items: Use the “Add Item” flow or scan a barcode to autofill.
+- Add items: Use the "Add Item" flow or scan a barcode to autofill.
 - Manage inventory: Swipe cards to extend expiry, consume, or move locations.
 - Calendar: View upcoming expiries in calendar views and 7‑day summaries.
 - Notifications: Enable push permissions and configure preferences in settings.

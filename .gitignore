@@ -87,3 +87,10 @@ temp/
 # Repo-level folders to keep local-only
 /.github/
 /__tests__/
+
+# Root files to keep local-only (keep README.md tracked)
+/CHANGELOG.md
+/CONTRIBUTING.md
+/FEATURE_PLAN.md
+/eslint.config.js
+/package.json
