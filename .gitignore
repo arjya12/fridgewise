@@ -2,6 +2,7 @@
 
 # Dependencies
 node_modules/
+vendor/
 
 # Expo / React Native
 .expo/
@@ -9,6 +10,7 @@ node_modules/
 dist/
 build/
 web-build/
+out/
 .bundle/
 .gradle/
 *.keystore
@@ -51,6 +53,8 @@ desktop.ini
 .env.local
 .env.production
 .env.*.local
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -64,3 +68,6 @@ coverage/
 *.swo
 tmp/
 temp/
+
+# Tooling caches
+.eslintcache
