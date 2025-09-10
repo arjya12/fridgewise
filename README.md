@@ -1,24 +1,24 @@
 <p align="center">
-  <img src="assets/images/icon.png" alt="FridgeWise logo" width="96" />
+  <img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475399.png" alt="FridgeWise logo" width="96" />
 </p>
 <h2 align="center">FridgeWise — Smart Food Inventory & Expiry Tracking</h2>
 <p align="center">Turn your kitchen notes into organized lists, timely reminders, and less waste.</p>
 
 ---
 
-![Welcome screen](docs/screenshots/welcome.png)
+![Welcome screen](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475409.png)
 
-![Create Account](docs/screenshots/create-account.png)
+![Create Account](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475424.png)
 
-![Sign In](docs/screenshots/sign-in.png)
+![Sign In](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475437.png)
 
-![Home Dashboard](docs/screenshots/home-dashboard.png)
+![Home Dashboard](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475457.png)
 
 ![Food Expiry Calendar](docs/screenshots/calendar.png)
 
-![Shopping List](docs/screenshots/shopping-list.png)
+![Shopping List](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475466.png)
 
-![More / Profile](docs/screenshots/more.png)
+![More / Profile](https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475468.png)
 
 ---
 
