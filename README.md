@@ -6,10 +6,6 @@
 
 ---
 
-### Screenshots
-
-> Add the following image files under `docs/screenshots/` (or update the paths below):
-
 ![Welcome screen](docs/screenshots/welcome.png)
 
 ![Create Account](docs/screenshots/create-account.png)
@@ -29,8 +25,6 @@
 ### Overview / Introduction
 
 FridgeWise helps households and meal preppers track food inventory across fridge, freezer, and pantry. It scans barcodes, predicts expiry windows, sends timely notifications, and provides insights to reduce waste and optimize shopping. Built with Expo and React Native, it runs on iOS, Android, and the web.
-
-Target users: individuals, families, and roommates who want to minimize waste, save money, and stay organized.
 
 ---
 
