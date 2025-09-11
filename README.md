@@ -14,7 +14,7 @@
 </tr>
 <tr>
 <td><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475457.png" alt="Home Dashboard" width="200" /></td>
-<td><img src="docs/screenshots/calendar.png" alt="Food Expiry Calendar" width="200" /></td>
+<td><img src="https://github.com/arjya12/fridgewise/blob/22c46c096fcb4593c4e7bdd73043f4a8a2995122/Screenshot_1757475463.png" alt="Food Expiry Calendar" width="200" /></td>
 <td><img src="https://github.com/arjya12/fridgewise/blob/879b97162eb277c0e224c68141dddec544da5249/Screenshot_1757475466.png" alt="Shopping List" width="200" /></td>
 </tr>
 <tr>
@@ -130,34 +130,3 @@ npm run web
 - Manage inventory: Swipe cards to extend expiry, consume, or move locations.
 - Calendar: View upcoming expiries in calendar views and 7‑day summaries.
 - Notifications: Enable push permissions and configure preferences in settings.
-
-See screenshots above.
-
-Developer utilities:
-
-```bash
-# Run tests
-npm test
-
-# Run lint, typecheck, and tests together
-npm run check
-
-# Test local notification (example helper script)
-node scripts/test-local-notification.js
-```
-
----
-
----
-
-### License
-
-MIT © FridgeWise contributors. See the [LICENSE](#) file.
-
----
-
-### Maintainers & Support
-
-- <Add maintainer/contact or discussion link here>
-
-For issues and feature requests, please open a GitHub Issue with reproduction steps and device info.
