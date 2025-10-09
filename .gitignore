@@ -73,12 +73,9 @@ temp/
 .eslintcache
 
 # Project config and tooling to keep local-only
-/app.json
-/eas.json
 /jest.config.js
 /jest.setup.js
 /metro.config.js
-/package-lock.json
 /settings-feature-plan.md
 /shelf_fridge_tracker_mvp_plan.md
 /test-utils.tsx
