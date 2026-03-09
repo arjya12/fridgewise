@@ -171,15 +171,8 @@ export function EnhancedTabBar({
         accessibilityState={{ selected: isFocused }}
       >
         <View style={styles.tabContent}>
-          {/* Icon with background indicator */}
-          <View
-            style={[
-              styles.iconContainer,
-              isFocused && {
-                backgroundColor: `${activeColor}15`,
-              },
-            ]}
-          >
+          {/* Icon (no filled background when focused for a cleaner look) */}
+          <View style={styles.iconContainer}>
             <Ionicons
               name={iconName as any}
               size={24}
@@ -306,14 +299,15 @@ const styles = StyleSheet.create({
   tabBarContainer: {
     position: "absolute",
     borderTopWidth: 1,
-    elevation: 8,
-    shadowColor: "#000",
+    // Flatten the bar – remove drop shadow
+    elevation: 0,
+    shadowColor: "transparent",
     shadowOffset: {
       width: 0,
-      height: -2,
+      height: 0,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0,
+    shadowRadius: 0,
     // Reduced top corners radius to minimize content overlap
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
@@ -375,14 +369,15 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 8,
-    shadowColor: "#000",
+    // Flatten FAB – no icon shadow
+    elevation: 0,
+    shadowColor: "transparent",
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 0,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
   fabShadow: {
     position: "absolute",
@@ -391,7 +386,8 @@ const styles = StyleSheet.create({
     right: 2,
     bottom: 2,
     borderRadius: 28,
-    opacity: 0.2,
+    // Hide halo completely
+    opacity: 0,
     zIndex: -1,
   },
 });

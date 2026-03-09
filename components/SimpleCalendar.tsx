@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -17,11 +17,18 @@ function getFirstDayOfWeek(year: number, month: number) {
 interface SimpleCalendarProps {
   selectedDate: Date | null;
   onSelect: (date: Date) => void;
+  /**
+   * Optional callback to inform parent how many week rows
+   * are currently rendered (5 or 6). Used to adjust layout
+   * around the calendar.
+   */
+  onWeeksChange?: (weeks: number) => void;
 }
 
 export function SimpleCalendar({
   selectedDate,
   onSelect,
+  onWeeksChange,
 }: SimpleCalendarProps) {
   const today = new Date();
   const [currentDate, setCurrentDate] = useState(
@@ -74,6 +81,15 @@ export function SimpleCalendar({
       days.push({ n: d, faded: isPast });
     }
 
+    // Pad with blanks after the last day so the final row always has 7 cells
+    const remainder = days.length % 7;
+    if (remainder !== 0) {
+      const cellsToAdd = 7 - remainder;
+      for (let i = 0; i < cellsToAdd; i++) {
+        days.push({ n: 0, faded: true });
+      }
+    }
+
     return days;
   }
 
@@ -84,6 +100,17 @@ export function SimpleCalendar({
     }
     return rows;
   }
+
+  const daysGrid = buildDaysGrid(year, month);
+  const rows = chunkIntoRows(daysGrid);
+
+  // Inform parent how many week rows are rendered (5 or 6).
+  // Do this in an effect so we don't call setState during render.
+  useEffect(() => {
+    if (onWeeksChange) {
+      onWeeksChange(rows.length);
+    }
+  }, [rows.length, onWeeksChange]);
 
   return (
     <View style={styles.container}>
@@ -125,7 +152,7 @@ export function SimpleCalendar({
 
       {/* Days grid */}
       <View style={{ width: "100%" }}>
-        {chunkIntoRows(buildDaysGrid(year, month)).map((row, rowIdx) => (
+        {rows.map((row, rowIdx) => (
           <View key={rowIdx} style={{ flexDirection: "row", width: "100%" }}>
             {row.map((day, colIdx) => {
               if (day.n === 0) {
@@ -151,41 +178,36 @@ export function SimpleCalendar({
               return (
                 <Pressable
                   key={colIdx}
-                  style={[
-                    styles.dayCell,
-                    isExpired && styles.dayButtonExpired,
-                    isSelected && styles.dayButtonSelected,
-                    isToday && !isSelected && styles.dayButtonToday,
-                    !isExpired && !isSelected && styles.dayButton,
-                  ]}
+                  style={styles.dayCell}
                   disabled={isExpired}
                   onPress={() => onSelect(currentDateObj)}
                 >
-                  <Text
+                  <View
                     style={[
-                      styles.dayText,
-                      isExpired && styles.dayTextExpired,
-                      isSelected && styles.dayTextSelected,
-                      isToday && !isSelected && styles.dayTextToday,
+                      styles.dayPill,
+                      !isExpired && styles.dayPillDefault,
+                      isExpired && styles.dayPillExpired,
+                      isToday && !isSelected && styles.dayPillToday,
+                      isSelected && styles.dayPillSelected,
                     ]}
                   >
-                    {day.n}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.dayText,
+                        isExpired && styles.dayTextExpired,
+                        isSelected && styles.dayTextSelected,
+                        isToday && !isSelected && styles.dayTextToday,
+                      ]}
+                    >
+                      {day.n}
+                    </Text>
+                  </View>
                 </Pressable>
               );
             })}
           </View>
         ))}
       </View>
-
-      {/* Selected date display */}
-      {selectedDate && (
-        <View style={styles.selectedDateContainer}>
-          <Text style={styles.selectedDateText}>
-            Selected: {selectedDate.toLocaleDateString()}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -197,9 +219,9 @@ const styles = StyleSheet.create({
     padding: 8,
     alignItems: "center",
     width: 220,
-    shadowColor: "#22C55E",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
     elevation: 4,
     borderWidth: 1,
     borderColor: "#E5E7EB",
@@ -213,17 +235,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   arrowCircle: {
-    backgroundColor: "#E6F9EF",
+    backgroundColor: "#F3F4F6",
     borderRadius: 999,
     width: 22,
     height: 22,
     alignItems: "center",
     justifyContent: "center",
     marginHorizontal: 2,
-    shadowColor: "#22C55E",
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 1.5,
+    elevation: 0,
   },
   arrowIcon: {
     color: "#22C55E",
@@ -270,40 +292,41 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     color: "#A1A1AB",
-    fontFamily: "SpaceMono",
   },
   dayCell: {
     flex: 1,
     aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
-    margin: 1,
+    marginHorizontal: 3,
+    marginVertical: 4,
   },
-  dayButton: {
-    borderRadius: 8,
+  // Pill that visually represents a day; kept smaller than the cell for a cleaner look
+  dayPill: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayPillDefault: {
     backgroundColor: "#F8F9FA",
   },
-  dayButtonSelected: {
+  dayPillSelected: {
     backgroundColor: "#22C55E",
-    borderRadius: 10,
-    shadowColor: "#22C55E",
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  dayButtonToday: {
+  dayPillToday: {
     borderWidth: 1,
     borderColor: "#22C55E",
-    borderRadius: 10,
+    backgroundColor: "#ECFDF3",
   },
-  dayButtonExpired: {
-    backgroundColor: "transparent",
+  dayPillExpired: {
+    backgroundColor: "#F3F4F6",
   },
   dayText: {
     fontSize: 12,
     fontWeight: "500",
     color: "#374151",
-    fontFamily: "SpaceMono",
   },
   dayTextSelected: {
     color: "#FFF",

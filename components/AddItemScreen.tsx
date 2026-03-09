@@ -33,20 +33,67 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import {
+  DropIcon,
+  BoneIcon,
+  FishIcon,
+  CarrotIcon,
+  AppleLogoIcon,
+  BreadIcon,
+  EggIcon,
+  GrainsIcon,
+  CookieIcon,
+  CoffeeIcon,
+  BeerBottleIcon,
+  CookingPotIcon,
+  SnowflakeIcon,
+  PackageIcon,
+} from "phosphor-react-native";
 import { SimpleCalendar } from "./SimpleCalendar";
 
 // Move these up before their first use
-const commonUnits = ["pcs", "kg", "g", "L", "ml", "oz", "lb", "servings"];
-const commonCategories = [
-  "Dairy",
-  "Meat",
-  "Vegetables",
-  "Fruits",
-  "Beverages",
-  "Snacks",
-  "Frozen",
-  "Condiments",
+const commonUnits = [
+  "pcs",
+  "kg",
+  "g",
+  "lb",
+  "oz",
+  "L",
+  "ml",
+  "pack",
+  "can",
+  "jar",
+  "bottle",
+  "box",
+  "bag",
+  "servings",
+  "portion",
 ];
+
+const CATEGORY_OPTIONS: {
+  label: string;
+  Icon: React.ComponentType<{ size?: number; color?: string; weight?: "regular" | "fill" | "bold" }>;
+}[] = [
+  { label: "Dairy", Icon: DropIcon },
+  { label: "Meat", Icon: BoneIcon },
+  { label: "Seafood", Icon: FishIcon },
+  { label: "Vegetables", Icon: CarrotIcon },
+  { label: "Fruits", Icon: AppleLogoIcon },
+  { label: "Bakery", Icon: BreadIcon },
+  { label: "Eggs", Icon: EggIcon },
+  { label: "Grains", Icon: GrainsIcon },
+  { label: "Snacks", Icon: CookieIcon },
+  { label: "Beverages", Icon: CoffeeIcon },
+  { label: "Condiments", Icon: BeerBottleIcon },
+  { label: "Prepared Meals", Icon: CookingPotIcon },
+  { label: "Frozen", Icon: SnowflakeIcon },
+  { label: "Other", Icon: PackageIcon },
+];
+const CATEGORY_LABELS = CATEGORY_OPTIONS.map((o) => o.label);
+
+const CHIPS_PER_ROW = 7;
+const CATEGORY_ROW_1 = CATEGORY_OPTIONS.slice(0, CHIPS_PER_ROW);
+const CATEGORY_ROW_2 = CATEGORY_OPTIONS.slice(CHIPS_PER_ROW);
 
 export default function AddItemScreen() {
   const params = useLocalSearchParams<{ edit: string; id: string }>();
@@ -75,21 +122,13 @@ export default function AddItemScreen() {
   const [suggestions, setSuggestions] = useState<FoodItem[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  // 1. Add state for category dropdown and search
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [categorySearch, setCategorySearch] = useState("");
-  const categoryDropdownTriggerRef = useRef<View>(null);
-  const [categoryDropdownPos, setCategoryDropdownPos] = useState<{
-    x: number;
-    y: number;
-  }>({ x: 0, y: 0 });
+  const [calendarWeeks, setCalendarWeeks] = useState(5);
 
   const { width } = useWindowDimensions();
   const addButtonScale = useRef(new Animated.Value(1)).current;
   const [showSuccess, setShowSuccess] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const insets = useSafeAreaInsets();
-  const quantityInputRef = useRef<TextInput>(null);
 
   // Calendar context for real-time updates after save
   const { refresh, invalidateCache } = useCalendar();
@@ -97,6 +136,13 @@ export default function AddItemScreen() {
   // Add icon requires
   const fridgeIcon = require("../assets/images/icons/fridge_icon.png");
   const shelfIcon = require("../assets/images/icons/shelf_icon.png");
+
+  // Layout constants
+  const UNIT_DROPDOWN_WIDTH = 180;
+  const unitDropdownLeft = Math.min(
+    Math.max(dropdownPos.x - 10, 16),
+    width - 16 - UNIT_DROPDOWN_WIDTH
+  );
 
   // Animate card entrance
   const cardAnim = useRef(new Animated.Value(0)).current;
@@ -149,8 +195,6 @@ export default function AddItemScreen() {
         setExpiryDate(null);
         setNotes("");
         setShowUnitDropdown(false);
-        setShowCategoryDropdown(false);
-        setCategorySearch("");
       }
     }, [isEditing])
   );
@@ -190,7 +234,9 @@ export default function AddItemScreen() {
         setQuantity(String(item.quantity));
         setUnit(item.unit || "pcs");
         setLocation(item.location as "fridge" | "shelf");
-        setCategory(item.category || "");
+        const cat = item.category || "";
+        // Map legacy categories to chip set (Dairy, Meat, Vegetables, Fruits, Beverages, Other)
+        setCategory(CATEGORY_LABELS.includes(cat) ? cat : cat ? "Other" : "");
         setNotes(item.notes || "");
         if (item.expiry_date) {
           setExpiryDate(new Date(item.expiry_date));
@@ -452,340 +498,351 @@ export default function AddItemScreen() {
               justifyContent: "flex-start",
             }}
           >
-            {/* Item Name and Category side by side */}
-            <View
-              style={{
-                width: "100%",
-                flexDirection: "row",
-                alignItems: "flex-end",
-                gap: 12,
-                marginBottom: 16,
-              }}
-            >
-              {/* Item Name input (left) */}
-              <View style={{ flex: 1 }}>
-                <ThemedText
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "600",
-                    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                    color: "#222",
-                    marginBottom: 2,
-                  }}
-                >
-                  Item Name
-                </ThemedText>
-                <View style={{ position: "relative", width: "100%" }}>
-                  {name.length === 0 && (
-                    <Text
+            {/* Name | Quantity (same row) */}
+            <View style={{ width: "100%", marginBottom: 16, alignItems: "center" }}>
+              <View style={{ width: "100%", maxWidth: 360 }}>
+                <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
+                  {/* Item Name */}
+                  <View style={{ flex: 1 }}>
+                    <ThemedText
                       style={{
-                        position: "absolute",
-                        left: 18,
-                        top: 14,
                         fontSize: 13,
-                        color: "#A1A1AB",
-                        zIndex: 1,
+                        fontWeight: "500",
+                        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                        color: "#4B5563",
+                        marginBottom: 6,
+                        marginLeft: 4,
                       }}
                     >
-                      e.g. Milk, Chicken, Apples
-                    </Text>
-                  )}
-                  <TextInput
-                    style={{
-                      fontSize: 15,
-                      fontWeight: "500",
-                      color: "#222",
-                      backgroundColor: "#F5F5F5",
-                      borderRadius: 16,
-                      borderWidth: 1.2,
-                      borderColor: "#E5E7EB",
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      width: "100%",
-                      height: 44,
-                      fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                    }}
-                    value={name}
-                    onChangeText={(text) => {
-                      setName(text);
-                      Haptics.selectionAsync();
-                    }}
-                    accessibilityLabel="Item Name"
-                  />
-                </View>
-              </View>
-              {/* Category selector (right) */}
-              <View style={{ flex: 1 }}>
-                <ThemedText
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "600",
-                    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                    color: "#222",
-                    marginBottom: 2,
-                  }}
-                >
-                  Category
-                </ThemedText>
-                <Pressable
-                  ref={categoryDropdownTriggerRef}
-                  onPress={() => {
-                    if (categoryDropdownTriggerRef.current) {
-                      categoryDropdownTriggerRef.current.measureInWindow(
-                        (
-                          x: number,
-                          y: number,
-                          width: number,
-                          height: number
-                        ) => {
-                          let offsetY = y + height;
-                          if (Platform.OS === "android") {
-                            offsetY -= Constants.statusBarHeight || 0;
-                          } else {
-                            offsetY -= insets.top;
-                          }
-                          setCategoryDropdownPos({ x, y: offsetY });
-                          setShowCategoryDropdown(true);
-                        }
-                      );
-                    } else {
-                      setShowCategoryDropdown(true);
-                    }
-                  }}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    borderWidth: 1.2,
-                    borderColor: "#E5E7EB",
-                    borderRadius: 16,
-                    backgroundColor: "#F5F5F5",
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    width: "100%",
-                    height: 44,
-                    justifyContent: "space-between",
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Select category"
-                >
-                  <ThemedText
-                    style={{
-                      color: "#222",
-                      fontWeight: "500",
-                      fontSize: 15,
-                      fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                    }}
-                  >
-                    {category || "Select category"}
-                  </ThemedText>
-                  <View style={{ marginLeft: 6 }}>
-                    <ThemedText style={{ fontSize: 14, color: "#A1A1AB" }}>
-                      ▼
+                      Item Name
                     </ThemedText>
+                    <View style={{ position: "relative", width: "100%" }}>
+                      {name.length === 0 && (
+                        <Text
+                          style={{
+                            position: "absolute",
+                            left: 18,
+                            top: 14,
+                            fontSize: 13,
+                            color: "#A1A1AB",
+                            zIndex: 1,
+                          }}
+                        >
+                          e.g. Milk, Chicken, Apples
+                        </Text>
+                      )}
+                      <TextInput
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "500",
+                          color: "#222",
+                          backgroundColor: "#F5F5F5",
+                          borderRadius: 16,
+                          borderWidth: 1.2,
+                          borderColor: "#E5E7EB",
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                          width: "100%",
+                          height: 44,
+                          fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                          textAlign: "left",
+                        }}
+                        value={name}
+                        onChangeText={(text) => {
+                          setName(text);
+                          Haptics.selectionAsync();
+                        }}
+                        accessibilityLabel="Item Name"
+                      />
+                    </View>
                   </View>
-                </Pressable>
+
+                  {/* Quantity (compact, right) */}
+                  <View style={{ width: 116 }}>
+                    <ThemedText
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "500",
+                        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                        color: "#4B5563",
+                        marginBottom: 6,
+                        marginLeft: 4,
+                      }}
+                    >
+                      Quantity
+                    </ThemedText>
+                    <View
+                      style={{
+                        height: 44,
+                        backgroundColor: "#F5F5F5",
+                        borderRadius: 16,
+                        borderWidth: 1.2,
+                        borderColor: "#E5E7EB",
+                        paddingHorizontal: 6,
+                        paddingVertical: 4,
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      {/* Row: - 1 + */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: 2,
+                        }}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setQuantity((q) =>
+                              String(Math.max(1, (parseInt(q) || 1) - 1))
+                            );
+                            Haptics.selectionAsync();
+                          }}
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            backgroundColor: "#FFF",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderWidth: 1,
+                            borderColor: "#E5E7EB",
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Decrease quantity"
+                        >
+                          <ThemedText
+                            style={{ fontSize: 14, color: "#111827", fontWeight: "800" }}
+                          >
+                            −
+                          </ThemedText>
+                        </Pressable>
+
+                        <ThemedText
+                          style={{
+                            minWidth: 18,
+                            textAlign: "center",
+                            fontSize: 15,
+                            color: "#111",
+                            fontWeight: "800",
+                            fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                          }}
+                        >
+                          {String(Math.max(1, parseInt(quantity) || 1))}
+                        </ThemedText>
+
+                        <Pressable
+                          onPress={() => {
+                            setQuantity((q) =>
+                              String(Math.min(999, (parseInt(q) || 1) + 1))
+                            );
+                            Haptics.selectionAsync();
+                          }}
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            backgroundColor: "#FFF",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            borderWidth: 1,
+                            borderColor: "#E5E7EB",
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Increase quantity"
+                        >
+                          <ThemedText
+                            style={{ fontSize: 14, color: "#111827", fontWeight: "800" }}
+                          >
+                            +
+                          </ThemedText>
+                        </Pressable>
+                      </View>
+
+                      {/* Row: unit dropdown centered under number */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        <Pressable
+                          ref={unitDropdownTriggerRef}
+                          onPress={() => {
+                            if (unitDropdownTriggerRef.current) {
+                              unitDropdownTriggerRef.current.measureInWindow(
+                                (
+                                  x: number,
+                                  y: number,
+                                  width: number,
+                                  height: number
+                                ) => {
+                                  let offsetY = y + height;
+                                  if (Platform.OS === "android") {
+                                    offsetY -= Constants.statusBarHeight || 0;
+                                  } else {
+                                    offsetY -= insets.top;
+                                  }
+                                  setDropdownPos({ x, y: offsetY });
+                                  setShowUnitDropdown(true);
+                                }
+                              );
+                            } else {
+                              setShowUnitDropdown(true);
+                            }
+                          }}
+                          style={{
+                            minWidth: 44,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 999,
+                            backgroundColor: "#FFF",
+                            borderWidth: 1,
+                            borderColor: "#E5E7EB",
+                            gap: 2,
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Select unit"
+                        >
+                          <ThemedText
+                            style={{
+                              color: "#222",
+                              fontWeight: "700",
+                              fontSize: 11,
+                              fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                              textAlign: "center",
+                            }}
+                          >
+                            {unit || "pcs"}
+                          </ThemedText>
+                          <ThemedText style={{ fontSize: 9, color: "#A1A1AB" }}>▾</ThemedText>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                </View>
               </View>
             </View>
 
-            <View style={{ width: "100%", marginBottom: 8 }}>
+            {/* Category — DoorDash-style: Phosphor icons, 2 rows, compact pills */}
+            <View style={{ width: "100%", marginBottom: 16 }}>
               <ThemedText
                 style={{
-                  fontSize: 15,
-                  fontWeight: "700",
+                  fontSize: 12,
+                  fontWeight: "500",
                   fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                  color: "#222",
-                  marginBottom: 8,
-                  textAlign: "center",
+                  color: "#4B5563",
+                  marginBottom: 6,
                 }}
               >
-                Quantity
+                Category
               </ThemedText>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: "#FFF",
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: "#E5E7EB",
-                  paddingVertical: 8,
-                  paddingHorizontal: 4,
-                  shadowColor: "#111",
-                  shadowOpacity: 0.04,
-                  shadowRadius: 6,
-                  elevation: 2,
-                  width: "65%",
-                  alignSelf: "center",
-                }}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 16 }}
+                style={{ marginHorizontal: -4 }}
               >
-                {/* Quantity controls */}
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <Pressable
-                    onPress={() =>
-                      setQuantity((q) =>
-                        String(Math.max(1, (parseInt(q) || 1) - 1))
-                      )
-                    }
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 12,
-                      backgroundColor: "#F3F4F6",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderWidth: 1.2,
-                      borderColor: "#E5E7EB",
-                      marginLeft: 28,
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Decrease quantity"
-                  >
-                    <ThemedText
-                      style={{
-                        fontSize: 16,
-                        color: "#22C55E",
-                        fontWeight: "700",
-                      }}
-                    >
-                      –
-                    </ThemedText>
-                  </Pressable>
-                  <View
-                    style={{
-                      minWidth: 36,
-                      maxWidth: 44,
-                      height: 28,
-                      borderRadius: 8,
-                      backgroundColor: "#FFF",
-                      borderWidth: 1.5,
-                      borderColor: "#22C55E",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginHorizontal: 2,
-                    }}
-                  >
-                    <TextInput
-                      ref={quantityInputRef}
-                      style={{
-                        fontSize: 16,
-                        color: "#222",
-                        fontWeight: "700",
-                        textAlign: "center",
-                        width: 36,
-                        height: 24,
-                        paddingVertical: 0,
-                        paddingHorizontal: 0,
-                        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                      }}
-                      value={quantity}
-                      onChangeText={(val) =>
-                        setQuantity(val.replace(/[^0-9]/g, ""))
-                      }
-                      keyboardType="numeric"
-                      accessibilityLabel="Quantity"
-                      maxLength={3}
-                      textAlignVertical="center"
-                      onFocus={() => {
-                        if (quantity === "1" && quantityInputRef.current) {
-                          quantityInputRef.current.setSelection(
-                            0,
-                            quantity.length
-                          );
-                        }
-                      }}
-                    />
-                  </View>
-                  <Pressable
-                    onPress={() =>
-                      setQuantity((q) =>
-                        String(Math.min(999, (parseInt(q) || 1) + 1))
-                      )
-                    }
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 12,
-                      backgroundColor: "#F3F4F6",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderWidth: 1.2,
-                      borderColor: "#E5E7EB",
-                      marginRight: 12,
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Increase quantity"
-                  >
-                    <ThemedText
-                      style={{
-                        fontSize: 16,
-                        color: "#22C55E",
-                        fontWeight: "700",
-                      }}
-                    >
-                      +
-                    </ThemedText>
-                  </Pressable>
-                </View>
-                {/* Unit selector on the right */}
-                <Pressable
-                  ref={unitDropdownTriggerRef}
-                  onPress={() => {
-                    if (unitDropdownTriggerRef.current) {
-                      unitDropdownTriggerRef.current.measureInWindow(
-                        (
-                          x: number,
-                          y: number,
-                          width: number,
-                          height: number
-                        ) => {
-                          let offsetY = y + height;
-                          if (Platform.OS === "android") {
-                            offsetY -= Constants.statusBarHeight || 0;
-                          } else {
-                            offsetY -= insets.top;
-                          }
-                          setDropdownPos({ x, y: offsetY });
-                          setShowUnitDropdown(true);
-                        }
-                      );
-                    } else {
-                      setShowUnitDropdown(true);
-                    }
-                  }}
+                <View
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    borderWidth: 2,
-                    borderColor: "#22C55E",
-                    borderRadius: 18,
-                    backgroundColor: "#F5F5F5",
-                    paddingHorizontal: 10,
-                    paddingVertical: 5,
-                    minWidth: 36,
-                    marginLeft: 6,
-                    justifyContent: "center",
-                    alignSelf: "center",
+                    minWidth: width * 1.6,
+                    flexDirection: "column",
+                    gap: 5,
                   }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Select unit"
                 >
-                  <ThemedText
-                    style={{
-                      color: "#222",
-                      fontWeight: "700",
-                      fontSize: 13,
-                      fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                    }}
-                  >
-                    {unit || "Unit"}
-                  </ThemedText>
-                  <ThemedText
-                    style={{ fontSize: 12, color: "#A1A1AB", marginLeft: 4 }}
-                  >
-                    ▼
-                  </ThemedText>
-                </Pressable>
-              </View>
+                  <View style={{ flexDirection: "row", gap: 6, flexWrap: "nowrap" }}>
+                    {CATEGORY_ROW_1.map(({ label, Icon }) => {
+                      const selected = category === label;
+                      return (
+                        <Pressable
+                          key={label}
+                          onPress={() => {
+                            setCategory(label);
+                            Haptics.selectionAsync();
+                          }}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            borderRadius: 999,
+                            backgroundColor: selected ? "#22C55E" : "#F0F0F0",
+                            borderWidth: 0,
+                            gap: 4,
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Category ${label}`}
+                          accessibilityState={{ selected }}
+                        >
+                          <Icon
+                            size={14}
+                            color={selected ? "#FFF" : "#1A1A1A"}
+                            weight="regular"
+                          />
+                          <ThemedText
+                            style={{
+                              fontSize: 11,
+                              fontWeight: "500",
+                              fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                              color: selected ? "#FFF" : "#4B5563",
+                            }}
+                          >
+                            {label}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 6, flexWrap: "nowrap" }}>
+                    {CATEGORY_ROW_2.map(({ label, Icon }) => {
+                      const selected = category === label;
+                      return (
+                        <Pressable
+                          key={label}
+                          onPress={() => {
+                            setCategory(label);
+                            Haptics.selectionAsync();
+                          }}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            borderRadius: 999,
+                            backgroundColor: selected ? "#22C55E" : "#F0F0F0",
+                            borderWidth: 0,
+                            gap: 4,
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Category ${label}`}
+                          accessibilityState={{ selected }}
+                        >
+                          <Icon
+                            size={14}
+                            color={selected ? "#FFF" : "#1A1A1A"}
+                            weight="regular"
+                          />
+                          <ThemedText
+                            style={{
+                              fontSize: 11,
+                              fontWeight: "500",
+                              fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                              color: selected ? "#FFF" : "#4B5563",
+                            }}
+                          >
+                            {label}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              </ScrollView>
             </View>
             {/* Calendar full width below */}
             <View
@@ -799,9 +856,9 @@ export default function AddItemScreen() {
               <ThemedText
                 style={{
                   fontSize: 13,
-                  fontWeight: "600",
+                  fontWeight: "500",
                   fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                  color: "#222",
+                  color: "#4B5563",
                   marginBottom: 2,
                 }}
               >
@@ -823,16 +880,18 @@ export default function AddItemScreen() {
                 <SimpleCalendar
                   selectedDate={expiryDate}
                   onSelect={(date: Date) => setExpiryDate(date)}
+                  onWeeksChange={(weeks) => setCalendarWeeks(weeks)}
                 />
               </View>
             </View>
-            {/* Move the FloatingAddItemButton below the calendar, centered horizontally, but keep its original styling and make the text one line */}
+            {/* FloatingAddItemButton below the calendar, kept a bit higher so it doesn't sit too close to the bottom even with tall calendars */}
             <View
               style={{
                 width: "100%",
                 alignItems: "center",
-                marginTop: 18,
-                paddingBottom: insets.bottom + 40,
+                marginTop: calendarWeeks >= 6 ? 4 : 12,
+                paddingBottom:
+                  insets.bottom + (calendarWeeks >= 6 ? 8 : 20),
               }}
             >
               <FloatingAddItemButton
@@ -872,27 +931,27 @@ export default function AddItemScreen() {
           <View
             style={{
               position: "absolute",
-              top: dropdownPos.y,
-              left: dropdownPos.x - 10,
-              width: 125,
-              backgroundColor: "#F6FFF9",
-              borderRadius: 16,
-              borderWidth: 2,
-              borderColor: "#22C55E",
+              top: dropdownPos.y + 4,
+              left: unitDropdownLeft,
+              width: UNIT_DROPDOWN_WIDTH,
+              backgroundColor: "#FFF",
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
               zIndex: 1001,
               elevation: 8,
               shadowColor: "#000",
-              shadowOpacity: 0.06,
-              shadowRadius: 8,
-              overflow: "visible",
-              alignSelf: "flex-start",
+              shadowOpacity: 0.08,
+              shadowRadius: 10,
+              overflow: "hidden",
+              alignSelf: "center",
             }}
           >
             <ScrollView
-              style={{ maxHeight: 200, zIndex: 1, paddingRight: 6 }}
+              style={{ maxHeight: 160, zIndex: 1 }}
               showsVerticalScrollIndicator={true}
               persistentScrollbar={true}
-              contentContainerStyle={{ paddingVertical: 4, paddingBottom: 24 }}
+              contentContainerStyle={{ paddingVertical: 4, paddingBottom: 8 }}
             >
               {commonUnits.map((u, i) => (
                 <Pressable
@@ -903,24 +962,23 @@ export default function AddItemScreen() {
                     Haptics.selectionAsync();
                   }}
                   style={{
-                    paddingVertical: 8,
-                    paddingHorizontal: 18,
-                    backgroundColor:
-                      unit === u
-                        ? "#22C55E"
-                        : i % 2 === 0
-                        ? "#E0F7EC"
-                        : "#D1F5E0",
-                    borderRadius: 12,
+                    alignItems: "center",
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    backgroundColor: unit === u ? "#DCFCE7" : "#FFF",
                     marginHorizontal: 8,
-                    marginVertical: 2,
+                    marginVertical: 1,
+                    borderRadius: 8,
                   }}
                 >
                   <ThemedText
                     style={{
-                      color: unit === u ? "#FFF" : "#222",
+                      color: unit === u ? "#166534" : "#111827",
                       fontWeight: "500",
-                      fontSize: 16,
+                      fontSize: 13,
+                      lineHeight: 18,
+                      textAlign: "center",
+                      fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                     }}
                   >
                     {u}
@@ -935,140 +993,14 @@ export default function AddItemScreen() {
                 alignItems: "center",
                 borderTopWidth: 1,
                 borderColor: "#E5E7EB",
-                backgroundColor: "#F6FFF9",
-                borderBottomLeftRadius: 16,
-                borderBottomRightRadius: 16,
+                backgroundColor: "#FFF",
+                borderBottomLeftRadius: 12,
+                borderBottomRightRadius: 12,
               }}
             >
               <ThemedText
                 style={{
-                  color: "#22C55E",
-                  fontWeight: "700",
-                  fontSize: 15,
-                  letterSpacing: 0.2,
-                }}
-              >
-                Cancel
-              </ThemedText>
-            </Pressable>
-          </View>
-        </>
-      )}
-      {showCategoryDropdown && (
-        <>
-          <Pressable
-            onPress={() => setShowCategoryDropdown(false)}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0,0,0,0.01)",
-              zIndex: 1000,
-            }}
-          />
-          <View
-            style={{
-              position: "absolute",
-              top: categoryDropdownPos.y,
-              left: categoryDropdownPos.x,
-              width: 170,
-              backgroundColor: "#F6FFF9",
-              borderRadius: 16,
-              borderWidth: 2,
-              borderColor: "#22C55E",
-              zIndex: 1001,
-              elevation: 24,
-              shadowColor: "#22C55E",
-              shadowOpacity: 0.1,
-              shadowRadius: 16,
-              overflow: "visible",
-            }}
-          >
-            <View style={{ padding: 8 }}>
-              <TextInput
-                value={categorySearch}
-                onChangeText={setCategorySearch}
-                placeholder="Search category"
-                placeholderTextColor="#A1A1AB"
-                style={{
-                  backgroundColor: "#FFF",
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: "#E5E7EB",
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  fontSize: 15,
-                  marginBottom: 8,
-                  color: "#222",
-                  fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                }}
-              />
-            </View>
-            <ScrollView
-              style={{ height: 160, zIndex: 1, paddingRight: 6 }}
-              showsVerticalScrollIndicator={true}
-              persistentScrollbar={true}
-              contentContainerStyle={{ paddingVertical: 4, paddingBottom: 24 }}
-            >
-              {commonCategories
-                .filter((cat) =>
-                  cat.toLowerCase().includes(categorySearch.toLowerCase())
-                )
-                .map((cat, i) => (
-                  <Pressable
-                    key={cat}
-                    onPress={() => {
-                      setCategory(cat);
-                      setShowCategoryDropdown(false);
-                      Haptics.selectionAsync();
-                      setCategorySearch("");
-                    }}
-                    style={{
-                      paddingVertical: 8,
-                      paddingHorizontal: 18,
-                      backgroundColor:
-                        category === cat
-                          ? "#22C55E"
-                          : i % 2 === 0
-                          ? "#E0F7EC"
-                          : "#D1F5E0",
-                      borderRadius: 12,
-                      marginHorizontal: 8,
-                      marginVertical: 2,
-                    }}
-                  >
-                    <ThemedText
-                      style={{
-                        color: category === cat ? "#FFF" : "#222",
-                        fontWeight: "500",
-                        fontSize: 16,
-                      }}
-                    >
-                      {cat}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-            </ScrollView>
-            <Pressable
-              onPress={() => {
-                setShowCategoryDropdown(false);
-                setCategorySearch("");
-              }}
-              style={{
-                padding: 12,
-                alignItems: "center",
-                borderTopWidth: 1,
-                borderColor: "#E5E7EB",
-                backgroundColor: "#F6FFF9",
-                borderBottomLeftRadius: 16,
-                borderBottomRightRadius: 16,
-              }}
-            >
-              <ThemedText
-                style={{
-                  color: "#22C55E",
+                  color: "#166534",
                   fontWeight: "700",
                   fontSize: 15,
                   letterSpacing: 0.2,
