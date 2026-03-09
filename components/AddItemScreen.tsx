@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Easing,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -128,6 +129,15 @@ export default function AddItemScreen() {
   const addButtonScale = useRef(new Animated.Value(1)).current;
   const [showSuccess, setShowSuccess] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const successAnim = useRef(new Animated.Value(0)).current;
+  const successScale = successAnim.interpolate({
+    inputRange: [0, 0.7, 1],
+    outputRange: [0.8, 1.05, 1],
+  });
+  const successTranslateY = successAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [24, 0],
+  });
   const insets = useSafeAreaInsets();
 
   // Calendar context for real-time updates after save
@@ -138,10 +148,10 @@ export default function AddItemScreen() {
   const shelfIcon = require("../assets/images/icons/shelf_icon.png");
 
   // Layout constants
-  const UNIT_DROPDOWN_WIDTH = 180;
+  const UNIT_DROPDOWN_WIDTH = 115;
   const unitDropdownLeft = Math.min(
     Math.max(dropdownPos.x - 10, 16),
-    width - 16 - UNIT_DROPDOWN_WIDTH
+    width - 25 - UNIT_DROPDOWN_WIDTH
   );
 
   // Animate card entrance
@@ -285,14 +295,21 @@ export default function AddItemScreen() {
           await refresh();
         } catch {}
         setShowSuccess(true);
+        successAnim.setValue(0);
+        Animated.timing(successAnim, {
+          toValue: 1,
+          duration: 400,
+          easing: Easing.out(Easing.exp),
+          useNativeDriver: true,
+        }).start();
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 350,
+          duration: 450,
           useNativeDriver: true,
         }).start(() => {
           setTimeout(() => {
             router.back();
-          }, 700);
+          }, 600);
         });
       } else {
         await foodItemsService.addItem(itemData);
@@ -302,14 +319,21 @@ export default function AddItemScreen() {
           await refresh();
         } catch {}
         setShowSuccess(true);
+        successAnim.setValue(0);
+        Animated.timing(successAnim, {
+          toValue: 1,
+          duration: 400,
+          easing: Easing.out(Easing.exp),
+          useNativeDriver: true,
+        }).start();
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 350,
+          duration: 450,
           useNativeDriver: true,
         }).start(() => {
           setTimeout(() => {
             router.back();
-          }, 700);
+          }, 600);
         });
 
         // Reset form only if adding new item
@@ -483,21 +507,22 @@ export default function AddItemScreen() {
         </Pressable>
       </View>
       {/* Main Content with horizontal padding */}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
-      >
-        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "#FFF",
-              paddingHorizontal: 16,
-              paddingBottom: 32,
-              justifyContent: "flex-start",
-            }}
-          >
+      {!showSuccess && (
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+        >
+          <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: "#FFF",
+                paddingHorizontal: 16,
+                paddingBottom: 32,
+                justifyContent: "flex-start",
+              }}
+            >
             {/* Name | Quantity (same row) */}
             <View style={{ width: "100%", marginBottom: 16, alignItems: "center" }}>
               <View style={{ width: "100%", maxWidth: 360 }}>
@@ -511,7 +536,7 @@ export default function AddItemScreen() {
                         fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                         color: "#4B5563",
                         marginBottom: 6,
-                        marginLeft: 4,
+                        marginLeft: 12,
                       }}
                     >
                       Item Name
@@ -566,7 +591,7 @@ export default function AddItemScreen() {
                         fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                         color: "#4B5563",
                         marginBottom: 6,
-                        marginLeft: 4,
+                        marginLeft: 10,
                       }}
                     >
                       Quantity
@@ -910,9 +935,9 @@ export default function AddItemScreen() {
               />
             </View>
           </View>
-          {/* Properly close the main content View here */}
         </Animated.View>
       </KeyboardAvoidingView>
+      )}
       {/* Dropdown overlays moved here, as siblings to KeyboardAvoidingView */}
       {showUnitDropdown && (
         <>
@@ -931,7 +956,7 @@ export default function AddItemScreen() {
           <View
             style={{
               position: "absolute",
-              top: dropdownPos.y + 4,
+              top: dropdownPos.y + 25,
               left: unitDropdownLeft,
               width: UNIT_DROPDOWN_WIDTH,
               backgroundColor: "#FFF",
@@ -989,7 +1014,8 @@ export default function AddItemScreen() {
             <Pressable
               onPress={() => setShowUnitDropdown(false)}
               style={{
-                padding: 12,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
                 alignItems: "center",
                 borderTopWidth: 1,
                 borderColor: "#E5E7EB",
@@ -1001,9 +1027,10 @@ export default function AddItemScreen() {
               <ThemedText
                 style={{
                   color: "#166534",
-                  fontWeight: "700",
-                  fontSize: 15,
+                  fontWeight: "500",
+                  fontSize: 13,
                   letterSpacing: 0.2,
+                  fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                 }}
               >
                 Cancel
@@ -1013,28 +1040,46 @@ export default function AddItemScreen() {
         </>
       )}
       {showSuccess && (
-        <View
-          style={{
-            position: "absolute",
-            top: "40%",
-            left: 0,
-            right: 0,
-            alignItems: "center",
-            zIndex: 999,
-          }}
-        >
-          <Ionicons name="checkmark-circle" size={80} color="#22C55E" />
-          <Text
+        <>
+          {/* Dim background */}
+          <Animated.View
             style={{
-              fontSize: 22,
-              color: "#22C55E",
-              fontWeight: "bold",
-              marginTop: 12,
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(15,23,42,0.35)",
+              opacity: successAnim,
+              zIndex: 998,
+            }}
+          />
+          {/* Success badge */}
+          <Animated.View
+            style={{
+              position: "absolute",
+              top: "40%",
+              left: 0,
+              right: 0,
+              alignItems: "center",
+              zIndex: 999,
+              opacity: successAnim,
+              transform: [{ scale: successScale }, { translateY: successTranslateY }],
             }}
           >
-            Item Added!
-          </Text>
-        </View>
+            <Ionicons name="checkmark-circle" size={80} color="#22C55E" />
+            <Text
+              style={{
+                fontSize: 22,
+                color: "#22C55E",
+                fontWeight: "bold",
+                marginTop: 12,
+              }}
+            >
+              Item Added!
+            </Text>
+          </Animated.View>
+        </>
       )}
     </SafeAreaView>
   );

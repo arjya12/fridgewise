@@ -71,7 +71,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({
   const rightRoutes = visibleRoutes.slice(Math.floor(numVisibleTabs / 2));
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingBottom: insets.bottom + 4 }]}>
       <View style={styles.navigationBar}>
         {/* Left side tabs */}
         {leftRoutes.map((route, index) => {
@@ -196,20 +196,22 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 5,
+    backgroundColor: "transparent",
   },
   navigationBar: {
     flexDirection: "row",
     height: 60,
     alignItems: "center",
     justifyContent: "space-around",
+    marginHorizontal: 16,
+    marginBottom: 6,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 8,
   },
   tabButton: {
     flex: 1,
@@ -254,12 +256,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#22C55E",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24, // Lift it up a bit
+    marginBottom: 12,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 9,
   },
   addButtonInner: {
     width: 56,

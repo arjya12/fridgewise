@@ -132,7 +132,7 @@ export function EnhancedTabBar({
 
   const handleFABPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSpeedDialVisible(true);
+    router.push("/(tabs)/add");
   };
 
   const handleSpeedDialClose = () => {
@@ -193,12 +193,6 @@ export function EnhancedTabBar({
             {tabConfig.title}
           </Text>
 
-          {/* Active indicator dot */}
-          {isFocused && (
-            <View
-              style={[styles.activeIndicator, { backgroundColor: activeColor }]}
-            />
-          )}
         </View>
       </Pressable>
     );
@@ -216,7 +210,7 @@ export function EnhancedTabBar({
         accessible
         accessibilityRole="button"
         accessibilityLabel="Add new item"
-        accessibilityHint="Opens options to add items manually or scan barcode"
+        accessibilityHint="Opens the Add Item screen"
       >
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </Pressable>
@@ -237,23 +231,20 @@ export function EnhancedTabBar({
   return (
     <>
       {/* Tab Bar Container with Absolute Positioning for Full Screen Extension */}
-      <View
-        style={[
-          styles.tabBarContainer,
-          {
-            backgroundColor,
-            borderTopColor: borderColor,
-            // Absolute positioning to ensure full screen coverage
-            bottom: 0,
-            left: 0,
-            right: 0,
-            // Total height: tab content + safe area
-            height: 64 + 24 + insets.bottom, // 64 (content) + 24 (padding) + safe area
-          },
-        ]}
-      >
-        {/* Tab Bar Content - positioned with proper spacing from top */}
-        <View style={styles.tabBarContent}>
+      <View style={styles.tabBarContainer}>
+        {/* Floating oval background */}
+        <View
+          style={[
+            styles.tabBarPill,
+            {
+              backgroundColor,
+              borderColor,
+              marginBottom:  37,
+            },
+          ]}
+        >
+          {/* Tab Bar Content - positioned with proper spacing */}
+          <View style={styles.tabBarContent}>
           {/* Left tabs */}
           <View style={styles.tabSection}>
             {visibleRoutes
@@ -266,26 +257,18 @@ export function EnhancedTabBar({
           {/* Center FAB */}
           {renderFAB()}
 
-          {/* Right tabs */}
-          <View style={styles.tabSection}>
-            {visibleRoutes
-              .slice(2, 4)
-              .map((route: any, index: number) =>
-                renderTab(route, state.routes.indexOf(route))
-              )}
+            {/* Right tabs */}
+            <View style={styles.tabSection}>
+              {visibleRoutes
+                .slice(2, 4)
+                .map((route: any, index: number) =>
+                  renderTab(route, state.routes.indexOf(route))
+                )}
+            </View>
           </View>
         </View>
-
-        {/* Safe Area Padding - ensures content doesn't get too close to screen edge */}
-        <View style={{ height: insets.bottom }} />
       </View>
 
-      {/* Speed Dial */}
-      <SpeedDial
-        visible={speedDialVisible}
-        onClose={handleSpeedDialClose}
-        actions={speedDialActions}
-      />
     </>
   );
 }
@@ -298,30 +281,35 @@ const styles = StyleSheet.create({
   // Main tab bar container with absolute positioning for full screen extension
   tabBarContainer: {
     position: "absolute",
-    borderTopWidth: 1,
-    // Flatten the bar – remove drop shadow
-    elevation: 0,
-    shadowColor: "transparent",
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    // Reduced top corners radius to minimize content overlap
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    // Ensure proper z-index for elevation
+    bottom: 0,
+    left: 0,
+    right: 0,
     zIndex: 1000,
+    alignItems: "stretch",
+  },
+  tabBarPill: {
+    flexDirection: "row",
+    borderRadius: 999,
+    marginHorizontal: 16,
+    alignSelf: "stretch",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    // Soft floating shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 6,
   },
   tabBarContent: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 12,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    minHeight: 64,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    minHeight: 52,
   },
   tabSection: {
     flex: 1,
