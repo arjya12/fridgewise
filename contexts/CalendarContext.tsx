@@ -12,7 +12,7 @@ import React, {
   useMemo,
   useReducer,
 } from "react";
-import { clearMonthDataCache } from "../hooks/useEnhancedCalendar";
+import { clearMonthDataCache } from "../utils/calendarCache";
 import { FoodItem } from "../lib/supabase";
 import { CalendarMonth } from "../types/calendar";
 import {

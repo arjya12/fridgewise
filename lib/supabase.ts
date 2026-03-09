@@ -6,8 +6,33 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Missing Supabase environment variables");
+  console.error("Missing Supabase environment variables - check your .env file");
+} else if (__DEV__) {
+  const domain = supabaseUrl.replace(/^https?:\/\//, "").split("/")[0];
+  console.log("[Supabase] Configured for:", domain);
 }
+
+// Custom fetch with retry for Android "Network request failed" (common on RN + Supabase)
+const fetchWithRetry: typeof fetch = async (input, init) => {
+  const maxRetries = 3;
+  let lastError: unknown;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fetch(input, init);
+    } catch (e) {
+      lastError = e;
+      const isNetworkError =
+        e instanceof TypeError &&
+        (e.message === "Network request failed" || e.message?.includes("Network request failed"));
+      if (isNetworkError && i < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
+};
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -16,6 +41,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
+  global: { fetch: fetchWithRetry },
 });
 
 // Database types

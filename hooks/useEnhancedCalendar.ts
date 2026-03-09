@@ -13,30 +13,17 @@ import {
   FilterOptionsEnhanced,
   SortOptionsEnhanced,
 } from "../types/calendar-enhanced";
+import {
+  clearMonthDataCache,
+  getCachedMonthData,
+  setCachedMonthData,
+  hasValidCache,
+} from "../utils/calendarCache";
 import { createEnhancedMarkedDates } from "../utils/calendarEnhancedDataUtils";
 import { getMonthRange } from "../utils/calendarUtils";
 
-// =============================================================================
-// PERFORMANCE OPTIMIZATIONS
-// =============================================================================
-
-// Cache for month data to prevent redundant API calls
-const monthDataCache = new Map<
-  string,
-  {
-    data: Record<string, FoodItem[]>;
-    timestamp: number;
-    expiry: number;
-  }
->();
-
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const MAX_CACHE_SIZE = 12; // Store up to 12 months
-
-// Clear cache function to handle data updates
-export const clearMonthDataCache = () => {
-  monthDataCache.clear();
-};
+// Re-export for backward compatibility
+export { clearMonthDataCache };
 
 // Batch prefetch adjacent months
 const prefetchAdjacentMonths = async (
@@ -63,7 +50,7 @@ const prefetchAdjacentMonths = async (
   Promise.all(
     adjacentMonths.map(async (month) => {
       const cacheKey = `${month.year}-${month.month}`;
-      if (!monthDataCache.has(cacheKey)) {
+      if (!hasValidCache(cacheKey)) {
         try {
           const { startDate, endDate } = getMonthRange(month.year, month.month);
           const items = await foodItemsService.getItemsByExpiryDate(
@@ -72,17 +59,7 @@ const prefetchAdjacentMonths = async (
           );
 
           // Cache the prefetched data
-          monthDataCache.set(cacheKey, {
-            data: items,
-            timestamp: Date.now(),
-            expiry: Date.now() + CACHE_DURATION,
-          });
-
-          // Limit cache size
-          if (monthDataCache.size > MAX_CACHE_SIZE) {
-            const oldestKey = Array.from(monthDataCache.keys())[0];
-            monthDataCache.delete(oldestKey);
-          }
+          setCachedMonthData(cacheKey, items);
         } catch (error) {
           console.warn("Prefetch failed for month:", month, error);
         }
@@ -97,13 +74,13 @@ const fetchMonthDataOptimized = async (
   foodItemsService: any
 ): Promise<Record<string, FoodItem[]>> => {
   const cacheKey = `${month.year}-${month.month}`;
-  const cached = monthDataCache.get(cacheKey);
+  const cached = getCachedMonthData(cacheKey);
 
   // Return cached data if valid
-  if (cached && Date.now() < cached.expiry) {
+  if (cached) {
     // Prefetch adjacent months in background
     prefetchAdjacentMonths(month, foodItemsService);
-    return cached.data;
+    return cached;
   }
 
   // Fetch fresh data
@@ -111,11 +88,7 @@ const fetchMonthDataOptimized = async (
   const items = await foodItemsService.getItemsByExpiryDate(startDate, endDate);
 
   // Cache the result
-  monthDataCache.set(cacheKey, {
-    data: items,
-    timestamp: Date.now(),
-    expiry: Date.now() + CACHE_DURATION,
-  });
+  setCachedMonthData(cacheKey, items);
 
   // Prefetch adjacent months
   prefetchAdjacentMonths(month, foodItemsService);
