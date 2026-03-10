@@ -15,7 +15,9 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "test:deep-link:ios": "npx uri-scheme open \"fridgewise://reset-password\" --ios",
+    "test:deep-link:android": "npx uri-scheme open \"fridgewise://reset-password\" --android"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

@@ -3,7 +3,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { NavigationContainer } from "@react-navigation/native";
 import { act, fireEvent, render } from "@testing-library/react-native";
 import React from "react";
-import { Alert } from "react-native";
 
 jest.mock("@expo/vector-icons", () => {
   const { View } = require("react-native");
@@ -15,6 +14,7 @@ jest.mock("@expo/vector-icons", () => {
 jest.mock("expo-router", () => ({
   router: {
     replace: jest.fn(),
+    push: jest.fn(),
   },
 }));
 
@@ -64,12 +64,13 @@ jest.mock("react-native-safe-area-context", () => {
 });
 
 describe("SignUpScreen", () => {
+  const signUpMock = jest.fn();
+
   beforeEach(() => {
     (useAuth as jest.Mock).mockReturnValue({
-      signUp: jest.fn().mockResolvedValue({ error: null }),
+      signUp: signUpMock.mockResolvedValue({ error: null }),
     });
     jest.clearAllMocks();
-    jest.spyOn(Alert, "alert");
   });
 
   it("should render all fields and the signup button", async () => {
@@ -79,14 +80,16 @@ describe("SignUpScreen", () => {
       </NavigationContainer>
     );
 
-    const fullNameInput = getByPlaceholderText("Name");
+    const firstNameInput = getByPlaceholderText("First Name");
+    const lastNameInput = getByPlaceholderText("Last Name");
     const emailInput = getByPlaceholderText("Email");
     const passwordInput = getByPlaceholderText("Password");
     const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
     const termsSwitch = getByTestId("terms-switch");
 
-    expect(fullNameInput).toBeTruthy();
+    expect(firstNameInput).toBeTruthy();
+    expect(lastNameInput).toBeTruthy();
     expect(emailInput).toBeTruthy();
     expect(passwordInput).toBeTruthy();
     expect(confirmPasswordInput).toBeTruthy();
@@ -94,8 +97,8 @@ describe("SignUpScreen", () => {
     expect(termsSwitch).toBeTruthy();
   });
 
-  it("should show alert when fields are empty", async () => {
-    const { getByTestId } = render(
+  it("should show inline errors when fields are empty", async () => {
+    const { getByTestId, getByText } = render(
       <NavigationContainer>
         <SignUpScreen />
       </NavigationContainer>
@@ -104,89 +107,87 @@ describe("SignUpScreen", () => {
 
     fireEvent.press(signupButton);
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      "Missing Information",
-      "Please fill in all fields."
-    );
+    expect(getByText("Fix the highlighted fields to continue.")).toBeTruthy();
   });
 
-  it("should show alert when passwords do not match", async () => {
-    const { getByPlaceholderText, getByTestId } = render(
+  it("should show inline error when passwords do not match", async () => {
+    const { getByPlaceholderText, getByTestId, getByText } = render(
       <NavigationContainer>
         <SignUpScreen />
       </NavigationContainer>
     );
 
-    const fullNameInput = getByPlaceholderText("Name");
+    const firstNameInput = getByPlaceholderText("First Name");
+    const lastNameInput = getByPlaceholderText("Last Name");
     const emailInput = getByPlaceholderText("Email");
     const passwordInput = getByPlaceholderText("Password");
     const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
     const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "Test User");
+    fireEvent.changeText(firstNameInput, "Test");
+    fireEvent.changeText(lastNameInput, "User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "password123");
     fireEvent.changeText(confirmPasswordInput, "password456");
     fireEvent.press(termsSwitch);
     fireEvent.press(signupButton);
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      "Password Mismatch",
-      "The passwords do not match."
-    );
+    expect(getByText("Passwords do not match.")).toBeTruthy();
   });
 
-  it("should show alert when password is too short", async () => {
-    const { getByPlaceholderText, getByTestId } = render(
+  it("should show inline error when password is too short", async () => {
+    const { getByPlaceholderText, getByTestId, getByText } = render(
       <NavigationContainer>
         <SignUpScreen />
       </NavigationContainer>
     );
 
-    const fullNameInput = getByPlaceholderText("Name");
+    const firstNameInput = getByPlaceholderText("First Name");
+    const lastNameInput = getByPlaceholderText("Last Name");
     const emailInput = getByPlaceholderText("Email");
     const passwordInput = getByPlaceholderText("Password");
     const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
     const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "Test User");
+    fireEvent.changeText(firstNameInput, "Test");
+    fireEvent.changeText(lastNameInput, "User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "123");
     fireEvent.changeText(confirmPasswordInput, "123");
     fireEvent.press(termsSwitch);
     fireEvent.press(signupButton);
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      "Password Too Short",
-      "The password must be at least 6 characters long."
-    );
+    expect(
+      getByText("Update your password to meet the requirements.")
+    ).toBeTruthy();
   });
 
-  it("should show alert when terms are not agreed", async () => {
-    const { getByPlaceholderText, getByTestId } = render(
+  it("should show inline error when terms are not agreed", async () => {
+    const { getByPlaceholderText, getByTestId, getByText } = render(
       <NavigationContainer>
         <SignUpScreen />
       </NavigationContainer>
     );
 
-    const fullNameInput = getByPlaceholderText("Name");
+    const firstNameInput = getByPlaceholderText("First Name");
+    const lastNameInput = getByPlaceholderText("Last Name");
     const emailInput = getByPlaceholderText("Email");
     const passwordInput = getByPlaceholderText("Password");
     const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
 
-    fireEvent.changeText(fullNameInput, "Test User");
+    fireEvent.changeText(firstNameInput, "Test");
+    fireEvent.changeText(lastNameInput, "User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "password123");
     fireEvent.changeText(confirmPasswordInput, "password123");
     fireEvent.press(signupButton);
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      "Terms and Conditions",
-      "You must agree to the terms and conditions to sign up."
-    );
+    expect(
+      getByText("You must agree to the terms and privacy policy.")
+    ).toBeTruthy();
   });
 
   it("should call signup on valid input", async () => {
@@ -196,14 +197,18 @@ describe("SignUpScreen", () => {
       </NavigationContainer>
     );
 
-    const fullNameInput = getByPlaceholderText("Name");
+    jest.useFakeTimers();
+
+    const firstNameInput = getByPlaceholderText("First Name");
+    const lastNameInput = getByPlaceholderText("Last Name");
     const emailInput = getByPlaceholderText("Email");
     const passwordInput = getByPlaceholderText("Password");
     const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
     const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "Test User");
+    fireEvent.changeText(firstNameInput, "Test");
+    fireEvent.changeText(lastNameInput, "User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "password123");
     fireEvent.changeText(confirmPasswordInput, "password123");
@@ -218,6 +223,15 @@ describe("SignUpScreen", () => {
       "password123",
       "Test User"
     );
+
+    act(() => {
+      jest.advanceTimersByTime(900);
+    });
+
+    const { router } = require("expo-router");
+    expect(router.push).toHaveBeenCalledWith("/(auth)/welcome?login=1");
+
+    jest.useRealTimers();
   });
 
   it("should handle signup error", async () => {
@@ -225,20 +239,22 @@ describe("SignUpScreen", () => {
       new Error("Failed to sign up")
     );
 
-    const { getByPlaceholderText, getByTestId } = render(
+    const { getByPlaceholderText, getByTestId, getByText } = render(
       <NavigationContainer>
         <SignUpScreen />
       </NavigationContainer>
     );
 
-    const fullNameInput = getByPlaceholderText("Name");
+    const firstNameInput = getByPlaceholderText("First Name");
+    const lastNameInput = getByPlaceholderText("Last Name");
     const emailInput = getByPlaceholderText("Email");
     const passwordInput = getByPlaceholderText("Password");
     const confirmPasswordInput = getByPlaceholderText("Confirm Password");
     const signupButton = getByTestId("signup-button");
     const termsSwitch = getByTestId("terms-switch");
 
-    fireEvent.changeText(fullNameInput, "Test User");
+    fireEvent.changeText(firstNameInput, "Test");
+    fireEvent.changeText(lastNameInput, "User");
     fireEvent.changeText(emailInput, "test@example.com");
     fireEvent.changeText(passwordInput, "password123");
     fireEvent.changeText(confirmPasswordInput, "password123");
@@ -248,9 +264,6 @@ describe("SignUpScreen", () => {
       fireEvent.press(signupButton);
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      "Sign-up failed",
-      "Failed to sign up"
-    );
+    expect(getByText("Failed to sign up")).toBeTruthy();
   });
 });

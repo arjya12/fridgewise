@@ -1,7 +1,6 @@
 import { supabase, UserProfile } from "@/lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Alert } from "react-native";
 
 interface AuthContextType {
   user: User | null;
@@ -121,7 +120,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw error;
     } catch (error: any) {
-      Alert.alert("Error", error.message);
       throw error;
     }
   };
@@ -138,6 +136,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
 
+      // Supabase returns a user with no identities when the email
+      // is already registered for an existing account.
+      if (
+        data?.user &&
+        Array.isArray((data.user as any).identities) &&
+        (data.user as any).identities.length === 0
+      ) {
+        throw new Error("An account with this email already exists.");
+      }
+
       if (data?.user && fullName) {
         // Update user profile with full name
         await supabase
@@ -146,7 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq("id", data.user.id);
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message);
       throw error;
     }
   };
@@ -156,7 +163,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error: any) {
-      Alert.alert("Error", error.message);
       throw error;
     }
   };

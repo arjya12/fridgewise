@@ -1,7 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { Alert } from "react-native";
 import { AuthProvider, useAuth } from "../AuthContext";
 
 // Mock Supabase
@@ -23,9 +22,6 @@ jest.mock("@/lib/supabase", () => ({
     }),
   },
 }));
-
-// Mock Alert
-jest.spyOn(Alert, "alert");
 
 describe("AuthContext", () => {
   beforeEach(() => {
@@ -89,14 +85,10 @@ describe("AuthContext", () => {
     });
 
     await act(async () => {
-      try {
-        await result.current.signIn("test@example.com", "wrong-password");
-      } catch (error) {
-        // Expected error
-      }
+      await expect(
+        result.current.signIn("test@example.com", "wrong-password")
+      ).rejects.toMatchObject({ message: "Invalid credentials" });
     });
-
-    expect(Alert.alert).toHaveBeenCalledWith("Error", "Invalid credentials");
   });
 
   it("should handle successful sign up", async () => {

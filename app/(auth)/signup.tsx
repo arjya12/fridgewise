@@ -6,9 +6,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Alert,
     Animated,
     Dimensions,
+    Easing,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
@@ -27,19 +27,6 @@ const THEME_GREEN = "#197C47";
 const THEME_LIGHT = "#fff";
 const THEME_BORDER = "#E0E0E0";
 const THEME_INPUT_BG = "rgba(255,255,255,0.92)";
-
-// Password strength helper
-function getPasswordStrength(password: string): {
-  label: string;
-  color: string;
-} {
-  if (!password) return { label: "", color: "#b0bfc7" };
-  if (password.length < 6) return { label: "Weak", color: "#e57373" };
-  if (/^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/.test(password))
-    return { label: "Strong", color: "#388e3c" };
-  if (password.length >= 6) return { label: "Medium", color: "#fbc02d" };
-  return { label: "Weak", color: "#e57373" };
-}
 
 export default function SignUpScreen() {
   const [firstName, setFirstName] = useState("");
@@ -63,6 +50,47 @@ export default function SignUpScreen() {
   const [formAnim] = useState(new Animated.Value(0));
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardOffset] = useState(new Animated.Value(0));
+  const [formError, setFormError] = useState<string | null>(null);
+  const formErrorAnim = useRef(new Animated.Value(0)).current;
+
+  const clearError = (key: string) => {
+    setErrors((prev) => {
+      if (!prev[key] && !prev.form) return prev;
+      const next = { ...prev };
+      delete next[key];
+      delete next.form;
+      return next;
+    });
+    setFormError(null);
+  };
+
+  const dismissFormError = React.useCallback(() => {
+    if (!formError) return;
+    formErrorAnim.stopAnimation();
+    Animated.timing(formErrorAnim, {
+      toValue: 0,
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) setFormError(null);
+    });
+  }, [formError, formErrorAnim]);
+
+  useEffect(() => {
+    formErrorAnim.stopAnimation();
+    if (formError) {
+      formErrorAnim.setValue(0);
+      Animated.timing(formErrorAnim, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+      return;
+    }
+    formErrorAnim.setValue(0);
+  }, [formError, formErrorAnim]);
 
   useEffect(() => {
     Animated.timing(formAnim, {
@@ -95,79 +123,88 @@ export default function SignUpScreen() {
     };
   }, [keyboardOffset]);
 
-  function validate() {
+  function validate(): { ok: boolean; summary: string } {
     const newErrors: { [key: string]: string } = {};
     if (!firstName.trim()) newErrors.firstName = "Please enter your first name.";
+    if (/\d/.test(firstName)) newErrors.firstName = "Numbers aren’t allowed.";
+
     if (!lastName.trim()) newErrors.lastName = "Please enter your last name.";
-    if (!email.match(/^\S+@\S+\.\S+$/))
+    if (/\d/.test(lastName)) newErrors.lastName = "Numbers aren’t allowed.";
+
+    if (!email.trim()) newErrors.email = "Please enter your email.";
+    else if (!email.match(/^\S+@\S+\.\S+$/))
       newErrors.email = "Please enter a valid email.";
-    if (password.length < 6)
-      newErrors.password = "Password must be at least 6 characters.";
-    if (password !== confirmPassword)
+
+    if (!password) newErrors.password = "Please enter a password.";
+    else if (password.length < 7 || !/\d/.test(password))
+      newErrors.password =
+        "Password must be at least 7 characters and include a number.";
+
+    if (!confirmPassword) newErrors.confirmPassword = "Please confirm your password.";
+    else if (password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match.";
+
     if (!agreedToTerms) newErrors.terms = "You must agree to the terms.";
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const errorKeys = Object.keys(newErrors);
+    const hasErrors = errorKeys.length > 0;
+
+    let summary = "Fix the highlighted fields to continue.";
+    if (newErrors.confirmPassword === "Passwords do not match.") {
+      summary = "Passwords do not match.";
+    } else if (
+      (newErrors.firstName === "Numbers aren’t allowed." ||
+        newErrors.lastName === "Numbers aren’t allowed.") &&
+      errorKeys.length === 1
+    ) {
+      summary = "Names cannot contain numbers.";
+    } else if (newErrors.email?.includes("valid email") && errorKeys.length === 1) {
+      summary = "Enter a valid email address.";
+    } else if (newErrors.password && errorKeys.length === 1) {
+      summary = "Update your password to meet the requirements.";
+    } else if (newErrors.terms && errorKeys.length === 1) {
+      summary = "You must agree to the terms and privacy policy.";
+    }
+
+    return { ok: !hasErrors, summary };
   }
 
   const handleSignUp = async () => {
-    // Check for empty fields
-    if (
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !email.trim() ||
-      !password.trim() ||
-      !confirmPassword.trim()
-    ) {
-      Alert.alert("Missing Information", "Please fill in all fields.");
-      return;
-    }
-
-    // Check password length
-    if (password.length < 6) {
-      Alert.alert(
-        "Password Too Short",
-        "The password must be at least 6 characters long."
-      );
-      return;
-    }
-
-    // Check password match
-    if (password !== confirmPassword) {
-      Alert.alert("Password Mismatch", "The passwords do not match.");
-      return;
-    }
-
-    // Check terms agreement
-    if (!agreedToTerms) {
-      Alert.alert(
-        "Terms and Conditions",
-        "You must agree to the terms and conditions to sign up."
-      );
-      return;
-    }
-
-    // Email validation
-    if (!email.match(/^\S+@\S+\.\S+$/)) {
-      Alert.alert("Invalid Email", "Please enter a valid email address.");
+    const result = validate();
+    if (!result.ok) {
+      setFormError(result.summary);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
     setLoading(true);
     try {
       await signUp(email, password, `${firstName} ${lastName}`);
-      Alert.alert(
-        "Sign up successful! Please check your email to verify your account."
-      );
-      router.push("/(auth)/welcome?login=1");
+      setTimeout(() => {
+        router.push("/(auth)/welcome?login=1");
+      }, 900);
     } catch (error: any) {
-      Alert.alert("Sign-up failed", error.message || "Failed to sign up");
+      const message = (error?.message ?? "").toString();
+      const lower = message.toLowerCase();
+      if (
+        lower.includes("already registered") ||
+        lower.includes("already exists") ||
+        lower.includes("duplicate key") ||
+        lower.includes("user already") ||
+        (lower.includes("email") && lower.includes("exists"))
+      ) {
+        setFormError(
+          "An account with this email already exists. Try signing in instead."
+        );
+      } else if (message) {
+        setFormError(message);
+      } else {
+        setFormError("Sign-up failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
-
-  const passwordStrength = getPasswordStrength(password);
 
   return (
     <SafeAreaWrapper usePadding edges={["top"]}>
@@ -235,29 +272,24 @@ export default function SignUpScreen() {
                       errors.firstName && styles.inputGroupError,
                     ]}
                   >
-                    <Ionicons
-                      name="person-outline"
-                      size={20}
-                      color={THEME_GREEN}
-                      style={styles.inputIcon}
-                    />
                     <TextInput
                       style={styles.input}
                       placeholder="First Name"
                       placeholderTextColor="#737373"
                       value={firstName}
-                      onChangeText={setFirstName}
+                        onChangeText={(t) => {
+                          setFirstName(t);
+                          clearError("firstName");
+                        }}
                       autoCapitalize="words"
+                        autoCorrect={false}
+                        autoComplete="off"
                       editable={!loading}
                       accessibilityLabel="First name input"
                       onFocus={() => setFirstNameFocused(true)}
-                      onBlur={() => setFirstNameFocused(false)}
-                      returnKeyType="next"
+                        onBlur={() => setFirstNameFocused(false)}
                     />
                   </View>
-                  {errors.firstName && (
-                    <Text style={styles.errorText}>{errors.firstName}</Text>
-                  )}
 
                   {/* Last Name Field */}
                   <View
@@ -267,29 +299,24 @@ export default function SignUpScreen() {
                       errors.lastName && styles.inputGroupError,
                     ]}
                   >
-                    <Ionicons
-                      name="person-outline"
-                      size={20}
-                      color={THEME_GREEN}
-                      style={styles.inputIcon}
-                    />
                     <TextInput
                       style={styles.input}
                       placeholder="Last Name"
                       placeholderTextColor="#737373"
                       value={lastName}
-                      onChangeText={setLastName}
+                      onChangeText={(t) => {
+                        setLastName(t);
+                        clearError("lastName");
+                      }}
                       autoCapitalize="words"
+                      autoCorrect={false}
+                      autoComplete="off"
                       editable={!loading}
                       accessibilityLabel="Last name input"
                       onFocus={() => setLastNameFocused(true)}
                       onBlur={() => setLastNameFocused(false)}
-                      returnKeyType="next"
                     />
                   </View>
-                  {errors.lastName && (
-                    <Text style={styles.errorText}>{errors.lastName}</Text>
-                  )}
 
                   {/* Email Field */}
                   <View
@@ -299,149 +326,146 @@ export default function SignUpScreen() {
                       errors.email && styles.inputGroupError,
                     ]}
                   >
-                    <Ionicons
-                      name="mail-outline"
-                      size={20}
-                      color={THEME_GREEN}
-                      style={styles.inputIcon}
-                    />
                     <TextInput
                       style={styles.input}
                       placeholder="Email"
                       placeholderTextColor="#737373"
                       value={email}
-                      onChangeText={setEmail}
+                      onChangeText={(t) => {
+                        setEmail(t);
+                        clearError("email");
+                      }}
                       autoCapitalize="none"
                       keyboardType="email-address"
+                      autoCorrect={false}
+                      autoComplete="off"
                       editable={!loading}
                       accessibilityLabel="Email input"
                       onFocus={() => setEmailFocused(true)}
                       onBlur={() => setEmailFocused(false)}
-                      returnKeyType="next"
                     />
                   </View>
-                  {errors.email && (
-                    <Text style={styles.errorText}>{errors.email}</Text>
-                  )}
 
                   {/* Password Field */}
-                  <View
-                    style={[
-                      styles.inputGroup,
-                      passwordFocused && styles.inputGroupFocused,
-                      errors.password && styles.inputGroupError,
-                    ]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color={THEME_GREEN}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Password"
-                      placeholderTextColor="#737373"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry={!showPassword}
-                      editable={!loading}
-                      maxLength={16}
-                      accessibilityLabel="Password input"
-                      onFocus={() => setPasswordFocused(true)}
-                      onBlur={() => setPasswordFocused(false)}
-                      returnKeyType="next"
-                    />
-                    {password && (
-                      <View style={styles.passwordStrengthInline}>
-                        <View
-                          style={[
-                            styles.passwordStrengthBar,
-                            { backgroundColor: passwordStrength.color },
-                          ]}
-                        />
-                        <Text
-                          style={[
-                            styles.passwordStrengthText,
-                            { color: passwordStrength.color },
-                          ]}
-                        >
-                          {passwordStrength.label}
-                        </Text>
-                      </View>
-                    )}
-                    <View
-                      style={styles.eyeIcon}
-                      onTouchEnd={() => setShowPassword(!showPassword)}
-                      accessibilityLabel={
-                        showPassword ? "Hide password" : "Show password"
-                      }
-                    >
-                      <Ionicons
-                        name={showPassword ? "eye-outline" : "eye-off-outline"}
-                        size={20}
-                        color={THEME_GREEN}
-                      />
-                    </View>
-                  </View>
-                  {errors.password && (
-                    <Text style={styles.errorText}>{errors.password}</Text>
-                  )}
-
-                  {/* Confirm Password Field */}
-                  <View
-                    style={[
-                      styles.inputGroup,
-                      confirmPasswordFocused && styles.inputGroupFocused,
-                      errors.confirmPassword && styles.inputGroupError,
-                    ]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color={THEME_GREEN}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Confirm Password"
-                      placeholderTextColor="#737373"
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      secureTextEntry={!showConfirmPassword}
-                      editable={!loading}
-                      accessibilityLabel="Confirm password input"
-                      onFocus={() => setConfirmPasswordFocused(true)}
-                      onBlur={() => setConfirmPasswordFocused(false)}
-                      returnKeyType="done"
-                    />
-                    <View
-                      style={styles.eyeIcon}
-                      onTouchEnd={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      accessibilityLabel={
-                        showConfirmPassword
-                          ? "Hide confirm password"
-                          : "Show confirm password"
-                      }
-                    >
+                  <View style={{ marginBottom: 6 }}>
+                    <View style={styles.passwordHelperRow}>
                       <Ionicons
                         name={
-                          showConfirmPassword
-                            ? "eye-outline"
-                            : "eye-off-outline"
+                          password.length >= 7 && /\d/.test(password)
+                            ? "checkmark-circle"
+                            : "information-circle"
                         }
-                        size={20}
-                        color={THEME_GREEN}
+                        size={14}
+                        color={
+                          password.length >= 7 && /\d/.test(password)
+                            ? "#15803D"
+                            : "#9CA3AF"
+                        }
+                        style={{ marginRight: 4 }}
                       />
+                      <Text
+                        style={[
+                          styles.passwordHelperText,
+                          password.length >= 7 && /\d/.test(password) && {
+                            color: "#15803D",
+                          },
+                        ]}
+                      >
+                        Use at least 7 characters and include a number.
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.inputGroup,
+                        passwordFocused && styles.inputGroupFocused,
+                        errors.password && styles.inputGroupError,
+                      ]}
+                    >
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Password"
+                        placeholderTextColor="#737373"
+                        value={password}
+                        onChangeText={(t) => {
+                          setPassword(t);
+                          clearError("password");
+                        }}
+                        secureTextEntry={!showPassword}
+                        editable={!loading}
+                        maxLength={24}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="off"
+                        accessibilityLabel="Password input"
+                        onFocus={() => setPasswordFocused(true)}
+                        onBlur={() => setPasswordFocused(false)}
+                      />
+                      <View
+                        style={styles.eyeIcon}
+                        onTouchEnd={() => setShowPassword(!showPassword)}
+                        accessibilityLabel={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                      >
+                        <Ionicons
+                          name={showPassword ? "eye-outline" : "eye-off-outline"}
+                          size={20}
+                          color={THEME_GREEN}
+                        />
+                      </View>
                     </View>
                   </View>
-                  {errors.confirmPassword && (
-                    <Text style={styles.errorText}>
-                      {errors.confirmPassword}
-                    </Text>
-                  )}
+
+                  {/* Confirm Password Field */}
+                  <View style={{ marginBottom: errors.confirmPassword ? 6 : 12 }}>
+                    <View
+                      style={[
+                        styles.inputGroup,
+                        confirmPasswordFocused && styles.inputGroupFocused,
+                        errors.confirmPassword && styles.inputGroupError,
+                      ]}
+                    >
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Confirm Password"
+                        placeholderTextColor="#737373"
+                        value={confirmPassword}
+                        onChangeText={(t) => {
+                          setConfirmPassword(t);
+                          clearError("confirmPassword");
+                        }}
+                        secureTextEntry={!showConfirmPassword}
+                        editable={!loading}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="off"
+                        accessibilityLabel="Confirm password input"
+                        onFocus={() => setConfirmPasswordFocused(true)}
+                        onBlur={() => setConfirmPasswordFocused(false)}
+                      />
+                      <View
+                        style={styles.eyeIcon}
+                        onTouchEnd={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                        accessibilityLabel={
+                          showConfirmPassword
+                            ? "Hide confirm password"
+                            : "Show confirm password"
+                        }
+                      >
+                        <Ionicons
+                          name={
+                            showConfirmPassword
+                              ? "eye-outline"
+                              : "eye-off-outline"
+                          }
+                          size={20}
+                          color={THEME_GREEN}
+                        />
+                      </View>
+                    </View>
+                  </View>
 
                   {/* Terms and Conditions */}
                   <View style={styles.termsContainer}>
@@ -462,14 +486,67 @@ export default function SignUpScreen() {
                       </View>
                     </TouchableOpacity>
                     <View style={styles.termsTextContainer}>
-                      <Text style={styles.termsText}>I agree to the </Text>
-                      <Text style={styles.termsLink}>Terms and Conditions</Text>
-                      <Text style={styles.termsText}> and </Text>
-                      <Text style={styles.termsLink}>Privacy Policy</Text>
+                      <Text style={styles.termsText}>
+                        I agree to the{" "}
+                        <Text style={styles.termsLink}>
+                          Terms and Conditions
+                        </Text>{" "}
+                        and{" "}
+                        <Text style={styles.termsLink}>Privacy Policy</Text>
+                      </Text>
                     </View>
                   </View>
-                  {errors.terms && (
-                    <Text style={styles.errorText}>{errors.terms}</Text>
+                  {!!formError && (
+                    <Animated.View
+                      style={[
+                        styles.formErrorToast,
+                        {
+                          opacity: formErrorAnim,
+                          maxHeight: formErrorAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 80],
+                          }),
+                          marginBottom: formErrorAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 10],
+                          }),
+                          paddingVertical: formErrorAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 10],
+                          }),
+                          paddingHorizontal: formErrorAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 12],
+                          }),
+                          transform: [
+                            {
+                              translateY: formErrorAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [-4, 0],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                      accessibilityRole="alert"
+                      accessible
+                    >
+                      <Ionicons
+                        name="alert-circle"
+                        size={18}
+                        color="#B91C1C"
+                        style={{ marginRight: 10, marginTop: 1 }}
+                      />
+                      <Text style={styles.formErrorToastText}>{formError}</Text>
+                      <TouchableOpacity
+                        style={styles.formErrorToastClose}
+                        onPress={dismissFormError}
+                        accessibilityLabel="Dismiss message"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close" size={16} color="#7F1D1D" />
+                      </TouchableOpacity>
+                    </Animated.View>
                   )}
 
                   {/* Sign Up Button */}
@@ -602,7 +679,8 @@ const styles = StyleSheet.create({
   termsContainer: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 16,
+    marginTop: 5,
+    marginBottom: 20,
   },
   checkbox: {
     width: 16,
@@ -610,10 +688,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#197C47",
     borderRadius: 4,
-    marginRight: 8,
+    marginRight: 10,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#101825",
+    backgroundColor: "#FFFFFF",
   },
   checkboxChecked: {
     backgroundColor: "#197C47",
@@ -627,12 +705,12 @@ const styles = StyleSheet.create({
   termsText: {
     fontSize: 14,
     color: "#b0bfc7",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   termsLink: {
     fontSize: 14,
     color: THEME_GREEN,
-    lineHeight: 22,
+    lineHeight: 20,
     fontWeight: "700",
     textDecorationLine: "underline",
   },
@@ -653,30 +731,46 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textDecorationLine: "underline",
   },
-  errorText: {
-    color: "#e57373",
-    fontSize: 13,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  passwordStrengthInline: {
+  passwordHelperRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 8,
+    marginTop: 4,
+    marginLeft: 4,
   },
-  passwordStrengthBar: {
-    width: 24,
-    height: 4,
-    borderRadius: 2,
-    marginRight: 4,
-  },
-  passwordStrengthText: {
+  passwordHelperText: {
     fontSize: 11,
-    fontWeight: "600",
+    color: "#9CA3AF",
   },
   checkboxTouchable: {
     padding: 8,
     marginRight: 0,
     borderRadius: 8,
+  },
+  formErrorToast: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    borderRadius: 12,
+    backgroundColor: "rgba(185,28,28,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(185,28,28,0.22)",
+    overflow: "hidden",
+  },
+  formErrorToastText: {
+    flex: 1,
+    color: "#7F1D1D",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  formErrorToastClose: {
+    marginLeft: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.65)",
+    borderWidth: 1,
+    borderColor: "rgba(185,28,28,0.18)",
   },
 });

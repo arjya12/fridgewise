@@ -1,4 +1,6 @@
+import { setPendingResetPasswordUrl } from '@/lib/pendingResetUrl';
 import { useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
 import React, { useEffect } from 'react';
 import { Dimensions, Image, StyleSheet, View } from 'react-native';
 
@@ -10,12 +12,27 @@ export default function SplashScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    // Navigate to welcome page after 2 seconds
-    const timer = setTimeout(() => {
-      router.replace('/(auth)/welcome');
-    }, 2000);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    return () => clearTimeout(timer);
+    const go = (path: string) => {
+      if (!cancelled) router.replace(path as any);
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (cancelled) return;
+      if (url && url.includes('reset-password') && url.includes('#')) {
+        setPendingResetPasswordUrl(url);
+        go('/(auth)/reset-password');
+        return;
+      }
+      timer = setTimeout(() => go('/(auth)/welcome'), 2000);
+    });
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   return (
