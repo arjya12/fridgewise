@@ -1,399 +1,893 @@
 /**
- * Shopping List Screen
- * Helps users plan and manage items they need to purchase
- * Completes the core user journey: Add → Track → Use → Plan → Shop
+ * Groceries Screen (premium redesign)
+ * Sleek, minimal, product-ready UI aligned with FridgeWise.
  */
 
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { foodItemsService } from "@/services/foodItems";
+import {
+  AppleLogoIcon,
+  BeerBottleIcon,
+  BoneIcon,
+  BreadIcon,
+  CarrotIcon,
+  CoffeeIcon,
+  CookieIcon,
+  DropIcon,
+  EggIcon,
+  FishIcon,
+  GrainsIcon,
+  HandbagIcon,
+  PackageIcon,
+  SnowflakeIcon,
+  CookingPotIcon,
+} from "phosphor-react-native";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useState } from "react";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  FlatList,
+  LayoutAnimation,
+  Modal,
+  Platform,
   RefreshControl,
+  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
+import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // =============================================================================
 // INTERFACES
 // =============================================================================
 
-interface ShoppingItem {
+interface GroceryItem {
   id: string;
   name: string;
   category?: string;
   quantity: number;
+  unit?: string;
+  status: "list" | "bought" | "fridge";
   priority: "high" | "medium" | "low";
   completed: boolean;
   addedDate: Date;
   notes?: string;
 }
 
+type GrocerySection = {
+  title: string;
+  kind: "category" | "purchased";
+  data: GroceryItem[];
+};
+
+// Reordered to balance long + short labels per row
+const CATEGORY_OPTIONS = [
+  { label: "Vegetables", Icon: CarrotIcon },
+  { label: "Meat", Icon: BoneIcon },
+  { label: "Eggs", Icon: EggIcon },
+  { label: "Fruits", Icon: AppleLogoIcon },
+  { label: "Dairy", Icon: DropIcon },
+  { label: "Bakery", Icon: BreadIcon },
+  { label: "Beverages", Icon: CoffeeIcon },
+  { label: "Snacks", Icon: CookieIcon },
+  { label: "Grains", Icon: GrainsIcon },
+  { label: "Condiments", Icon: BeerBottleIcon },
+  { label: "Prepared Meals", Icon: CookingPotIcon },
+  { label: "Frozen", Icon: SnowflakeIcon },
+  { label: "Household", Icon: PackageIcon },
+  { label: "Other", Icon: HandbagIcon },
+] as const;
+
+const CATEGORY_ORDER = CATEGORY_OPTIONS.map((c) => c.label);
+
+const UNIT_OPTIONS = [
+  "pcs",
+  "kg",
+  "g",
+  "lb",
+  "servings",
+  "ml",
+  "L",
+  "pack",
+  "can",
+  "jar",
+  "bottle",
+  "box",
+  "bag",
+  "oz",
+  "portion",
+] as const;
+
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
 export default function ShoppingListScreen() {
-  const { user } = useAuth();
-  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([]);
-  const [newItemName, setNewItemName] = useState("");
-  const [loading, setLoading] = useState(false);
+  useAuth();
+  const STORAGE_KEY = "fridgewise_shopping_list_v1";
+  const insets = useSafeAreaInsets();
+  const [shoppingList, setShoppingList] = useState<GroceryItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const swipeRefs = useRef<Record<string, Swipeable | null>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<
+    Record<string, boolean>
+  >({});
+  const [draftName, setDraftName] = useState("");
+  const [draftCategory, setDraftCategory] = useState<string>("");
+  const [draftQty, setDraftQty] = useState(1);
+  const [draftUnit, setDraftUnit] = useState<(typeof UNIT_OPTIONS)[number]>("pcs");
+  const [unitOpen, setUnitOpen] = useState(false);
 
-  // Fixed light theme colors
-  const backgroundColor = "#F9FAFB";
+  // Fixed light theme colors – match other pages
+  const backgroundColor = "#FFFFFF";
   const cardBackgroundColor = "#FFFFFF";
-  const cardBorderColor = "#F3F4F6";
   const textColor = "#1F2937";
   const subTextColor = "#6B7280";
   const primaryColor = "#22C55E";
+  const deepGreen = "#197C47";
+  const fridgePng = require("../../assets/images/icons/fridge_icon.png");
 
   // =============================================================================
   // DATA LOADING
   // =============================================================================
 
-  const loadShoppingList = useCallback(async () => {
-    try {
-      setLoading(true);
-      // For now, generate smart suggestions based on low stock items
-      const allItems = await foodItemsService.getItems();
-      const lowStockItems = allItems.filter((item) => item.quantity <= 1);
-
-      // Convert low stock items to shopping suggestions
-      const suggestions = lowStockItems.map((item) => ({
-        id: `suggestion-${item.id}`,
-        name: item.name,
-        category: item.category || "Other",
-        quantity: 1,
-        priority: "medium" as const,
-        completed: false,
-        addedDate: new Date(),
-        notes: "Low stock suggestion",
-      }));
-
-      // Add some common staples if list is empty
-      if (suggestions.length === 0) {
-        const staples = [
-          { name: "Milk", category: "Dairy", priority: "medium" as const },
-          { name: "Bread", category: "Bakery", priority: "medium" as const },
-          { name: "Eggs", category: "Dairy", priority: "low" as const },
-        ];
-
-        const stapleItems = staples.map((staple, index) => ({
-          id: `staple-${index}`,
-          name: staple.name,
-          category: staple.category,
-          quantity: 1,
-          priority: staple.priority,
-          completed: false,
-          addedDate: new Date(),
-          notes: "Common staple",
-        }));
-
-        setShoppingList(stapleItems);
-      } else {
-        setShoppingList(suggestions);
-      }
-    } catch (error) {
-      console.error("Error loading shopping list:", error);
-      Alert.alert("Error", "Failed to load shopping list");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadShoppingList();
+    // No auto-generated items; keep the user's list.
     setRefreshing(false);
-  }, [loadShoppingList]);
+  }, []);
 
+  // Load saved list on mount
   useEffect(() => {
-    loadShoppingList();
-  }, [loadShoppingList]);
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed: any[] = JSON.parse(raw);
+        const restored: GroceryItem[] = parsed.map((it) => {
+          const status: GroceryItem["status"] = it.status ?? "list";
+          return {
+            ...it,
+            status,
+            completed: status !== "list",
+            addedDate: it.addedDate ? new Date(it.addedDate) : new Date(),
+          };
+        });
+        setShoppingList(restored);
+      } catch (e) {
+        console.warn("Failed to load shopping list", e);
+      }
+    })();
+  }, []);
+
+  // Persist list whenever it changes
+  useEffect(() => {
+    (async () => {
+      try {
+        const toStore = shoppingList.map((it) => ({
+          ...it,
+          addedDate: it.addedDate.toISOString(),
+        }));
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+      } catch (e) {
+        console.warn("Failed to save shopping list", e);
+      }
+    })();
+  }, [shoppingList]);
 
   // =============================================================================
   // ACTIONS
   // =============================================================================
 
+  const animateListChange = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  };
+
+  const openAdd = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDraftName("");
+    setDraftCategory("");
+    setDraftQty(1);
+    setDraftUnit("pcs");
+    setUnitOpen(false);
+    setEditingId(null);
+    setAddOpen(true);
+  }, []);
+
+  const startEditItem = useCallback(
+    (item: GroceryItem) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setDraftName(item.name);
+      setDraftCategory(item.category || "");
+      setDraftQty(item.quantity);
+      setDraftUnit((item.unit as (typeof UNIT_OPTIONS)[number]) || "pcs");
+      setUnitOpen(false);
+      setEditingId(item.id);
+      setAddOpen(true);
+    },
+    []
+  );
+
   const addItem = useCallback(() => {
-    if (!newItemName.trim()) {
-      Alert.alert("Error", "Please enter an item name");
+    const name = draftName.trim();
+    if (!name) {
+      Alert.alert("Add item", "Enter an item name.");
       return;
     }
+    animateListChange();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const newItem: ShoppingItem = {
-      id: `manual-${Date.now()}`,
-      name: newItemName.trim(),
-      quantity: 1,
-      priority: "medium",
-      completed: false,
-      addedDate: new Date(),
-    };
+    if (editingId) {
+      setShoppingList((prev) =>
+        prev.map((it) =>
+          it.id === editingId
+            ? {
+                ...it,
+                name,
+                category: draftCategory,
+                quantity: draftQty,
+                unit: draftUnit,
+              }
+            : it
+        )
+      );
+    } else {
+      const item: GroceryItem = {
+        id: `manual-${Date.now()}`,
+        name,
+        category: draftCategory,
+        quantity: draftQty,
+        unit: draftUnit,
+        status: "list",
+        priority: "medium",
+        completed: false,
+        addedDate: new Date(),
+      };
+      setShoppingList((prev) => [item, ...prev]);
+    }
 
-    setShoppingList((prev) => [newItem, ...prev]);
-    setNewItemName("");
-    setShowAddForm(false);
-  }, [newItemName]);
+    setAddOpen(false);
+    setEditingId(null);
+  }, [draftCategory, draftName, draftQty, draftUnit, editingId]);
 
-  const toggleItemComplete = useCallback((itemId: string) => {
-    setShoppingList((prev) =>
-      prev.map((item) =>
-        item.id === itemId ? { ...item, completed: !item.completed } : item
-      )
-    );
-  }, []);
+  const setItemStatus = useCallback(
+    (itemId: string, status: GroceryItem["status"]) => {
+      animateListChange();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setShoppingList((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                status,
+                completed: status !== "list",
+              }
+            : item
+        )
+      );
+    },
+    []
+  );
 
   const removeItem = useCallback((itemId: string) => {
+    animateListChange();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setShoppingList((prev) => prev.filter((item) => item.id !== itemId));
-  }, []);
-
-  const clearCompleted = useCallback(() => {
-    Alert.alert(
-      "Clear Completed",
-      "Remove all completed items from your shopping list?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear",
-          style: "destructive",
-          onPress: () => {
-            setShoppingList((prev) => prev.filter((item) => !item.completed));
-          },
-        },
-      ]
-    );
   }, []);
 
   // =============================================================================
   // RENDER HELPERS
   // =============================================================================
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "#EF4444";
-      case "medium":
-        return "#F59E0B";
-      case "low":
-        return "#6B7280";
-      default:
-        return "#6B7280";
-    }
+  const closeOtherSwipes = (openId: string) => {
+    Object.entries(swipeRefs.current).forEach(([id, ref]) => {
+      if (id !== openId) ref?.close();
+    });
   };
 
-  const renderShoppingItem = ({ item }: { item: ShoppingItem }) => (
-    <View
-      style={[
-        styles.itemCard,
-        {
-          backgroundColor: cardBackgroundColor,
-          borderColor: cardBorderColor,
-        },
-        item.completed && styles.completedItem,
-      ]}
-    >
+  const renderRightActions = (itemId: string) => (
+    <View style={styles.swipeActionsWrap}>
       <TouchableOpacity
-        style={styles.itemContent}
-        onPress={() => toggleItemComplete(item.id)}
-        activeOpacity={0.7}
+        style={styles.swipeDelete}
+        onPress={() => removeItem(itemId)}
+        accessibilityRole="button"
+        accessibilityLabel="Delete item"
+        activeOpacity={0.9}
       >
-        {/* Checkbox */}
-        <View
-          style={[
-            styles.checkbox,
-            {
-              backgroundColor: item.completed ? primaryColor : "transparent",
-              borderColor: item.completed ? primaryColor : "#D1D5DB",
-            },
-          ]}
-        >
-          {item.completed && (
-            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-          )}
-        </View>
-
-        {/* Item Info */}
-        <View style={styles.itemInfo}>
-          <Text
-            style={[
-              styles.itemName,
-              { color: textColor },
-              item.completed && styles.completedText,
-            ]}
-          >
-            {item.name}
-          </Text>
-          <View style={styles.itemMeta}>
-            {item.category && (
-              <Text style={[styles.category, { color: subTextColor }]}>
-                {item.category}
-              </Text>
-            )}
-            <View
-              style={[
-                styles.priorityDot,
-                { backgroundColor: getPriorityColor(item.priority) },
-              ]}
-            />
-            <Text style={[styles.quantity, { color: subTextColor }]}>
-              Qty: {item.quantity}
-            </Text>
-          </View>
-        </View>
-
-        {/* Actions */}
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={() => removeItem(item.id)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close" size={20} color={subTextColor} />
-        </TouchableOpacity>
+        <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+        <Text style={styles.swipeDeleteText}>Delete</Text>
       </TouchableOpacity>
     </View>
   );
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <ThemedText style={styles.title}>Shopping List</ThemedText>
-      <Text style={[styles.subtitle, { color: subTextColor }]}>
-        {shoppingList.length === 0
-          ? "Your shopping list is empty"
-          : `${
-              shoppingList.filter((item) => !item.completed).length
-            } items to buy`}
-      </Text>
-    </View>
-  );
+  const renderGroceryItem = ({ item, index, section }: any) => {
+    // For category sections, render one grouped card per category with items stacked
+    if (section.kind === "category") {
+      if (index !== 0) return null;
 
-  const completedCount = shoppingList.filter((item) => item.completed).length;
+      const categoryMeta = CATEGORY_OPTIONS.find(
+        (c) => c.label === section.title
+      );
+      const CategoryIcon = categoryMeta?.Icon;
+      const itemCount = section.data.length;
+      const collapsed = collapsedCategories[section.title];
+
+      return (
+        <View style={styles.categoryGroupCard}>
+          <TouchableOpacity
+            style={styles.categoryGroupHeader}
+            activeOpacity={0.9}
+            onPress={() => {
+              animateListChange();
+              setCollapsedCategories((prev) => ({
+                ...prev,
+                [section.title]: !prev[section.title],
+              }));
+            }}
+          >
+            {CategoryIcon && (
+              <CategoryIcon size={16} color="#FFFFFF" weight="fill" />
+            )}
+            <Text style={styles.categoryGroupTitle}>{section.title}</Text>
+            <View style={styles.categoryCountBadge}>
+              <Text style={styles.categoryCountText}>{itemCount}</Text>
+            </View>
+          </TouchableOpacity>
+          {!collapsed && (
+            <View style={styles.categoryGroupBody}>
+              {section.data.map((sectionItem: GroceryItem, index: number) => {
+                const meta = sectionItem.unit
+                  ? `${sectionItem.quantity} ${sectionItem.unit}`
+                  : String(sectionItem.quantity);
+                const muted = sectionItem.completed;
+                const isLast = index === section.data.length - 1;
+                return (
+                  <View
+                    key={sectionItem.id}
+                    style={[
+                      styles.categoryGroupItemRow,
+                      !isLast && styles.categoryGroupItemRowDivider,
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.categoryGroupItemMain}
+                      onPress={() =>
+                        setItemStatus(
+                          sectionItem.id,
+                          sectionItem.status === "list" ? "bought" : "list"
+                        )
+                      }
+                      activeOpacity={0.9}
+                    >
+                      <Text
+                        style={styles.categoryGroupItemName}
+                        numberOfLines={1}
+                      >
+                        {sectionItem.name}
+                      </Text>
+                      <Text
+                        style={styles.categoryGroupItemMeta}
+                        numberOfLines={1}
+                      >
+                        {meta}
+                      </Text>
+                    </TouchableOpacity>
+                    <View style={styles.categoryGroupItemActions}>
+                      {/* 2-circle state: list -> fridge */}
+                      <View style={styles.statusCirclesRow}>
+                        {/* Left circle: mark as bought (checkmark), no navigation */}
+                        <TouchableOpacity
+                          style={[
+                            styles.statusCircle,
+                            sectionItem.status !== "list" &&
+                              styles.statusCircleActive,
+                          ]}
+                          onPress={() =>
+                            setItemStatus(
+                              sectionItem.id,
+                              sectionItem.status === "bought" ? "list" : "bought"
+                            )
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel="Toggle bought state"
+                        >
+                          {sectionItem.status !== "list" && (
+                            <Ionicons
+                              name="checkmark"
+                              size={14}
+                              color="#FFFFFF"
+                            />
+                          )}
+                        </TouchableOpacity>
+
+                        {/* Connector between states */}
+                        <View
+                          style={[
+                            styles.statusConnector,
+                            sectionItem.status !== "list" &&
+                              styles.statusConnectorActive,
+                          ]}
+                        />
+
+                        {/* Right circle: fridge icon + navigation */}
+                        <TouchableOpacity
+                          style={[
+                            styles.statusCircle,
+                            sectionItem.status === "fridge" &&
+                              styles.statusCircleActive,
+                          ]}
+                          onPress={() => {
+                            setItemStatus(sectionItem.id, "fridge");
+                            router.push({
+                              pathname: "/(tabs)/add",
+                              params: {
+                                name: sectionItem.name,
+                                quantity: String(sectionItem.quantity),
+                                unit: sectionItem.unit || "pcs",
+                                category: sectionItem.category,
+                              },
+                            });
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Move to fridge or shelf"
+                        >
+                          <Image
+                            source={fridgePng}
+                            style={{
+                              width: 14,
+                              height: 14,
+                              tintColor:
+                                sectionItem.status === "fridge"
+                                  ? "#FFFFFF"
+                                  : "#15803D",
+                            }}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.actionIcon}
+                        onPress={() => startEditItem(sectionItem)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit item"
+                      >
+                        <Ionicons name="create-outline" size={16} color="#22C55E" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.actionIcon}
+                        onPress={() => removeItem(sectionItem.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete item"
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#22C55E" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    // Fallback (shouldn't be hit often) – single item card
+    const meta = item.unit ? `${item.quantity} ${item.unit}` : String(item.quantity);
+    const muted = item.status !== "list";
+
+    return (
+      <Swipeable
+        ref={(ref) => {
+          swipeRefs.current[item.id] = ref;
+        }}
+        onSwipeableWillOpen={() => closeOtherSwipes(item.id)}
+        renderRightActions={() => renderRightActions(item.id)}
+        overshootRight={false}
+      >
+        <View
+          style={[styles.itemCard, { backgroundColor: cardBackgroundColor }]}
+        >
+                        <TouchableOpacity
+                          style={styles.categoryCardContent}
+                          onPress={() =>
+                            setItemStatus(
+                              item.id,
+                              item.status === "bought" ? "list" : "bought"
+                            )
+                          }
+                          activeOpacity={0.9}
+          >
+            <View style={styles.categoryCardHeader}>
+              <Text style={styles.categoryCardTitle} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <Text style={styles.categoryCardMetaHeader} numberOfLines={1}>
+                {meta}
+              </Text>
+            </View>
+
+            <View style={styles.categoryCardBody}>
+              <View style={styles.categoryCardActions}>
+                <TouchableOpacity
+                  style={styles.actionIcon}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/add",
+                      params: {
+                        name: item.name,
+                        quantity: String(item.quantity),
+                        unit: item.unit || "pcs",
+                        category: item.category,
+                      },
+                    })
+                  }
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Move to fridge or shelf"
+                >
+                  <Ionicons
+                    name="arrow-down-circle-outline"
+                    size={16}
+                    color="#22C55E"
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionIcon}
+                  onPress={() => startEditItem(item)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit item"
+                >
+                  <Ionicons name="create-outline" size={16} color="#22C55E" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionIcon}
+                  onPress={() => removeItem(item.id)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete purchased item"
+                >
+                  <Ionicons name="trash-outline" size={16} color="#22C55E" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Swipeable>
+    );
+  };
+
+  const activeCount = shoppingList.length;
+
+  const sections: GrocerySection[] = useMemo(() => {
+    const byCategory = new Map<string, GroceryItem[]>();
+    shoppingList.forEach((it) => {
+      const cat = it.category || "Other";
+      const arr = byCategory.get(cat) || [];
+      arr.push(it);
+      byCategory.set(cat, arr);
+    });
+
+    const orderedCats = Array.from(byCategory.keys()).sort((a, b) => {
+      const ai = CATEGORY_ORDER.indexOf(a as any);
+      const bi = CATEGORY_ORDER.indexOf(b as any);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.localeCompare(b);
+    });
+
+    return orderedCats.map((cat) => ({
+      title: cat,
+      kind: "category",
+      data: byCategory.get(cat) || [],
+    }));
+  }, [shoppingList]);
+
+  const headerTitle = "Groceries";
+  const subtitle = `${activeCount} ${activeCount === 1 ? "item" : "items"} left`;
 
   return (
     <SafeAreaWrapper usePadding edges={["top"]}>
       <ThemedView style={[styles.container, { backgroundColor }]}>
-        {/* Header */}
-        {renderHeader()}
+        {/* Full-width green banner header (like Add Item) */}
+        <View
+          style={[
+            styles.banner,
+            {
+              marginLeft: -insets.left,
+              marginRight: -insets.right,
+              paddingLeft: insets.left,
+              paddingRight: insets.right,
+            },
+          ]}
+        >
+          <ThemedText style={styles.bannerTitle}>Groceries</ThemedText>
+        </View>
 
-        {/* Add Item Form */}
-        {showAddForm ? (
-          <View
-            style={[
-              styles.addForm,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
-            ]}
-          >
-            <TextInput
-              style={[styles.addInput, { color: textColor }]}
-              placeholder="Enter item name..."
-              placeholderTextColor={subTextColor}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={addItem}
-            />
-            <View style={styles.addActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  setShowAddForm(false);
-                  setNewItemName("");
-                }}
-              >
-                <Text style={[styles.cancelText, { color: subTextColor }]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.addButton, { backgroundColor: primaryColor }]}
-                onPress={addItem}
-              >
-                <Text style={styles.addButtonText}>Add Item</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.addItemButton,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: primaryColor,
-              },
-            ]}
-            onPress={() => setShowAddForm(true)}
-          >
-            <Ionicons name="add" size={20} color={primaryColor} />
-            <Text style={[styles.addItemText, { color: primaryColor }]}>
-              Add Item
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Shopping List */}
-        <FlatList
-          data={shoppingList}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
-          renderItem={renderShoppingItem}
-          contentContainerStyle={styles.listContainer}
+          renderItem={renderGroceryItem}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={[
+            styles.listContainer,
+            // ensure last items scroll above sticky bottom button + tab bar
+            { paddingBottom: Math.min(insets.bottom + 160, 200) },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor={primaryColor}
+              tintColor={deepGreen}
             />
           }
+          ListHeaderComponent={
+            <>
+              {/* Simple centered Add button */}
+              <View style={styles.addButtonSpacer} />
+            </>
+          }
+          renderSectionHeader={() => null}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="basket-outline" size={48} color={subTextColor} />
-              <Text style={[styles.emptyText, { color: textColor }]}>
-                No items in your shopping list
-              </Text>
-              <Text style={[styles.emptySubtext, { color: subTextColor }]}>
-                Add items to plan your next grocery trip
-              </Text>
+              <View style={styles.emptyBox}>
+                <Text style={[styles.emptyText, { color: textColor }]}>
+                  Your list is empty
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  Tap “Add item” to start. Use the left circle for purchased,
+                  and the fridge icon to move items into your fridge with an
+                  expiry date.
+                </Text>
+              </View>
             </View>
           }
+          ListFooterComponent={<View style={{ height: 24 }} />}
         />
 
-        {/* Footer Actions */}
-        {completedCount > 0 && (
-          <View
-            style={[
-              styles.footer,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderTopColor: cardBorderColor,
-              },
-            ]}
+        {/* Bottom Add button (sticky over list) */}
+        <View
+          style={[
+            styles.bottomAddWrap,
+            { bottom: insets.bottom + 104 }, // above floating tab bar
+          ]}
+          pointerEvents="box-none"
+        >
+          <TouchableOpacity
+            style={styles.bottomAddButton}
+            onPress={openAdd}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+            accessibilityLabel="Add item"
           >
-            <Text style={[styles.footerText, { color: subTextColor }]}>
-              {completedCount} completed
-            </Text>
+            <Text style={styles.bottomAddText}>Add item</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Modal
+          visible={addOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setAddOpen(false)}
+        >
+          <View style={styles.modalBackdrop}>
             <TouchableOpacity
-              style={styles.clearButton}
-              onPress={clearCompleted}
-            >
-              <Text style={[styles.clearButtonText, { color: primaryColor }]}>
-                Clear Completed
-              </Text>
-            </TouchableOpacity>
+              style={styles.modalBackdropPress}
+              activeOpacity={1}
+              onPress={() => {
+                if (unitOpen) {
+                  setUnitOpen(false);
+                  return;
+                }
+                setAddOpen(false);
+              }}
+            />
+
+            {/* Single centered "square" popup */}
+            <View style={styles.modalCard}>
+              {unitOpen && (
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => setUnitOpen(false)}
+                  style={styles.dropdownDismissLayer}
+                />
+              )}
+
+              {/* Name + Quantity row */}
+              <View style={styles.sheetTopRow}>
+                <View style={styles.sheetNameWrap}>
+                  <Text style={styles.fieldLabel}>Item Name</Text>
+                  <View style={styles.fieldInputWrap}>
+                    {draftName.length === 0 && (
+                      <Text style={styles.fieldPlaceholder}>
+                        e.g. Milk, Chicken, Apples
+                      </Text>
+                    )}
+                    <TextInput
+                      value={draftName}
+                      onChangeText={setDraftName}
+                      style={styles.fieldInput}
+                      autoFocus
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      onSubmitEditing={addItem}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.qtyColumn}>
+                  <Text style={styles.fieldLabelRight}>Quantity</Text>
+                  <View style={styles.qtyControlModern}>
+                    <TouchableOpacity
+                      onPress={() => setDraftQty((q) => Math.max(1, q - 1))}
+                      style={styles.qtyBtnModern}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.qtyBtnText}>−</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.qtyMid}>
+                      <Text style={styles.qtyTextModern}>{draftQty}</Text>
+                      <TouchableOpacity
+                        onPress={() => setUnitOpen((v) => !v)}
+                        activeOpacity={0.9}
+                        style={styles.unitPill}
+                      >
+                        <Text
+                          style={styles.unitText}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                        >
+                          {draftUnit}
+                        </Text>
+                        <Text style={styles.unitChevron}>▾</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      onPress={() => setDraftQty((q) => Math.min(99, q + 1))}
+                      style={styles.qtyBtnModern}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.qtyBtnText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {unitOpen && (
+                    <>
+                      <View style={styles.unitDropdown}>
+                        <ScrollView
+                          style={styles.unitScroll}
+                          showsVerticalScrollIndicator
+                          nestedScrollEnabled
+                        >
+                          {UNIT_OPTIONS.map((u) => {
+                            const selected = draftUnit === u;
+                            return (
+                              <TouchableOpacity
+                                key={u}
+                                activeOpacity={0.9}
+                                onPress={() => {
+                                  setDraftUnit(u);
+                                  setUnitOpen(false);
+                                }}
+                                style={[
+                                  styles.unitOption,
+                                  selected && styles.unitOptionSelected,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.unitOptionText,
+                                    selected && styles.unitOptionTextSelected,
+                                  ]}
+                                >
+                                  {u}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                        <TouchableOpacity
+                          activeOpacity={0.9}
+                          onPress={() => setUnitOpen(false)}
+                          style={styles.unitCancel}
+                        >
+                          <Text style={styles.unitCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </View>
+
+              {/* Category */}
+              <View style={styles.categoryBlock}>
+                <Text style={styles.categoryLabel}>Category</Text>
+                <View style={styles.chipsWrap}>
+                  {CATEGORY_OPTIONS.map(({ label, Icon }) => {
+                    const selected = label === draftCategory;
+                    return (
+                      <TouchableOpacity
+                        key={label}
+                        onPress={() => setDraftCategory(label)}
+                        style={[
+                          styles.chip,
+                          selected && styles.chipSelectedModern,
+                        ]}
+                        activeOpacity={0.9}
+                      >
+                        <Icon
+                          size={14}
+                          color={selected ? "#FFFFFF" : "#1A1A1A"}
+                          weight="regular"
+                        />
+                        <Text
+                          style={[
+                            styles.chipText,
+                            selected && styles.chipTextSelectedModern,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Actions */}
+              {/** All fields must be filled for Add to be active */}
+              <View style={styles.sheetActions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setUnitOpen(false);
+                    setAddOpen(false);
+                  }}
+                  style={styles.sheetCancel}
+                >
+                  <Text style={styles.sheetCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={addItem}
+                  disabled={
+                    !draftName.trim() ||
+                    draftQty <= 0 ||
+                    !draftCategory ||
+                    !draftUnit
+                  }
+                  style={[
+                    styles.sheetAdd,
+                    (!draftName.trim() ||
+                      draftQty <= 0 ||
+                      !draftCategory ||
+                      !draftUnit) &&
+                      styles.sheetAddDisabled,
+                  ]}
+                >
+                  <Text style={styles.sheetAddText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        )}
+        </Modal>
       </ThemedView>
     </SafeAreaWrapper>
   );
@@ -407,160 +901,737 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    padding: 20,
-    paddingBottom: 16,
+  listContainer: {
+    paddingHorizontal: 18,
+    paddingBottom: 120,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginBottom: 4,
+  banner: {
+    width: "100%",
+    alignSelf: "stretch",
+    backgroundColor: "#22C55E",
+    paddingTop: 18,
+    paddingBottom: 12,
+    alignItems: "center",
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    marginBottom: 10,
   },
-  subtitle: {
-    fontSize: 16,
+  bannerTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
   },
-  addItemButton: {
+  bannerSub: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.85)",
+  },
+  // Header
+  headerContainer: {
+    marginTop: 8,
+    marginBottom: 6,
+    paddingHorizontal: 2,
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerTextBlock: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: 0.2,
+  },
+  headerSubtitle: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6B7280",
+  },
+  countPill: {
+    minWidth: 32,
+    height: 32,
+    paddingHorizontal: 0,
+    borderRadius: 999,
+    backgroundColor: "#ECFDF3",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
     alignItems: "center",
     justifyContent: "center",
-    marginHorizontal: 20,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderStyle: "dashed",
   },
-  addItemText: {
+  countPillText: {
+    color: "#166534",
     fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
+    fontWeight: "900",
   },
-  addForm: {
-    marginHorizontal: 20,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  addInput: {
-    fontSize: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 0,
-    marginBottom: 16,
-  },
-  addActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-  },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  cancelText: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  addButton: {
-    paddingHorizontal: 20,
+  addCard: {
+    marginTop: 6,
+    marginBottom: 14,
+    borderRadius: 18,
     paddingVertical: 10,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  listContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  itemCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 8,
-    overflow: "hidden",
-  },
-  completedItem: {
-    opacity: 0.6,
-  },
-  itemContent: {
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  addButtonSpacer: {
+    height: 6,
+  },
+  bottomAddWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 2000,
+  },
+  bottomAddButton: {
+    height: 46,
+    paddingHorizontal: 24,
+    borderRadius: 23,
+    backgroundColor: "#22C55E",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+    elevation: 0,
+  },
+  bottomAddText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+  addLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  addIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#22C55E",
+  },
+  addTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  addHint: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  itemCard: {
+    borderRadius: 18,
+    marginBottom: 10,
+    marginHorizontal: 2,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 2,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  itemInfo: {
+  itemCenter: {
     flex: 1,
   },
   itemName: {
     fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  completedText: {
-    textDecorationLine: "line-through",
+    fontWeight: "900",
+    marginBottom: 2,
   },
   itemMeta: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  itemActions: {
     flexDirection: "row",
     alignItems: "center",
+    marginLeft: 8,
+    gap: 4,
   },
-  category: {
-    fontSize: 14,
+  actionIcon: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  categoryRow: {},
+  categoryCard: {},
+  categoryGroupCard: {
+    borderRadius: 18,
+    marginBottom: 14,
+    marginHorizontal: 2,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    overflow: "hidden",
+  },
+  categoryGroupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "#22C55E",
+  },
+  categoryGroupTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#FFFFFF",
+  },
+  categoryCountBadge: {
+    marginLeft: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categoryCountText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  categoryGroupBody: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  categoryGroupItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  categoryGroupItemRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  categoryGroupItemMain: {
+    flex: 1,
+  },
+  categoryGroupItemName: {
+    fontSize: 14.5,
+    fontWeight: "600",
+    letterSpacing: 0.1,
+    color: "#111827",
+  },
+  categoryGroupItemMeta: {
+    marginTop: 1,
+    fontSize: 11.5,
+    color: "#6B7280",
+  },
+  categoryGroupItemActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginLeft: 8,
+  },
+  statusCirclesRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginRight: 8,
   },
-  priorityDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 8,
+  statusCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 0,
   },
-  quantity: {
+  statusCircleActive: {
+    backgroundColor: "#16A34A",
+    borderColor: "#15803D",
+  },
+  statusConnector: {
+    width: 18,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#E5E7EB",
+    marginHorizontal: 2,
+  },
+  statusConnectorActive: {
+    backgroundColor: "#16A34A",
+  },
+  categoryCardContent: {
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  categoryCardHeader: {
+    backgroundColor: "#22C55E",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: "center",
+  },
+  categoryCardTitle: {
+    color: "#FFFFFF",
     fontSize: 14,
+    fontWeight: "800",
+    textAlign: "center",
   },
-  removeButton: {
-    padding: 4,
+  categoryCardBody: {
+    paddingHorizontal: 10,
+    paddingTop: 2,
+    paddingBottom: 2,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  categoryCardMetaHeader: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.9)",
+    textAlign: "center",
+    marginTop: 2,
+  },
+  categoryCardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+    marginBottom: 2,
+    gap: 6,
   },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
+    paddingHorizontal: 26,
+  },
+  emptyBox: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 0,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    alignItems: "center",
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
+    fontWeight: "900",
+    marginBottom: 6,
   },
   emptySubtext: {
-    fontSize: 16,
+    fontSize: 13,
     textAlign: "center",
+    color: "#6B7280",
+    fontWeight: "600",
+    lineHeight: 18,
   },
-  footer: {
+  sectionHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
+    justifyContent: "space-between",
+    marginTop: 18,
+    marginBottom: 6,
+    paddingHorizontal: 6,
   },
-  footerText: {
-    fontSize: 14,
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#6B7280",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
-  clearButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  clearPurchased: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
   },
-  clearButtonText: {
-    fontSize: 14,
+  clearPurchasedText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#197C47",
+  },
+  clearPurchasedFooter: {
+    alignItems: "flex-start",
+    paddingHorizontal: 6,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  swipeActionsWrap: {
+    justifyContent: "center",
+    alignItems: "flex-end",
+    marginBottom: 10,
+  },
+  swipeDelete: {
+    width: 92,
+    backgroundColor: "#EF4444",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 16,
+    marginRight: 2,
+  },
+  swipeDeleteText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  categoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 6,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  categoryTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#6B7280",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    paddingHorizontal: 16,
+  },
+  modalBackdropPress: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  sheetCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4B5563",
+    marginBottom: 6,
+    marginLeft: 4,
+  },
+  fieldLabelRight: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4B5563",
+    marginBottom: 6,
+    marginLeft: 0,
+    textAlign: "center",
+    alignSelf: "center",
+  },
+  fieldInputWrap: {
+    position: "relative",
+  },
+  fieldPlaceholder: {
+    position: "absolute",
+    left: 14,
+    top: 13,
+    fontSize: 13,
+    color: "#9CA3AF",
+  },
+  fieldInput: {
+    height: 44,
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 14,
+    fontSize: 15,
     fontWeight: "500",
+    color: "#111827",
+  },
+  categoryBlock: {
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  categoryLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#4B5563",
+    marginBottom: 6,
+  },
+  chipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  chipSelected: {
+    borderColor: "rgba(25,124,71,0.25)",
+    backgroundColor: "rgba(34,197,94,0.12)",
+  },
+  chipSelectedModern: {
+    backgroundColor: "#22C55E",
+    borderColor: "#22C55E",
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  chipTextSelected: {
+    color: "#197C47",
+  },
+  chipTextSelectedModern: {
+    color: "#FFFFFF",
+  },
+  sheetTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  sheetNameWrap: {
+    flex: 1,
+  },
+  qtyColumn: {
+    width: 120,
+  },
+  qtyMid: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  unitPill: {
+    minWidth: 44,
+    maxWidth: 70,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    gap: 4,
+    overflow: "hidden",
+  },
+  unitText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#111827",
+    flexShrink: 1,
+    maxWidth: 40,
+  },
+  unitChevron: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#9CA3AF",
+    flexShrink: 0,
+  },
+  unitDropdown: {
+    position: "absolute",
+    top: 62,
+    left: "50%",
+    width: 96,
+    transform: [{ translateX: -48 }],
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+    overflow: "hidden",
+    zIndex: 20,
+  },
+  dropdownDismissLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 15,
+  },
+  unitScroll: {
+    maxHeight: 6 * 34,
+  },
+  unitOption: {
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  unitOptionSelected: {
+    backgroundColor: "#DCFCE7",
+  },
+  unitOptionText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#374151",
+  },
+  unitOptionTextSelected: {
+    color: "#166534",
+  },
+  unitCancel: {
+    paddingVertical: 10,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  unitCancelText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#166534",
+  },
+  qtyControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  qtyControlModern: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 44,
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F5F5F5",
+    paddingHorizontal: 6,
+  },
+  qtyBtnModern: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qtyBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  qtyBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F3F4F6",
+  },
+  qtyText: {
+    minWidth: 30,
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#111827",
+    paddingHorizontal: 8,
+  },
+  qtyTextModern: {
+    minWidth: 20,
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  sheetActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  sheetCancel: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  sheetCancelText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  sheetAdd: {
+    flex: 1,
+    backgroundColor: "#22C55E",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  sheetAddDisabled: {
+    backgroundColor: "#A1EACB",
+  },
+  sheetAddText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 });

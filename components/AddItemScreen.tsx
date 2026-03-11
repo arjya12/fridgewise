@@ -17,6 +17,7 @@ import {
   Animated,
   Easing,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -58,7 +59,7 @@ const commonUnits = [
   "kg",
   "g",
   "lb",
-  "oz",
+  "servings",
   "L",
   "ml",
   "pack",
@@ -67,7 +68,7 @@ const commonUnits = [
   "bottle",
   "box",
   "bag",
-  "servings",
+  "oz",
   "portion",
 ];
 
@@ -97,14 +98,33 @@ const CATEGORY_ROW_1 = CATEGORY_OPTIONS.slice(0, CHIPS_PER_ROW);
 const CATEGORY_ROW_2 = CATEGORY_OPTIONS.slice(CHIPS_PER_ROW);
 
 export default function AddItemScreen() {
-  const params = useLocalSearchParams<{ edit: string; id: string }>();
+  const params = useLocalSearchParams<{
+    edit?: string;
+    id?: string;
+    name?: string;
+    quantity?: string;
+    unit?: string;
+    location?: "fridge" | "shelf";
+    category?: string;
+  }>();
   const isEditing = params.edit === "true" && Boolean(params.id);
+  const hasPrefill =
+    !isEditing &&
+    Boolean(
+      params.name ||
+        params.quantity ||
+        params.unit ||
+        params.location ||
+        params.category
+    );
 
-  const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState("1");
-  const [unit, setUnit] = useState("pcs");
-  const [location, setLocation] = useState<"fridge" | "shelf">("fridge");
-  const [category, setCategory] = useState("");
+  const [name, setName] = useState(params.name ?? "");
+  const [quantity, setQuantity] = useState(params.quantity ?? "1");
+  const [unit, setUnit] = useState(params.unit ?? "pcs");
+  const [location, setLocation] = useState<"fridge" | "shelf">(
+    params.location ?? "fridge"
+  );
+  const [category, setCategory] = useState(params.category ?? "");
   const [expiryDate, setExpiryDate] = useState<Date | null>(null);
   const [notes, setNotes] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -130,9 +150,14 @@ export default function AddItemScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const successAnim = useRef(new Animated.Value(0)).current;
+  const successPop = useRef(new Animated.Value(0)).current;
   const successScale = successAnim.interpolate({
     inputRange: [0, 0.7, 1],
     outputRange: [0.8, 1.05, 1],
+  });
+  const successPopScale = successPop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.6, 1],
   });
   const successTranslateY = successAnim.interpolate({
     inputRange: [0, 1],
@@ -188,6 +213,26 @@ export default function AddItemScreen() {
     loadExistingItems();
   }, [isEditing, params.id]);
 
+  // Apply prefill from groceries when params change (non-editing)
+  useEffect(() => {
+    if (!isEditing && hasPrefill) {
+      if (params.name) setName(params.name);
+      if (params.quantity) setQuantity(params.quantity);
+      if (params.unit) setUnit(params.unit);
+      if (params.location) setLocation(params.location);
+      if (params.category) setCategory(params.category);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isEditing,
+    hasPrefill,
+    params.name,
+    params.quantity,
+    params.unit,
+    params.location,
+    params.category,
+  ]);
+
   // Reset form and success state when screen comes into focus
   useFocusEffect(
     useCallback(() => {
@@ -195,8 +240,8 @@ export default function AddItemScreen() {
       setShowSuccess(false);
       fadeAnim.setValue(1);
 
-      // Reset form fields if not editing
-      if (!isEditing) {
+      // Reset form fields if not editing and there's no prefill from groceries
+      if (!isEditing && !hasPrefill) {
         setName("");
         setQuantity("1");
         setUnit("pcs");
@@ -206,7 +251,7 @@ export default function AddItemScreen() {
         setNotes("");
         setShowUnitDropdown(false);
       }
-    }, [isEditing])
+    }, [isEditing, hasPrefill])
   );
 
   const loadExistingItems = async () => {
@@ -275,6 +320,11 @@ export default function AddItemScreen() {
       return;
     }
 
+    if (!category.trim()) {
+      Alert.alert("Error", "Please select a category");
+      return;
+    }
+
     setLoading(true);
     try {
       const itemData = {
@@ -296,12 +346,21 @@ export default function AddItemScreen() {
         } catch {}
         setShowSuccess(true);
         successAnim.setValue(0);
-        Animated.timing(successAnim, {
-          toValue: 1,
-          duration: 400,
-          easing: Easing.out(Easing.exp),
-          useNativeDriver: true,
-        }).start();
+        successPop.setValue(0);
+        Animated.parallel([
+          Animated.timing(successAnim, {
+            toValue: 1,
+            duration: 220,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.spring(successPop, {
+            toValue: 1,
+            speed: 20,
+            bounciness: 10,
+            useNativeDriver: true,
+          }),
+        ]).start();
         Animated.timing(fadeAnim, {
           toValue: 0,
           duration: 450,
@@ -320,12 +379,21 @@ export default function AddItemScreen() {
         } catch {}
         setShowSuccess(true);
         successAnim.setValue(0);
-        Animated.timing(successAnim, {
-          toValue: 1,
-          duration: 400,
-          easing: Easing.out(Easing.exp),
-          useNativeDriver: true,
-        }).start();
+        successPop.setValue(0);
+        Animated.parallel([
+          Animated.timing(successAnim, {
+            toValue: 1,
+            duration: 220,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.spring(successPop, {
+            toValue: 1,
+            speed: 20,
+            bounciness: 10,
+            useNativeDriver: true,
+          }),
+        ]).start();
         Animated.timing(fadeAnim, {
           toValue: 0,
           duration: 450,
@@ -696,27 +764,31 @@ export default function AddItemScreen() {
                         <Pressable
                           ref={unitDropdownTriggerRef}
                           onPress={() => {
-                            if (unitDropdownTriggerRef.current) {
-                              unitDropdownTriggerRef.current.measureInWindow(
-                                (
-                                  x: number,
-                                  y: number,
-                                  width: number,
-                                  height: number
-                                ) => {
-                                  let offsetY = y + height;
-                                  if (Platform.OS === "android") {
-                                    offsetY -= Constants.statusBarHeight || 0;
-                                  } else {
-                                    offsetY -= insets.top;
+                            // Dismiss keyboard first so dropdown isn't immediately closed
+                            Keyboard.dismiss();
+                            setTimeout(() => {
+                              if (unitDropdownTriggerRef.current) {
+                                unitDropdownTriggerRef.current.measureInWindow(
+                                  (
+                                    x: number,
+                                    y: number,
+                                    width: number,
+                                    height: number
+                                  ) => {
+                                    let offsetY = y + height;
+                                    if (Platform.OS === "android") {
+                                      offsetY -= Constants.statusBarHeight || 0;
+                                    } else {
+                                      offsetY -= insets.top;
+                                    }
+                                    setDropdownPos({ x, y: offsetY });
+                                    setShowUnitDropdown(true);
                                   }
-                                  setDropdownPos({ x, y: offsetY });
-                                  setShowUnitDropdown(true);
-                                }
-                              );
-                            } else {
-                              setShowUnitDropdown(true);
-                            }
+                                );
+                              } else {
+                                setShowUnitDropdown(true);
+                              }
+                            }, 10);
                           }}
                           style={{
                             minWidth: 44,
@@ -1041,20 +1113,7 @@ export default function AddItemScreen() {
       )}
       {showSuccess && (
         <>
-          {/* Dim background */}
-          <Animated.View
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(15,23,42,0.35)",
-              opacity: successAnim,
-              zIndex: 998,
-            }}
-          />
-          {/* Success badge */}
+          {/* Success badge (no full-screen dim) */}
           <Animated.View
             style={{
               position: "absolute",
@@ -1064,20 +1123,16 @@ export default function AddItemScreen() {
               alignItems: "center",
               zIndex: 999,
               opacity: successAnim,
-              transform: [{ scale: successScale }, { translateY: successTranslateY }],
+              transform: [
+                { scale: Animated.multiply(successScale, successPopScale) },
+                { translateY: successTranslateY },
+              ],
             }}
           >
-            <Ionicons name="checkmark-circle" size={80} color="#22C55E" />
-            <Text
-              style={{
-                fontSize: 22,
-                color: "#22C55E",
-                fontWeight: "bold",
-                marginTop: 12,
-              }}
-            >
-              Item Added!
-            </Text>
+            <View style={styles.successCard}>
+              <Ionicons name="checkmark-circle" size={78} color="#22C55E" />
+              <Text style={styles.successText}>Item Added!</Text>
+            </View>
           </Animated.View>
         </>
       )}
@@ -1126,6 +1181,25 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     gap: 16,
+  },
+  successCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  successText: {
+    fontSize: 18,
+    color: "#16A34A",
+    fontWeight: "800",
+    marginTop: 10,
+    letterSpacing: 0.2,
   },
   halfWidth: {
     flex: 1,

@@ -49,11 +49,11 @@ export default function TabLayout() {
           }}
         />
 
-        {/* 3. Shopping List Tab - Planning and replenishing */}
+        {/* 3. Groceries Tab - Planning and replenishing */}
         <Tabs.Screen
           name="shopping-list"
           options={{
-            title: "Shopping",
+            title: "Groceries",
             tabBarIcon: ({ color }) => (
               <Ionicons name="basket-outline" color={color} size={24} />
             ),

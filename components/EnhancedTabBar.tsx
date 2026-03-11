@@ -47,7 +47,7 @@ const TAB_CONFIG: Record<string, TabConfig> = {
   },
   "shopping-list": {
     name: "shopping-list",
-    title: "Shopping",
+    title: "Groceries",
     icon: "basket-outline",
     focusedIcon: "basket",
   },
