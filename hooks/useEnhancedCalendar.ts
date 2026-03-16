@@ -216,19 +216,7 @@ export function useEnhancedCalendar(
     }
   }, [currentMonth]);
 
-  // Profile marked dates calculation
-  useEffect(() => {
-    const start = performance.now();
-    createEnhancedMarkedDates(data.itemsByDate, undefined, {
-      maxDotsPerDate: 4,
-    });
-    const end = performance.now();
-    console.log(
-      "[Calendar Performance] Marked dates calculation took",
-      (end - start).toFixed(0),
-      "ms"
-    );
-  }, [data.itemsByDate]);
+  // Note: keep marked-dates computation pure (no console logging)
 
   // =============================================================================
   // UTILITY FUNCTIONS
@@ -328,69 +316,66 @@ export function useEnhancedCalendar(
 
     Object.entries(data.itemsByDate).forEach(([date, items]) => {
       if (items.length > 0) {
-        // Enhanced status priority system: Critical > Warning > Soon > Safe
-        let mostCriticalStatus = "safe";
-        let mostCriticalColor = "#22C55E"; // Safe (green)
+        // Legend-aligned multi-dot system:
+        // - Green: fresh/safe
+        // - Yellow: expiring soon (today..+3 days)
+        // - Red: expired (past)
+        const dotOrder: Array<"expired" | "soon" | "safe"> = [
+          "expired",
+          "soon",
+          "safe",
+        ];
+        const dotColors: Record<"expired" | "soon" | "safe", string> = {
+          expired: "#EF4444",
+          soon: "#EAB308",
+          safe: "#22C55E",
+        };
+
+        const present = new Set<"expired" | "soon" | "safe">();
 
         items.forEach((item) => {
-          if (item.expiry_date) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+          if (!item.expiry_date) return;
 
-            const expiryDate = new Date(item.expiry_date);
-            expiryDate.setHours(0, 0, 0, 0);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
 
-            const daysUntilExpiry = Math.ceil(
-              (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-            );
+          const expiryDate = new Date(item.expiry_date);
+          expiryDate.setHours(0, 0, 0, 0);
 
-            // Priority-based status determination
-            let itemStatus = "safe";
-            let itemColor = "#22C55E";
+          const daysUntilExpiry = Math.floor(
+            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+          );
 
-            if (daysUntilExpiry <= 0) {
-              // Critical: expires today/overdue
-              itemStatus = "critical";
-              itemColor = "#EF4444"; // Red
-            } else if (daysUntilExpiry >= 1 && daysUntilExpiry <= 3) {
-              // Warning: expires 1-3 days
-              itemStatus = "warning";
-              itemColor = "#F97316"; // Orange
-            } else if (daysUntilExpiry >= 4 && daysUntilExpiry <= 7) {
-              // Soon: expires 4-7 days
-              itemStatus = "soon";
-              itemColor = "#EAB308"; // Yellow
-            }
-            // Safe: expires 8+ days (default)
-
-            // Update most critical status based on priority
-            const statusPriority = {
-              critical: 0,
-              warning: 1,
-              soon: 2,
-              safe: 3,
-            };
-
-            if (
-              statusPriority[itemStatus as keyof typeof statusPriority] <
-              statusPriority[mostCriticalStatus as keyof typeof statusPriority]
-            ) {
-              mostCriticalStatus = itemStatus;
-              mostCriticalColor = itemColor;
-            }
+          if (daysUntilExpiry < 0) {
+            present.add("expired");
+          } else if (daysUntilExpiry <= 3) {
+            present.add("soon");
+          } else {
+            present.add("safe");
           }
         });
 
-        // Create single dot representing most critical status
+        const dots = dotOrder
+          .filter((t) => present.has(t))
+          .slice(0, 3)
+          .map((t) => ({
+            key: t,
+            color: dotColors[t],
+            selectedDotColor: "#FFFFFF",
+          }));
+
+        // Fallback: if items exist but have no expiry_date, show "safe" dot
+        if (dots.length === 0) {
+          dots.push({
+            key: "safe",
+            color: dotColors.safe,
+            selectedDotColor: "#FFFFFF",
+          });
+        }
+
         marked[date] = {
           marked: true,
-          dots: [
-            {
-              key: mostCriticalStatus,
-              color: mostCriticalColor,
-              selectedDotColor: "#FFFFFF", // White dot when date is selected
-            },
-          ],
+          dots,
         };
       }
     });

@@ -149,6 +149,19 @@ export const foodItemsService = {
     if (error) throw error;
   },
 
+  // Mark item as used (consumed). Logs to usage_logs and reduces/removes from food_items.
+  async markItemUsed(itemId: string, quantity?: number): Promise<void> {
+    const { data: item, error: itemError } = await supabase
+      .from("food_items")
+      .select("quantity")
+      .eq("id", itemId)
+      .single();
+
+    if (itemError || !item) throw new Error("Item not found");
+    const qty = quantity ?? (item as FoodItem).quantity;
+    await this.logUsage(itemId, "used", qty);
+  },
+
   // Log item usage
   async logUsage(
     itemId: string,

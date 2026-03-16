@@ -464,7 +464,7 @@ export default function ShoppingListScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Edit item"
                       >
-                        <Ionicons name="create-outline" size={16} color="#22C55E" />
+                        <Ionicons name="create-outline" size={16} color="#6B7280" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.actionIcon}
@@ -473,7 +473,7 @@ export default function ShoppingListScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Delete item"
                       >
-                        <Ionicons name="trash-outline" size={16} color="#22C55E" />
+                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -552,7 +552,7 @@ export default function ShoppingListScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Edit item"
                 >
-                  <Ionicons name="create-outline" size={16} color="#22C55E" />
+                  <Ionicons name="create-outline" size={16} color="#6B7280" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionIcon}
@@ -561,7 +561,7 @@ export default function ShoppingListScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Delete purchased item"
                 >
-                  <Ionicons name="trash-outline" size={16} color="#22C55E" />
+                  <Ionicons name="trash-outline" size={16} color="#EF4444" />
                 </TouchableOpacity>
               </View>
             </View>

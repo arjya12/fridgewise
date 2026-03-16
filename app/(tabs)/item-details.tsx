@@ -1,3 +1,4 @@
+import { ConfirmModal } from "@/components/ConfirmModal";
 import EditItemModal from "@/components/EditItemModal";
 import ItemGroupCard from "@/components/ItemGroupCard";
 import RealisticFoodImage from "@/components/RealisticFoodImage";
@@ -48,6 +49,8 @@ export default function ItemDetailsScreen() {
   const [entries, setEntries] = useState<ItemEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [pendingDeleteEntryId, setPendingDeleteEntryId] = useState<string | null>(null);
   const [currentEditItem, setCurrentEditItem] = useState<{
     id: string;
     name: string;
@@ -157,24 +160,18 @@ export default function ItemDetailsScreen() {
   };
 
   const handleDeleteEntry = (entryId: string) => {
-    Alert.alert("Delete Item", "Are you sure you want to delete this item?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Delete",
-        onPress: () => {
-          // Remove the entry from our state
-          setEntries((prevEntries) =>
-            prevEntries.filter((entry) => entry.id !== entryId)
-          );
-          // Show confirmation
-          Alert.alert("Success", "Item deleted successfully");
-        },
-        style: "destructive",
-      },
-    ]);
+    setPendingDeleteEntryId(entryId);
+    setDeleteModalVisible(true);
+  };
+
+  const handleConfirmDeleteEntry = () => {
+    if (pendingDeleteEntryId == null) return;
+    const entryId = pendingDeleteEntryId;
+    setDeleteModalVisible(false);
+    setPendingDeleteEntryId(null);
+    setEntries((prevEntries) =>
+      prevEntries.filter((entry) => entry.id !== entryId)
+    );
   };
 
   // Handle modal update
@@ -297,6 +294,20 @@ export default function ItemDetailsScreen() {
           }}
         />
       )}
+
+      <ConfirmModal
+        visible={deleteModalVisible}
+        title="Delete item"
+        message="Are you sure you want to delete this item?"
+        cancelLabel="Cancel"
+        confirmLabel="Delete"
+        variant="destructive"
+        onCancel={() => {
+          setDeleteModalVisible(false);
+          setPendingDeleteEntryId(null);
+        }}
+        onConfirm={handleConfirmDeleteEntry}
+      />
     </SafeAreaView>
   );
 }

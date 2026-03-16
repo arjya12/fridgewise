@@ -433,7 +433,7 @@ export default function AddItemScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#FFF" }}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
-      {/* Add Item Heading with green background */}
+      {/* Add Item / Edit Item Heading with green background */}
       <View
         style={{
           width: "100%",
@@ -456,7 +456,7 @@ export default function AddItemScreen() {
             textAlign: "center",
           }}
         >
-          Add Item
+          {isEditing ? "Edit Item" : "Add Item"}
         </ThemedText>
         <ThemedText
           style={{
@@ -469,7 +469,7 @@ export default function AddItemScreen() {
             textAlign: "center",
           }}
         >
-          to
+          {isEditing ? "" : "to"}
         </ThemedText>
       </View>
       {/* Fridge/Shelf buttons below heading */}
@@ -659,7 +659,7 @@ export default function AddItemScreen() {
                         fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                         color: "#4B5563",
                         marginBottom: 6,
-                        marginLeft: 10,
+                        textAlign: "center",
                       }}
                     >
                       Quantity
@@ -682,7 +682,6 @@ export default function AddItemScreen() {
                           flexDirection: "row",
                           alignItems: "center",
                           justifyContent: "space-between",
-                          marginBottom: 2,
                         }}
                       >
                         <Pressable
@@ -706,7 +705,12 @@ export default function AddItemScreen() {
                           accessibilityLabel="Decrease quantity"
                         >
                           <ThemedText
-                            style={{ fontSize: 14, color: "#111827", fontWeight: "800" }}
+                            style={{
+                              fontSize: 14,
+                              lineHeight: 14,
+                              color: "#111827",
+                              fontWeight: "800",
+                            }}
                           >
                             −
                           </ThemedText>
@@ -746,7 +750,12 @@ export default function AddItemScreen() {
                           accessibilityLabel="Increase quantity"
                         >
                           <ThemedText
-                            style={{ fontSize: 14, color: "#111827", fontWeight: "800" }}
+                            style={{
+                              fontSize: 14,
+                              lineHeight: 14,
+                              color: "#111827",
+                              fontWeight: "800",
+                            }}
                           >
                             +
                           </ThemedText>
@@ -1004,6 +1013,7 @@ export default function AddItemScreen() {
                 }
                 loading={loading}
                 singleLineText
+                isEditing={isEditing}
               />
             </View>
           </View>
@@ -1131,7 +1141,7 @@ export default function AddItemScreen() {
           >
             <View style={styles.successCard}>
               <Ionicons name="checkmark-circle" size={78} color="#22C55E" />
-              <Text style={styles.successText}>Item Added!</Text>
+              <Text style={styles.successText}>{isEditing ? "Item Edited!" : "Item Added!"}</Text>
             </View>
           </Animated.View>
         </>
@@ -1345,10 +1355,12 @@ interface GradientAddItemButtonProps {
   onPress: () => void;
   disabled: boolean;
   loading: boolean;
+  isEditing?: boolean;
 }
 
 function GradientAddItemButton(props: GradientAddItemButtonProps) {
-  const { onPress, disabled, loading } = props;
+  const { onPress, disabled, loading, isEditing } = props;
+  const actionLabel = isEditing ? "Edit Item" : "Add Item";
   const scale = useRef(new Animated.Value(1)).current;
 
   function handlePressIn() {
@@ -1418,7 +1430,7 @@ function GradientAddItemButton(props: GradientAddItemButtonProps) {
               letterSpacing: 0.5,
             }}
           >
-            {loading ? "Saving..." : "Add Item"}
+            {loading ? "Saving..." : actionLabel}
           </Text>
         </LinearGradient>
       </Pressable>
@@ -1431,8 +1443,10 @@ function FloatingAddItemButton(props: {
   disabled: boolean;
   loading: boolean;
   singleLineText?: boolean;
+  isEditing?: boolean;
 }) {
-  const { onPress, disabled, loading, singleLineText } = props;
+  const { onPress, disabled, loading, singleLineText, isEditing } = props;
+  const actionLabel = isEditing ? "Edit Item" : "Add Item";
   const scale = useRef(new Animated.Value(1)).current;
 
   function handlePressIn() {
@@ -1469,7 +1483,7 @@ function FloatingAddItemButton(props: {
           paddingHorizontal: 18,
         }}
         accessibilityRole="button"
-        accessibilityLabel="Add Item"
+        accessibilityLabel={actionLabel}
       >
         {/* Ensure all text is wrapped in <Text> */}
         <Text
@@ -1483,7 +1497,7 @@ function FloatingAddItemButton(props: {
             lineHeight: 18,
           }}
         >
-          {loading ? "Saving..." : singleLineText ? "Add Item" : "Add\nItem"}
+          {loading ? "Saving..." : singleLineText ? actionLabel : actionLabel.replace(" ", "\n")}
         </Text>
       </Pressable>
     </Animated.View>

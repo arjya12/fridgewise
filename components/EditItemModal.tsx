@@ -164,7 +164,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
             {/* Quantity & Expiry Date */}
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.label}>Quantity</Text>
+                <Text style={[styles.label, styles.quantityLabel]}>Quantity</Text>
                 <View style={styles.quantityContainer}>
                   <TouchableOpacity
                     style={styles.quantityButton}
@@ -400,6 +400,9 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 8,
   },
+  quantityLabel: {
+    textAlign: "center",
+  },
   textInput: {
     backgroundColor: "#F9FAFB",
     borderRadius: 8,
@@ -434,6 +437,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     color: "#374151",
+    lineHeight: 20,
   },
   quantityInput: {
     flex: 1,

@@ -11,6 +11,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CalendarProvider } from "@/contexts/CalendarContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { TipsProvider } from "@/contexts/TipsContext";
+import { foodItemsService } from "@/services/foodItems";
 import {
   registerBackgroundTasks,
   requestNotificationPermissions,
@@ -75,7 +76,7 @@ export default function RootLayout() {
         <AuthProvider>
           <SettingsProvider>
             <TipsProvider>
-              <CalendarProvider>
+              <CalendarProvider foodItemsService={foodItemsService}>
                 <ThemeProvider value={CustomLightTheme}>
                   <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="index" />

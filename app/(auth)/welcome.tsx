@@ -618,9 +618,9 @@ export default function WelcomeScreen() {
                     onFocus={() => setEmailFocused(true)}
                     onBlur={() => setEmailFocused(false)}
                     underlineColorAndroid="transparent"
-                    autoComplete="email"
-                    importantForAutofill="yes"
-                    textContentType="emailAddress"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                    textContentType="none"
                   />
                 </View>
                 {!isResetMode && (
@@ -652,9 +652,9 @@ export default function WelcomeScreen() {
                       onFocus={() => setPasswordFocused(true)}
                       onBlur={() => setPasswordFocused(false)}
                       underlineColorAndroid="transparent"
-                      autoComplete="password"
-                      importantForAutofill="yes"
-                      textContentType="password"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                    textContentType="none"
                     />
                     <TouchableOpacity
                       onPress={() => setShowPassword(!showPassword)}
@@ -913,11 +913,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: "#FFFFFF",
   },
   inputGroupFocused: {
     borderColor: "#197C47",
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: "#FFFFFF",
   },
   inputGroupError: {
     borderColor: "#D32F2F",
@@ -958,7 +958,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: "#197C47",
     fontSize: 16,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 0,
   },
   eyeIcon: {

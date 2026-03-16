@@ -1,7 +1,8 @@
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { formatExpiry } from "@/utils/formatExpiry";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useRef } from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 
 type ItemEntryCardProps = {
@@ -34,6 +35,7 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
   const { color, backgroundColor, borderColor, iconColor } =
     getExpiryColors(expiryStatus);
   const swipeableRef = useRef<Swipeable>(null);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
   const handleEditPress = () => {
     swipeableRef.current?.close();
@@ -44,22 +46,12 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
 
   const showDeleteConfirmation = () => {
     swipeableRef.current?.close();
-    Alert.alert(
-      "Delete Item",
-      "Are you sure you want to delete this item? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            if (onDeletePress) {
-              onDeletePress();
-            }
-          },
-        },
-      ]
-    );
+    setDeleteModalVisible(true);
+  };
+
+  const handleConfirmDelete = () => {
+    setDeleteModalVisible(false);
+    if (onDeletePress) onDeletePress();
   };
 
   const renderRightActions = () => {
@@ -87,6 +79,7 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
   };
 
   return (
+    <>
     <Swipeable
       ref={swipeableRef}
       renderRightActions={renderRightActions}
@@ -158,6 +151,17 @@ const ItemEntryCard: React.FC<ItemEntryCardProps> = ({
         </View>
       </View>
     </Swipeable>
+    <ConfirmModal
+      visible={deleteModalVisible}
+      title="Delete item"
+      message="Are you sure you want to delete this item? This action cannot be undone."
+      cancelLabel="Cancel"
+      confirmLabel="Delete"
+      variant="destructive"
+      onCancel={() => setDeleteModalVisible(false)}
+      onConfirm={handleConfirmDelete}
+    />
+    </>
   );
 };
 

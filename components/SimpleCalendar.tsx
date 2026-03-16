@@ -1,6 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -39,6 +47,55 @@ export function SimpleCalendar({
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+
+  // ── Month/year wheel picker (same UX as Calendar screen) ───────────────────
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [tempMonth, setTempMonth] = useState(month + 1);
+  const [tempYear, setTempYear] = useState(year);
+
+  const WHEEL_ITEM_H = 32;
+  const WHEEL_VISIBLE = 5;
+  const WHEEL_PAD = Math.floor(WHEEL_VISIBLE / 2); // 2
+  const wheelSpacerH = WHEEL_PAD * WHEEL_ITEM_H;
+
+  const MONTHS = useMemo(
+    () =>
+      [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ],
+    []
+  );
+  const MONTH_LOOP_REPEATS = 40;
+  const MONTH_LOOP_START = Math.floor(MONTH_LOOP_REPEATS / 2) * 12;
+
+  const baseYear = useMemo(() => new Date().getFullYear(), []);
+  const YEAR_PAST = 2;
+  const YEAR_FUTURE = 12;
+  const yearsData = useMemo(() => {
+    const start = baseYear - YEAR_PAST;
+    return Array.from({ length: YEAR_PAST + 1 + YEAR_FUTURE }).map(
+      (_, i) => start + i
+    );
+  }, [baseYear]);
+
+  const monthRef = useRef<FlatList<string>>(null);
+  const yearRef = useRef<FlatList<number>>(null);
+
+  const scrollWheelToIndex = (ref: any, index: number, animated: boolean) => {
+    const offset = Math.max(0, index * WHEEL_ITEM_H);
+    ref.current?.scrollToOffset({ offset, animated });
+  };
 
   const monthNames = [
     "January",
@@ -114,6 +171,23 @@ export function SimpleCalendar({
 
   return (
     <View style={styles.container}>
+      {/* Calendar icon (acts as dropdown trigger) */}
+      <Pressable
+        style={styles.hintIcon}
+        onPress={() => {
+          setTempMonth(month + 1);
+          setTempYear(year);
+          setPickerOpen(true);
+          requestAnimationFrame(() => {
+            scrollWheelToIndex(monthRef, MONTH_LOOP_START + month, false);
+            const yi = Math.max(0, yearsData.indexOf(year));
+            scrollWheelToIndex(yearRef, yi, false);
+          });
+        }}
+      >
+        <Ionicons name="calendar-outline" size={16} color="#22C55E" />
+      </Pressable>
+
       {/* Year and Month selectors */}
       <View style={styles.header}>
         <Pressable onPress={() => changeYear(-1)} style={styles.arrowCircle}>
@@ -208,6 +282,150 @@ export function SimpleCalendar({
           </View>
         ))}
       </View>
+
+      <Modal
+        transparent
+        visible={pickerOpen}
+        animationType="fade"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setPickerOpen(false)}
+          />
+          <View style={styles.modalCard}>
+            <View style={styles.wheelsRow}>
+              <View style={styles.wheelCol}>
+                <View style={styles.wheelBody}>
+                  <View style={styles.wheelHighlight} pointerEvents="none" />
+                  <FlatList
+                    ref={monthRef}
+                    data={Array.from({ length: 12 * MONTH_LOOP_REPEATS }).map(
+                      (_, i) => MONTHS[i % 12]
+                    )}
+                    keyExtractor={(it, idx) => `${it}-${idx}`}
+                    showsVerticalScrollIndicator={false}
+                    bounces={false}
+                    overScrollMode="never"
+                    snapToInterval={WHEEL_ITEM_H}
+                    decelerationRate="fast"
+                    disableIntervalMomentum
+                    contentContainerStyle={{ paddingVertical: wheelSpacerH }}
+                    getItemLayout={(_, index) => ({
+                      length: WHEEL_ITEM_H,
+                      offset: WHEEL_ITEM_H * index,
+                      index,
+                    })}
+                    initialScrollIndex={MONTH_LOOP_START + (tempMonth - 1)}
+                    onMomentumScrollEnd={(e) => {
+                      const idx = Math.round(
+                        e.nativeEvent.contentOffset.y / WHEEL_ITEM_H
+                      );
+                      const raw = (Array.from({
+                        length: 12 * MONTH_LOOP_REPEATS,
+                      }).map((_, i) => MONTHS[i % 12]) as any[])[idx];
+                      const m = MONTHS.indexOf(raw);
+                      if (m >= 0) setTempMonth(m + 1);
+                      const minSafe = 12 * 6;
+                      const maxSafe = 12 * (MONTH_LOOP_REPEATS - 6);
+                      if (idx < minSafe || idx > maxSafe) {
+                        scrollWheelToIndex(
+                          monthRef,
+                          MONTH_LOOP_START + (m >= 0 ? m : 0),
+                          false
+                        );
+                      }
+                    }}
+                    renderItem={({ item, index }) => {
+                      const active = index === MONTH_LOOP_START + (tempMonth - 1);
+                      return (
+                        <View style={styles.wheelItem}>
+                          <Text
+                            style={[
+                              styles.wheelText,
+                              active && styles.wheelTextActive,
+                            ]}
+                          >
+                            {item}
+                          </Text>
+                        </View>
+                      );
+                    }}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.wheelCol}>
+                <View style={styles.wheelBody}>
+                  <View style={styles.wheelHighlight} pointerEvents="none" />
+                  <FlatList
+                    ref={yearRef}
+                    data={yearsData}
+                    keyExtractor={(it, idx) => `${it}-${idx}`}
+                    showsVerticalScrollIndicator={false}
+                    bounces={false}
+                    overScrollMode="never"
+                    snapToInterval={WHEEL_ITEM_H}
+                    decelerationRate="fast"
+                    disableIntervalMomentum
+                    contentContainerStyle={{ paddingVertical: wheelSpacerH }}
+                    getItemLayout={(_, index) => ({
+                      length: WHEEL_ITEM_H,
+                      offset: WHEEL_ITEM_H * index,
+                      index,
+                    })}
+                    initialScrollIndex={Math.max(0, yearsData.indexOf(tempYear))}
+                    onMomentumScrollEnd={(e) => {
+                      let idx = Math.round(
+                        e.nativeEvent.contentOffset.y / WHEEL_ITEM_H
+                      );
+                      if (idx < 0) idx = 0;
+                      if (idx > yearsData.length - 1) idx = yearsData.length - 1;
+                      const y = yearsData[idx];
+                      if (typeof y === "number") setTempYear(y);
+                      if (idx <= 0) scrollWheelToIndex(yearRef, 0, false);
+                    }}
+                    renderItem={({ item }) => {
+                      const active = item === tempYear;
+                      return (
+                        <View style={styles.wheelItem}>
+                          <Text
+                            style={[
+                              styles.wheelText,
+                              active && styles.wheelTextActive,
+                            ]}
+                          >
+                            {item}
+                          </Text>
+                        </View>
+                      );
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setPickerOpen(false)}
+                style={styles.modalCancel}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setCurrentDate(new Date(tempYear, tempMonth - 1, 1));
+                  setPickerOpen(false);
+                }}
+                style={styles.modalApply}
+              >
+                <Text style={styles.modalApplyText}>Apply</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -226,6 +444,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
     marginVertical: 8,
+  },
+  hintIcon: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    opacity: 0.9,
   },
   header: {
     flexDirection: "row",
@@ -277,6 +502,98 @@ const styles = StyleSheet.create({
     fontFamily: "SpaceMono",
     letterSpacing: 0.5,
     textAlign: "center",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.35)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  modalLabel: {
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: "#94A3B8",
+    marginBottom: 10,
+  },
+  wheelsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  wheelCol: {
+    flex: 1,
+  },
+  wheelBody: {
+    height: 32 * 5,
+    borderRadius: 12,
+    backgroundColor: "#F9FAFB",
+    overflow: "hidden",
+    position: "relative",
+  },
+  wheelHighlight: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 64,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    backgroundColor: "rgba(220,252,231,0.35)",
+  },
+  wheelItem: {
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E5E7EB",
+  },
+  wheelText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#6B7280",
+  },
+  wheelTextActive: {
+    color: "#15803D",
+    fontWeight: "700",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 12,
+    gap: 16,
+  },
+  modalCancel: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  modalApply: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#22C55E",
+  },
+  modalApplyText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   daysRow: {
     flexDirection: "row",
