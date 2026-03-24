@@ -16,6 +16,7 @@ export const foodItemsService = {
     let query = supabase
       .from("food_items")
       .select("*")
+      .gt("quantity", 0)
       .order("expiry_date", { ascending: true });
 
     if (location) {
@@ -40,6 +41,7 @@ export const foodItemsService = {
     const { data, error } = await supabase
       .from("food_items")
       .select("*")
+      .gt("quantity", 0)
       .gte("expiry_date", today.toISOString().split("T")[0])
       .lte("expiry_date", futureDate.toISOString().split("T")[0])
       .order("expiry_date", { ascending: true });
@@ -57,6 +59,7 @@ export const foodItemsService = {
     const { data, error } = await supabase
       .from("food_items")
       .select("*")
+      .gt("quantity", 0)
       .lt("expiry_date", today)
       .order("expiry_date", { ascending: true });
 
@@ -74,6 +77,7 @@ export const foodItemsService = {
     let query = supabase
       .from("food_items")
       .select("*")
+      .gt("quantity", 0)
       .not("expiry_date", "is", null);
 
     if (startDate) {
@@ -190,11 +194,11 @@ export const foodItemsService = {
 
     if (logError) throw logError;
 
-    // Update or delete the item based on remaining quantity
+    // Keep row for history joins; hide zero qty in read queries
     const remainingQuantity = (item as FoodItem).quantity - quantity;
 
     if (remainingQuantity <= 0) {
-      await this.deleteItem(itemId);
+      await this.updateItem(itemId, { quantity: 0 });
     } else {
       await this.updateItem(itemId, { quantity: remainingQuantity });
     }
@@ -238,6 +242,7 @@ export const foodItemsService = {
     const { data, error } = await supabase
       .from("food_items")
       .select("*")
+      .gt("quantity", 0)
       .ilike("name", `%${query}%`)
       .order("name");
 

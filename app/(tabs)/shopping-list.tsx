@@ -917,10 +917,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   bannerTitle: {
-    fontSize: 22,
-    fontWeight: "900",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#FFFFFF",
-    letterSpacing: 0.5,
+    textAlign: "center",
   },
   bannerSub: {
     marginTop: 2,

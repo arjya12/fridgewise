@@ -1,17 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   Alert,
-  Dimensions,
-  Platform,
+  Image,
+  Keyboard,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,366 +17,704 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Archive,
+  AppleLogo,
+  BeerBottle,
+  Bone,
+  Coffee,
+  Cookie,
+  CookingPot,
+  CaretLeft,
+  CaretRight,
+  Carrot,
+  ClockCounterClockwise,
+  Drop,
+  Egg,
+  Fish,
+  Grains,
+  Hourglass,
+  MagnifyingGlass,
+  Package,
+  PushPin,
+  Snowflake,
+  X,
+  Bread,
+  Thermometer,
+  WarningCircle,
+} from "phosphor-react-native";
+import Svg, { Path } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
+import { Dimensions } from "react-native";
 
-import AnimatedItemGroupCard from "@/components/AnimatedItemGroupCard";
-import DashboardSummary from "@/components/DashboardSummary";
-import EditItemModal from "@/components/EditItemModal";
-import EmptyStateView from "@/components/EmptyStateView";
-import SafeAreaWrapper from "@/components/SafeAreaWrapper";
-import TipCard from "@/components/TipCard";
+import { ConsumeModal } from "@/components/ConsumeModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSettings } from "@/contexts/SettingsContext";
-import { useTips } from "@/contexts/TipsContext";
-import { useColorScheme } from "@/hooks/useColorScheme";
-import { FoodItem } from "@/lib/supabase";
+import {
+  loadPinnedItemIds,
+  MAX_PINNED_ITEMS,
+  savePinnedItemIds,
+} from "@/lib/pinnedItemsStorage";
+import { FoodItem, supabase, UsageLog } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
 import { formatExpiry } from "@/utils/formatExpiry";
 
-const { width, height } = Dimensions.get("window");
+type LocationFilter = "all" | "fridge" | "shelf";
 
-// Utility function to ensure text props are properly handled
-const ensureTextSafety = (text: string | number | undefined): string => {
-  if (text === undefined || text === null) {
-    return "";
-  }
-  return String(text);
-};
-
-// Use React Native's Text component with enhanced styling to fix rendering issues
-const EnhancedText = ({
-  style,
-  children,
-  ...props
-}: React.ComponentProps<typeof Text>) => (
-  <Text
-    {...props}
-    style={[
-      {
-        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-        includeFontPadding: false,
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 0,
-        opacity: 1,
-        fontWeight: "500",
-      },
-      style,
-    ]}
-    allowFontScaling={false}
-  >
-    {children}
-  </Text>
-);
-
-// Special component for numbers to fix "0" rendering issues
-const NumberText = ({
-  style,
-  children,
-  ...props
-}: React.ComponentProps<typeof Text>) => (
-  <Text
-    {...props}
-    style={[
-      {
-        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-        fontWeight: "900",
-        includeFontPadding: true,
-        lineHeight: Platform.OS === "ios" ? 60 : 65,
-        padding: 0,
-        margin: 0,
-        color: "#424753",
-        textAlign: "center",
-        textAlignVertical: "center",
-      },
-      style,
-    ]}
-    allowFontScaling={false}
-  >
-    {children}
-  </Text>
-);
-
-// Type for an individual food item entry
 type ItemEntry = {
   id: string;
   quantity: number;
   expiryDate?: string;
-  isUseFirst?: boolean;
   daysUntilExpiry?: number;
-  expiryStatus?: string;
+  location: "fridge" | "shelf";
 };
 
-// Type for a group of food items
 type ItemGroup = {
   name: string;
+  totalQuantity: number;
+  soonestExpiry?: string;
+  soonestDays?: number;
   entries: ItemEntry[];
 };
 
-// Helper function to calculate days until expiry
+type ThisWeekCard = {
+  kind: "expiring" | "expired" | "used" | "wasted";
+  id: string;
+  title: string;
+  quantity: number;
+  unit?: string;
+  location?: "fridge" | "shelf";
+  category?: string;
+  expiryDate?: string;
+  statusText: string;
+};
+
+const UI = {
+  bg: "#ffffff",
+  card: "#ffffff",
+  border: "#e8e6e0",
+  divider: "#ece9e2",
+  ink: "#1f2937",
+  muted: "#6b7280",
+  neutral: "#334155",
+  neutralBg: "#F1F5F9",
+  neutralBorder: "#CBD5E1",
+  greenBg: "#EAF3DE",
+  greenInk: "#27500A",
+  greenBorder: "#C0DD97",
+  amber: "#B45309",
+  amberBg: "#FEF3C7",
+  amberBorder: "#FDE68A",
+  red: "#991B1B",
+  redBg: "#FEE2E2",
+  redBorder: "#FECACA",
+  ok: "#166534",
+  okBg: "#DCFCE7",
+  okBorder: "#BBF7D0",
+};
+
 const getDaysUntilExpiry = (expiryDate?: string): number | undefined => {
   if (!expiryDate) return undefined;
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const expiry = new Date(expiryDate);
   return Math.ceil(
     (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
   );
 };
 
-export default function InventoryScreen() {
+const getDaysAgo = (dateString?: string): number | undefined => {
+  if (!dateString) return undefined;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dt = new Date(dateString);
+  dt.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today.getTime() - dt.getTime()) / (1000 * 60 * 60 * 24));
+  return diff >= 0 ? diff : undefined;
+};
+
+const fridgeIconAsset = require("@/assets/images/icons/fridge_icon.png");
+const shelfIconAsset = require("@/assets/images/icons/shelf_icon.png");
+const PINNED_ACTION_ROW_H = 44;
+const INVENTORY_ACTION_ROW_H = 44;
+
+function parseExpiryYmd(iso?: string): string | null {
+  if (!iso || iso.length < 10) return null;
+  return iso.includes("T") ? iso.split("T")[0]! : iso.slice(0, 10);
+}
+
+function parseExpiryDate(iso?: string): Date | null {
+  const ymd = parseExpiryYmd(iso);
+  if (!ymd) return null;
+  const d = new Date(`${ymd}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isFoodItemExpired(item: FoodItem): boolean {
+  const d = parseExpiryDate(item.expiry_date);
+  if (!d) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return d < today;
+}
+
+/** Upcoming (soonest expiry first), then no date, then expired (earlier date first). */
+function compareFoodItemsByExpirySoonestFirst(a: FoodItem, b: FoodItem): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const da = parseExpiryDate(a.expiry_date);
+  const db = parseExpiryDate(b.expiry_date);
+  const bucket = (d: Date | null) => {
+    if (!d) return 2;
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    if (x < today) return 1;
+    return 0;
+  };
+  const ba = bucket(da);
+  const bb = bucket(db);
+  if (ba !== bb) return ba - bb;
+  if (da && db) return da.getTime() - db.getTime();
+  return a.name.localeCompare(b.name);
+}
+
+function formatPinExpiryLine(item: FoodItem): { text: string; expired: boolean } {
+  if (!parseExpiryYmd(item.expiry_date)) {
+    return { text: "No expiry date", expired: false };
+  }
+  const d = parseExpiryDate(item.expiry_date)!;
+  const label = d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const expired = isFoodItemExpired(item);
+  return { text: expired ? `Expired · ${label}` : label, expired };
+}
+
+const getCategoryIcon = (category?: string, name?: string) => {
+  const label = (category || "").toLowerCase().trim();
+  const n = (name || "").toLowerCase().trim();
+
+  // Prefer explicit category names (matches calendar screen groups)
+  if (label === "dairy" || label.includes("milk")) return Drop;
+  if (label === "meat" || label === "protein") return Bone;
+  if (label === "seafood" || label === "fish") return Fish;
+  if (label === "vegetable" || label === "vegetables" || label === "veg") return Carrot;
+  if (label === "fruit" || label === "fruits") return AppleLogo;
+  if (label === "bakery" || label === "bread") return Bread;
+  if (label === "egg" || label === "eggs") return Egg;
+  if (label === "grains" || label === "grain") return Grains;
+  if (label === "snacks") return Cookie;
+  if (label === "beverages") return Coffee;
+  if (label === "condiments") return BeerBottle;
+  if (label === "prepared meals" || label === "prepared meal") return CookingPot;
+  if (label === "frozen") return Snowflake;
+  if (label === "other") return Package;
+
+  // Fallback to name heuristics if category is missing / inconsistent
+  if (n.includes("milk") || n.includes("yogurt") || n.includes("cheese")) return Drop;
+  if (n.includes("chicken") || n.includes("beef") || n.includes("pork") || n.includes("meat")) return Bone;
+  if (n.includes("salmon") || n.includes("tuna") || n.includes("fish") || n.includes("shrimp")) return Fish;
+  if (n.includes("carrot") || n.includes("broccoli") || n.includes("lettuce") || n.includes("spinach")) return Carrot;
+  if (n.includes("apple") || n.includes("banana") || n.includes("orange") || n.includes("grape")) return AppleLogo;
+  if (n.includes("bread") || n.includes("toast") || n.includes("bun") || n.includes("bagel")) return Bread;
+  if (n.includes("egg")) return Egg;
+  if (n.includes("rice") || n.includes("pasta") || n.includes("oat") || n.includes("grain")) return Grains;
+  if (n.includes("cookie") || n.includes("chips") || n.includes("snack")) return Cookie;
+  if (n.includes("coffee") || n.includes("tea") || n.includes("juice") || n.includes("soda")) return Coffee;
+  if (n.includes("sauce") || n.includes("ketchup") || n.includes("mayo") || n.includes("mustard")) return BeerBottle;
+  if (n.includes("frozen") || n.includes("ice")) return Snowflake;
+  return Package;
+};
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 5) return "Good Night";
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  if (hour < 22) return "Good Evening";
+  return "Good Night";
+};
+
+const firstNameFromProfile = (fullName?: string, email?: string) => {
+  const candidate =
+    (fullName && fullName.trim().split(" ")[0]) ||
+    (email && email.split("@")[0]) ||
+    "";
+  const match = candidate.match(/[A-Za-z]+/);
+  const cleaned = match ? match[0] : candidate;
+  if (!cleaned) return undefined;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
+};
+
+function Divider() {
+  return (
+    <View
+      style={styles.sectionLine}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    />
+  );
+}
+
+function CardRow({
+  title,
+  subtitle,
+  leftDotColor,
+  icon,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  leftDotColor: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.rowCard} accessibilityRole="button">
+      <View style={[styles.rowAccentDot, { backgroundColor: leftDotColor }]} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.rowSubtitle} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+      <View style={styles.rowRight}>
+        {icon}
+        <CaretRight size={18} color={UI.muted} weight="bold" />
+      </View>
+    </Pressable>
+  );
+}
+
+export default function HomeScreen() {
+  const { user, userProfile, getUserProfile } = useAuth();
+  const insets = useSafeAreaInsets();
+
   const [items, setItems] = useState<FoodItem[]>([]);
-  const [itemGroups, setItemGroups] = useState<ItemGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<"all" | "fridge" | "shelf">("fridge");
+
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>("fridge");
+  const [inventoryToggleWidth, setInventoryToggleWidth] = useState(0);
   const [searchText, setSearchText] = useState("");
-  const [wastePercentage, setWastePercentage] = useState(15); // Default value, should be calculated from actual data
-  const [mostConsumedCategory, setMostConsumedCategory] = useState("");
-  const [newItemGroups, setNewItemGroups] = useState<Set<string>>(new Set());
-  const prevItemGroupsRef = useRef<ItemGroup[]>([]);
-  const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const { user, userProfile, getUserProfile } = useAuth();
-  const { helpfulTips } = useSettings();
-  const { currentTip, refreshTip } = useTips();
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const homeScrollRef = useRef<ScrollView>(null);
+  const inventorySectionYRef = useRef(0);
+  const inventoryListYRef = useRef(0);
 
-  // State for edit modal
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [currentEditItem, setCurrentEditItem] = useState<FoodItem | null>(null);
-
-  // State for filtered groups and search results
-  const [filteredGroups, setFilteredGroups] = useState<ItemGroup[]>([]);
-  const [hasFilteredResults, setHasFilteredResults] = useState(true);
-
-  const {
-    itemGroups: allItemGroups,
-    expiringItems,
-    lowStockGroups,
-    fridgeCount,
-    shelfCount,
-  } = useMemo(() => {
-    // Group items by name
-    const grouped = items.reduce<{ [key: string]: ItemGroup }>((acc, item) => {
-      if (!acc[item.name]) {
-        acc[item.name] = { name: item.name, entries: [] };
-      }
-
-      const daysUntilExpiry = getDaysUntilExpiry(item.expiry_date);
-      // Show "Use First" only for items expiring in 0-3 days
-      const isUseFirst =
-        daysUntilExpiry !== undefined &&
-        daysUntilExpiry >= 0 &&
-        daysUntilExpiry <= 3;
-
-      acc[item.name].entries.push({
-        id: item.id,
-        quantity: item.quantity,
-        expiryDate: item.expiry_date,
-        isUseFirst, // Apply the new logic here
-        daysUntilExpiry,
-      });
-
-      return acc;
-    }, {});
-
-    // Sort entries within each group
-    Object.values(grouped).forEach((group) => {
-      group.entries.sort(
-        (a, b) => (a.daysUntilExpiry ?? 999) - (b.daysUntilExpiry ?? 999)
-      );
-    });
-
-    const allGroups = Object.values(grouped);
-
-    // Calculate stats
-    const expiring = items.filter((item) => {
-      const days = getDaysUntilExpiry(item.expiry_date);
-      return days !== undefined && days <= 3;
-    });
-
-    const lowStock = allGroups.filter(
-      (group) =>
-        group.entries.reduce((total, entry) => total + entry.quantity, 0) <= 2
-    );
-
-    const fridge = items.filter((item) => item.location === "fridge").length;
-    const shelf = items.filter((item) => item.location === "shelf").length;
-
-    return {
-      itemGroups: allGroups,
-      expiringItems: expiring,
-      lowStockGroups: lowStock.length,
-      fridgeCount: fridge,
-      shelfCount: shelf,
-    };
-  }, [items]);
-
-  // Extract first name from full name or email
-  const getFirstName = () => {
-    if (userProfile?.full_name) {
-      // Extract first name from full name
-      return userProfile.full_name.split(" ")[0];
-    } else if (user?.email) {
-      // Use the part before @ in email
-      return user.email.split("@")[0];
-    }
-    return undefined;
-  };
-
-  // Refresh data when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      if (user) {
-        loadItems();
-        // Fetch user profile if not available
-        if (!userProfile) {
-          getUserProfile();
-        }
-
-        // Refresh the tip when the screen comes into focus
-        if (helpfulTips) {
-          refreshTip();
-        }
-      } else {
-        router.replace({ pathname: "/(auth)/welcome" });
-      }
-    }, [user, filter, userProfile, helpfulTips])
+  const [thisWeekTab, setThisWeekTab] = useState<"upcoming" | "recent" | "expired">(
+    "upcoming"
   );
-
-  // Effect to filter items based on search text
+  const twStripRef = useRef<ScrollView>(null);
+  const twSlideAnim = useRef(new Animated.Value(0)).current;
+  const inventoryToggleAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (searchText.trim() === "") {
-      setFilteredGroups(allItemGroups);
-      setHasFilteredResults(allItemGroups.length > 0);
-    } else {
-      const filtered = allItemGroups.filter((group) =>
-        group.name.toLowerCase().includes(searchText.toLowerCase())
-      );
-      setFilteredGroups(filtered);
-      setHasFilteredResults(filtered.length > 0);
-    }
-  }, [searchText, allItemGroups]);
-
-  // Effect to filter items based on location filter
-  useEffect(() => {
-    let filtered = [...allItemGroups];
-
-    // Apply location filter
-    if (filter !== "all") {
-      filtered = allItemGroups.filter((group) => {
-        // Check if any entry in the group belongs to the selected location
-        const item = items.find(
-          (item) => item.name === group.name && item.location === filter
-        );
-        return item !== undefined;
-      });
-    }
-
-    // Apply search filter
-    if (searchText.trim() !== "") {
-      filtered = filtered.filter((group) =>
-        group.name.toLowerCase().includes(searchText.toLowerCase())
-      );
-    }
-
-    setFilteredGroups(filtered);
-    setHasFilteredResults(filtered.length > 0);
-  }, [filter, searchText, allItemGroups, items]);
-
-  // Clear search handler
-  const handleClearSearch = () => {
-    setSearchText("");
-  };
-
-  // Track new item groups for animation
-  useEffect(() => {
-    const prevItemNames = new Set(
-      prevItemGroupsRef.current.map((group) => group.name)
-    );
-    const currentItemNames = new Set(allItemGroups.map((group) => group.name));
-
-    // Find new item groups that weren't in the previous render
-    const newItems = new Set<string>();
-    currentItemNames.forEach((name) => {
-      if (!prevItemNames.has(name)) {
-        newItems.add(name);
-      }
+    Animated.timing(twSlideAnim, {
+      toValue: thisWeekTab === "recent" ? 1 : thisWeekTab === "expired" ? 2 : 0,
+      duration: 200,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+    requestAnimationFrame(() => {
+      twStripRef.current?.scrollTo({ x: 0, animated: false });
     });
+  }, [thisWeekTab]);
+  useEffect(() => {
+    Animated.timing(inventoryToggleAnim, {
+      toValue: locationFilter === "shelf" ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [locationFilter, inventoryToggleAnim]);
+  const scrollInventoryIntoView = useCallback(() => {
+    const hasSearchQuery = searchText.trim().length > 0;
+    const targetY = hasSearchQuery
+      ? inventoryListYRef.current
+      : inventorySectionYRef.current;
+    const extraTopOffset = keyboardInset > 0 ? (hasSearchQuery ? 245 : 170) : 8;
+    requestAnimationFrame(() => {
+      homeScrollRef.current?.scrollTo({
+        y: Math.max(targetY - extraTopOffset, 0),
+        animated: true,
+      });
+    });
+  }, [keyboardInset, searchText]);
+  useEffect(() => {
+    const onShow = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardInset(e.endCoordinates?.height ?? 0);
+      scrollInventoryIntoView();
+    });
+    const onHide = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardInset(0);
+    });
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, [scrollInventoryIntoView]);
+  useEffect(() => {
+    if (keyboardInset <= 0) return;
+    if (!searchText.trim()) return;
+    scrollInventoryIntoView();
+  }, [keyboardInset, searchText, scrollInventoryIntoView]);
+  const [thisWeekExpiring, setThisWeekExpiring] = useState<FoodItem[]>([]);
+  const [thisWeekExpired, setThisWeekExpired] = useState<FoodItem[]>([]);
+  const [thisWeekLogs, setThisWeekLogs] = useState<
+    Array<
+      UsageLog & {
+        food_items?: { name?: string; location?: string; category?: string } | null;
+      }
+    >
+  >([]);
+  const [expiredCount, setExpiredCount] = useState<number>(0);
+  const [historyTotals, setHistoryTotals] = useState<{ used: number; wasted: number } | null>(null);
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinSearchQuery, setPinSearchQuery] = useState("");
+  const [expandedPinnedId, setExpandedPinnedId] = useState<string | null>(null);
+  const pinnedActionAnimRef = useRef<Record<string, Animated.Value>>({});
+  const [expandedInventoryId, setExpandedInventoryId] = useState<string | null>(
+    null
+  );
+  const inventoryActionAnimRef = useRef<Record<string, Animated.Value>>({});
+  const [consumeModalItem, setConsumeModalItem] = useState<FoodItem | null>(null);
+  const [removeModalItem, setRemoveModalItem] = useState<FoodItem | null>(null);
 
-    if (newItems.size > 0) {
-      setNewItemGroups(newItems);
+  const name = firstNameFromProfile(userProfile?.full_name, user?.email);
+  const { width } = Dimensions.get("window");
+  const pinnedStripInnerW = width - 36;
+  const pinnedCardHalfW = Math.floor((pinnedStripInnerW - 8) / 2);
 
-      // Clear the new items after animation (3 seconds)
-      const timer = setTimeout(() => {
-        setNewItemGroups(new Set());
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-
-    // Update the ref for the next comparison
-    prevItemGroupsRef.current = [...allItemGroups];
-  }, [allItemGroups]);
-
-  // Handle item press in the carousel
-  const handleItemPress = (itemId: string) => {
-    // Find the item group that contains this item
-    const group = allItemGroups.find((g) =>
-      g.entries.some((entry) => entry.id === itemId)
-    );
-
-    if (group) {
-      // Scroll to the item group (this would require additional implementation)
-      // For now, we'll just log it
-      console.log(`Scrolling to item: ${group.name}`);
-
-      // You could also navigate to a details page
-      // router.push({
-      //   pathname: "/(tabs)/item-details",
-      //   params: { id: itemId },
-      // });
-    }
-  };
-
-  // Load usage statistics
-  const loadUsageStats = async () => {
+  const loadHomeMeta = useCallback(async () => {
     try {
-      // Get the current date
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      // "Recent" window: last 7 days up to end of today
+      const recentStart = new Date(today);
+      recentStart.setDate(recentStart.getDate() - 7);
+      const recentEnd = new Date(today);
+      recentEnd.setHours(23, 59, 59, 999);
 
-      // Get the date from 7 days ago
-      const lastWeek = new Date();
-      lastWeek.setDate(today.getDate() - 7);
+      const [expiring, expired] = await Promise.all([
+        foodItemsService.getExpiringItems(7),
+        foodItemsService.getExpiredItems(),
+      ]);
 
-      // For now, we'll use placeholder data since getUsageStats isn't implemented
-      // In a real implementation, you would call the actual service
-      // const stats = await foodItemsService.getUsageStats(lastWeek, today);
+      setThisWeekExpiring(expiring as unknown as FoodItem[]);
+      setThisWeekExpired(expired as unknown as FoodItem[]);
+      setExpiredCount(expired.length);
 
-      // Update state with the statistics
-      setWastePercentage(15); // Placeholder value
-      setMostConsumedCategory("dairy products"); // Placeholder value
-    } catch (error: any) {
-      console.error("Error loading usage statistics:", error);
+      // Recent usage logs (last 7 days) + join name
+      const { data: logs, error } = await supabase
+        .from("usage_logs")
+        .select(
+          `
+          *,
+          food_items!usage_logs_item_id_fkey (
+            name,
+            location,
+            category
+          )
+        `
+        )
+        .in("status", ["used", "wasted"])
+        .gte("logged_at", recentStart.toISOString())
+        .lte("logged_at", recentEnd.toISOString())
+        .order("logged_at", { ascending: false });
+
+      if (error) throw error;
+      setThisWeekLogs((logs as any) ?? []);
+
+      // All-time totals
+      const [{ count: usedCount, error: usedErr }, { count: wastedCount, error: wastedErr }] =
+        await Promise.all([
+          supabase
+            .from("usage_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "used"),
+          supabase
+            .from("usage_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "wasted"),
+        ]);
+
+      if (usedErr) throw usedErr;
+      if (wastedErr) throw wastedErr;
+      setHistoryTotals({ used: usedCount ?? 0, wasted: wastedCount ?? 0 });
+
+    } catch (e) {
+      // keep screen usable even if some meta calls fail
+      console.warn("Home meta load failed", e);
     }
-  };
+  }, []);
 
-  // Update the loadItems function to also load usage statistics
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
     try {
       setLoading(true);
       const data = await foodItemsService.getItems();
       setItems(data);
-
-      // Also load usage statistics
-      await loadUsageStats();
+      await loadHomeMeta();
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Error", error?.message ?? "Failed to load items");
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadHomeMeta]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) {
+        router.replace({ pathname: "/(auth)/welcome" });
+        return;
+      }
+      loadItems();
+      if (!userProfile) getUserProfile();
+      loadPinnedItemIds(user.id).then(setPinnedIds);
+    }, [user, userProfile, getUserProfile, loadItems])
+  );
+
+  useEffect(() => {
+    if (!user?.id || loading) return;
+    setPinnedIds((prev) => {
+      if (prev.length === 0) return prev;
+      const valid = prev.filter((id) => items.some((it) => it.id === id));
+      if (valid.length === prev.length) return prev;
+      savePinnedItemIds(user.id, valid).catch(() => {});
+      return valid;
+    });
+  }, [user?.id, items, loading]);
+
+  const pinnedItemsOrdered = useMemo(() => {
+    const list: FoodItem[] = [];
+    for (const id of pinnedIds) {
+      const it = items.find((x) => x.id === id);
+      if (it) list.push(it);
+    }
+    return list;
+  }, [pinnedIds, items]);
+
+  const pinPickerCandidates = useMemo(() => {
+    const q = pinSearchQuery.trim().toLowerCase();
+    return items
+      .filter((it) => !pinnedIds.includes(it.id))
+      .filter((it) => {
+        if (!q) return true;
+        const name = it.name.toLowerCase();
+        const cat = (it.category || "").toLowerCase();
+        return name.includes(q) || cat.includes(q);
+      })
+      .sort(compareFoodItemsByExpirySoonestFirst);
+  }, [items, pinnedIds, pinSearchQuery]);
+
+  const openPinPicker = useCallback(() => {
+    if (!user?.id) return;
+    if (items.length === 0 && pinnedIds.length === 0) {
+      Alert.alert("Nothing to pin", "Add items to your inventory first.");
+      return;
+    }
+    setPinSearchQuery("");
+    setPinModalVisible(true);
+  }, [user?.id, pinnedIds, items]);
+
+  const addPinnedItem = useCallback(
+    async (itemId: string) => {
+      if (!user?.id) return;
+      if (pinnedIds.includes(itemId)) return;
+      if (pinnedIds.length >= MAX_PINNED_ITEMS) return;
+      const prev = pinnedIds;
+      const next = [...prev, itemId];
+      setPinnedIds(next);
+      try {
+        await savePinnedItemIds(user.id, next);
+      } catch {
+        setPinnedIds(prev);
+        return;
+      }
+      // Keep modal open so user can pin a second item; close only at max.
+      if (next.length >= MAX_PINNED_ITEMS) {
+        setPinModalVisible(false);
+        setPinSearchQuery("");
+      }
+    },
+    [user?.id, pinnedIds]
+  );
+
+  const removePinnedItem = useCallback(
+    async (itemId: string) => {
+      if (!user?.id) return;
+      const next = pinnedIds.filter((id) => id !== itemId);
+      setPinnedIds(next);
+      await savePinnedItemIds(user.id, next).catch(() => {});
+    },
+    [user?.id, pinnedIds]
+  );
+
+  const goToPinnedOnCalendar = useCallback((item: FoodItem) => {
+    const nonce = `${Date.now()}-${Math.random()}`;
+    const raw = item.expiry_date;
+    const ymd =
+      raw && raw.length >= 10
+        ? raw.includes("T")
+          ? raw.split("T")[0]!
+          : raw.slice(0, 10)
+        : null;
+    const todayStr = new Date().toISOString().split("T")[0]!;
+
+    if (ymd) {
+      if (ymd < todayStr) {
+        router.push(
+          `/(tabs)/calendar?view=timeline&itemId=${encodeURIComponent(
+            item.id
+          )}&nonce=${encodeURIComponent(nonce)}&openExpired=true`
+        );
+      } else {
+        router.push({
+          pathname: "/(tabs)/calendar",
+          params: {
+            date: ymd,
+            itemId: item.id,
+            nonce,
+          },
+        });
+      }
+      return;
+    }
+
+    router.push({
+      pathname: "/item-details",
+      params: { itemId: item.id },
+    });
+  }, []);
+
+  const derived = useMemo(() => {
+    const groupsByName = new Map<string, ItemGroup>();
+    let fridgeCount = 0;
+    let shelfCount = 0;
+
+    for (const item of items) {
+      if (item.location === "fridge") fridgeCount += 1;
+      if (item.location === "shelf") shelfCount += 1;
+
+      const days = getDaysUntilExpiry(item.expiry_date);
+      const entry: ItemEntry = {
+        id: item.id,
+        quantity: item.quantity,
+        expiryDate: item.expiry_date ?? undefined,
+        daysUntilExpiry: days,
+        location: item.location as "fridge" | "shelf",
+      };
+
+      const key = item.name;
+      const existing = groupsByName.get(key);
+      if (!existing) {
+        groupsByName.set(key, {
+          name: key,
+          totalQuantity: item.quantity,
+          soonestExpiry: item.expiry_date ?? undefined,
+          soonestDays: days,
+          entries: [entry],
+        });
+      } else {
+        existing.totalQuantity += item.quantity;
+        existing.entries.push(entry);
+
+        const currSoonest = existing.soonestDays;
+        if (
+          days !== undefined &&
+          (currSoonest === undefined || days < currSoonest)
+        ) {
+          existing.soonestDays = days;
+          existing.soonestExpiry = item.expiry_date ?? undefined;
+        }
+      }
+    }
+
+    const groups = Array.from(groupsByName.values()).map((g) => {
+      g.entries.sort(
+        (a, b) => (a.daysUntilExpiry ?? 999) - (b.daysUntilExpiry ?? 999)
+      );
+      return g;
+    });
+
+    groups.sort((a, b) => {
+      const ad = a.soonestDays ?? 999;
+      const bd = b.soonestDays ?? 999;
+      if (ad !== bd) return ad - bd;
+      return a.name.localeCompare(b.name);
+    });
+
+    const expiringSoon = items.filter((i) => {
+      const d = getDaysUntilExpiry(i.expiry_date);
+      return d !== undefined && d <= 3;
+    }).length;
+
+    const lowStockGroups = groups.filter((g) => g.totalQuantity <= 2).length;
+
+    return {
+      groups,
+      fridgeCount,
+      shelfCount,
+    };
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return [];
+    const showAll = q === "all";
+    const filtered = items
+      .filter((it) => (locationFilter === "all" ? true : it.location === locationFilter))
+      .filter((it) => {
+        if (showAll) return true;
+        const nameMatch = (it.name ?? "").toLowerCase().includes(q);
+        const categoryMatch = (it.category ?? "").toLowerCase().includes(q);
+        const rawExpiry = (it.expiry_date ?? "").toLowerCase();
+        const expiryDateObj = parseExpiryDate(it.expiry_date);
+        const expirySearchText = expiryDateObj
+          ? [
+              expiryDateObj.toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }),
+              expiryDateObj.toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              }),
+              expiryDateObj.toLocaleDateString(undefined, {
+                month: "short",
+                year: "numeric",
+              }),
+              expiryDateObj.toLocaleDateString(undefined, {
+                month: "long",
+                year: "numeric",
+              }),
+              String(expiryDateObj.getFullYear()),
+              formatExpiry(it.expiry_date),
+            ]
+              .join(" ")
+              .toLowerCase()
+          : "";
+        const expiryMatch = rawExpiry.includes(q) || expirySearchText.includes(q);
+        return nameMatch || categoryMatch || expiryMatch;
+      });
+    return filtered.sort(
+      showAll
+        ? (a, b) => {
+            const aExpired = isFoodItemExpired(a);
+            const bExpired = isFoodItemExpired(b);
+            if (aExpired !== bExpired) return aExpired ? -1 : 1;
+            return compareFoodItemsByExpirySoonestFirst(a, b);
+          }
+        : (a, b) => a.name.localeCompare(b.name)
+    );
+  }, [items, locationFilter, searchText]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -388,424 +722,2491 @@ export default function InventoryScreen() {
     setRefreshing(false);
   };
 
-  // Handle entry quantity decrement
   const handleEntryDecrement = async (itemId: string) => {
     try {
       const item = items.find((i) => i.id === itemId);
-      if (item && item.quantity > 1) {
-        await foodItemsService.updateItem(itemId, {
-          quantity: item.quantity - 1,
-        });
-        setItems((prevItems) =>
-          prevItems.map((i) =>
-            i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i
-          )
-        );
-      }
+      if (!item || item.quantity <= 1) return;
+      await foodItemsService.updateItem(itemId, { quantity: item.quantity - 1 });
+      setItems((prev) =>
+        prev.map((i) => (i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i))
+      );
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Error", error?.message ?? "Failed to update item");
     }
   };
 
-  // Handle entry quantity increment
   const handleEntryIncrement = async (itemId: string) => {
     try {
       const item = items.find((i) => i.id === itemId);
-      if (item) {
-        await foodItemsService.updateItem(itemId, {
-          quantity: item.quantity + 1,
-        });
-        setItems((prevItems) =>
-          prevItems.map((i) =>
-            i.id === itemId ? { ...i, quantity: i.quantity + 1 } : i
-          )
-        );
-      }
+      if (!item) return;
+      await foodItemsService.updateItem(itemId, { quantity: item.quantity + 1 });
+      setItems((prev) =>
+        prev.map((i) => (i.id === itemId ? { ...i, quantity: i.quantity + 1 } : i))
+      );
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Error", error?.message ?? "Failed to update item");
     }
   };
 
-  // Handle use all for an item entry
   const handleEntryUseAll = async (itemId: string) => {
     try {
       const item = items.find((i) => i.id === itemId);
-      if (item) {
-        await foodItemsService.logUsage(itemId, "used", item.quantity);
-        await loadItems(); // Reload items as the item should be removed
-      }
+      if (!item) return;
+      await foodItemsService.logUsage(itemId, "used", item.quantity);
+      await loadItems();
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Error", error?.message ?? "Failed to mark used");
     }
   };
 
-  // Handle add more for a food item group
-  const handleAddMore = (itemName: string) => {
+  const toggleInventoryItemExpanded = useCallback((rawId: string) => {
+    const itemId = String(rawId);
+    setExpandedInventoryId((prev) => (prev === itemId ? null : itemId));
+  }, []);
+
+  const openInventoryEdit = useCallback((item: FoodItem) => {
+    setExpandedInventoryId(null);
     router.push({
       pathname: "/(tabs)/add",
-      params: { name: itemName },
+      params: { edit: "true", id: item.id },
     });
-  };
+  }, []);
 
-  // Handle edit for an item entry
-  const handleEditEntry = (itemId: string) => {
-    const item = items.find((i) => i.id === itemId);
-    if (item) {
-      setCurrentEditItem(item);
-      setEditModalVisible(true);
-    }
-  };
+  const confirmDeleteInventoryItem = useCallback((item: FoodItem) => {
+    setRemoveModalItem(item);
+  }, []);
 
-  // Handle delete for an item entry
-  const handleDeleteEntry = async (itemId: string) => {
+  const handleThrowAwayItem = useCallback(async () => {
+    if (!removeModalItem) return;
+    const item = removeModalItem;
+    setRemoveModalItem(null);
+    setExpandedInventoryId((prev) => (prev === String(item.id) ? null : prev));
+    setExpandedPinnedId((prev) => (prev === String(item.id) ? null : prev));
     try {
-      setLoading(true);
-      await foodItemsService.deleteItem(itemId);
-      await loadItems(); // Refresh the list
-    } catch (error) {
-      console.error("Failed to delete item:", error);
-      Alert.alert("Error", "Failed to delete item.");
-    } finally {
-      setLoading(false);
-      setEditModalVisible(false); // Close modal if open
-      setCurrentEditItem(null);
+      const qty = typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
+      await foodItemsService.logUsage(item.id, "wasted", qty);
+      await removePinnedItem(item.id);
+      await loadItems();
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error?.message ?? "Failed to throw away item. Please try again."
+      );
     }
-  };
+  }, [removeModalItem, loadItems, removePinnedItem]);
 
-  const handleUpdateItem = (updatedItemData: {
-    name: string;
-    quantity: number;
-    expiryDate: string;
-    location: string;
-    category: string;
-    notes: string;
-  }) => {
-    if (!currentEditItem) return;
+  const handleDeleteItem = useCallback(async () => {
+    if (!removeModalItem) return;
+    const item = removeModalItem;
+    setRemoveModalItem(null);
+    setExpandedInventoryId((prev) => (prev === String(item.id) ? null : prev));
+    setExpandedPinnedId((prev) => (prev === String(item.id) ? null : prev));
+    try {
+      await foodItemsService.deleteItem(item.id);
+      await removePinnedItem(item.id);
+      await loadItems();
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error?.message ?? "Failed to delete item. Please try again."
+      );
+    }
+  }, [removeModalItem, loadItems, removePinnedItem]);
 
-    const updatePayload: Partial<FoodItem> = {
-      ...updatedItemData,
-      expiry_date: updatedItemData.expiryDate,
-      location: updatedItemData.location as "fridge" | "shelf",
-    };
-
-    const updateItem = async () => {
+  const handleInventoryConsumeConfirm = useCallback(
+    async (quantity: number) => {
+      if (!consumeModalItem) return;
+      const id = consumeModalItem.id;
+      setConsumeModalItem(null);
+      setExpandedInventoryId((prev) => (prev === String(id) ? null : prev));
       try {
-        setLoading(true);
-        const updated = await foodItemsService.updateItem(
-          currentEditItem.id,
-          updatePayload
+        await foodItemsService.markItemUsed(id, quantity);
+        await loadItems();
+      } catch (error: any) {
+        Alert.alert(
+          "Error",
+          error?.message ?? "Failed to log consumption. Please try again."
         );
-        if (updated) {
-          // Invalidate and refetch
-          loadItems();
-        }
-      } catch (error) {
-        console.error("Failed to update item:", error);
-        Alert.alert("Error", "Failed to update item.");
-      } finally {
-        setLoading(false);
-        setEditModalVisible(false);
-        setCurrentEditItem(null);
       }
-    };
-    updateItem();
-  };
+    },
+    [consumeModalItem, loadItems]
+  );
+
+  useEffect(() => {
+    const dur = 220;
+    const easing = Easing.bezier(0.25, 0.1, 0.25, 1);
+    const expandAllPinnedRows =
+      pinnedItemsOrdered.length === 2 && expandedPinnedId !== null;
+    pinnedItemsOrdered.forEach((item) => {
+      const id = String(item.id);
+      const isExpanded = expandAllPinnedRows || expandedPinnedId === id;
+      if (!pinnedActionAnimRef.current[id]) {
+        pinnedActionAnimRef.current[id] = new Animated.Value(
+          isExpanded ? 1 : 0
+        );
+      } else {
+        Animated.timing(pinnedActionAnimRef.current[id], {
+          toValue: isExpanded ? 1 : 0,
+          duration: dur,
+          easing,
+          useNativeDriver: false,
+        }).start();
+      }
+    });
+  }, [expandedPinnedId, pinnedItemsOrdered]);
+  useEffect(() => {
+    const dur = 220;
+    const easing = Easing.bezier(0.25, 0.1, 0.25, 1);
+    filteredItems.forEach((item) => {
+      const id = String(item.id);
+      const isExpanded = expandedInventoryId === id;
+      if (!inventoryActionAnimRef.current[id]) {
+        inventoryActionAnimRef.current[id] = new Animated.Value(isExpanded ? 1 : 0);
+      } else {
+        Animated.timing(inventoryActionAnimRef.current[id], {
+          toValue: isExpanded ? 1 : 0,
+          duration: dur,
+          easing,
+          useNativeDriver: false,
+        }).start();
+      }
+    });
+  }, [expandedInventoryId, filteredItems]);
+
+  const upcomingCards = useMemo<ThisWeekCard[]>(() => {
+    return thisWeekExpiring.map((it) => ({
+      kind: "expiring" as const,
+      id: it.id,
+      title: it.name,
+      quantity: it.quantity,
+      unit: it.unit,
+      location: it.location as "fridge" | "shelf" | undefined,
+      category: it.category,
+      expiryDate: it.expiry_date ?? undefined,
+      statusText: formatExpiry(it.expiry_date),
+    }));
+  }, [thisWeekExpiring]);
+
+  const expiredCards = useMemo<ThisWeekCard[]>(() => {
+    return thisWeekExpired.map((it) => ({
+        kind: "expired" as const,
+        id: it.id,
+        title: it.name,
+        quantity: it.quantity,
+        unit: it.unit,
+        location: it.location as "fridge" | "shelf" | undefined,
+        category: it.category,
+        expiryDate: it.expiry_date ?? undefined,
+        statusText: "Expired",
+      }));
+  }, [thisWeekExpired]);
+
+  const recentCards = useMemo<ThisWeekCard[]>(() => {
+    const itemsById = new Map(items.map((it) => [it.id, it]));
+    return thisWeekLogs.map((log) => {
+      const daysAgo = getDaysAgo(log.logged_at);
+      const agoText =
+        typeof daysAgo === "number"
+          ? daysAgo === 0
+            ? "today"
+            : daysAgo === 1
+              ? "yesterday"
+            : `${daysAgo}d ago`
+          : "recently";
+      const fallbackItem = itemsById.get(log.item_id);
+      const logAny = log as any;
+      const title =
+        log.food_items?.name ||
+        logAny.item_name ||
+        logAny.name ||
+        fallbackItem?.name ||
+        "Item";
+      const loc =
+        (log.food_items?.location as "fridge" | "shelf" | undefined) ||
+        (logAny.item_location as "fridge" | "shelf" | undefined) ||
+        (logAny.location as "fridge" | "shelf" | undefined) ||
+        (fallbackItem?.location as "fridge" | "shelf" | undefined);
+      const category =
+        log.food_items?.category ||
+        fallbackItem?.category ||
+        undefined;
+      const base = {
+        id: log.id,
+        title,
+        quantity:
+          log.quantity && log.quantity > 0
+            ? log.quantity
+            : (fallbackItem?.quantity ?? 1),
+        unit: fallbackItem?.unit ?? undefined,
+        location: loc,
+        category,
+      };
+      if (log.status === "used") {
+        return { ...base, kind: "used" as const, statusText: `Used ${agoText}` };
+      }
+      return { ...base, kind: "wasted" as const, statusText: `Thrown ${agoText}` };
+    });
+  }, [thisWeekLogs, items]);
 
   return (
-    <SafeAreaWrapper usePadding edges={["top"]}>
-      <View style={styles.container}>
-        {/* Background gradient */}
-        <LinearGradient
-          colors={["#FFFFFF", "#FAFAFA"]}
-          style={StyleSheet.absoluteFillObject}
-        />
-
-        {/* Main content */}
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-        >
-          {/* Unified Dashboard Summary */}
-          <DashboardSummary
-            expiringItems={expiringItems as FoodItem[]}
-            lowStockGroups={lowStockGroups}
-            wastePercentage={wastePercentage}
-            mostConsumedCategory={mostConsumedCategory}
-            userName={getFirstName()}
-            onItemPress={handleItemPress}
+    <SafeAreaView style={styles.safe} edges={["top", "right", "left"]}>
+      <ScrollView
+        ref={homeScrollRef}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom:
+              keyboardInset > 0
+                ? keyboardInset + 80
+                : 28 + insets.bottom + 78,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        removeClippedSubviews={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={UI.greenInk}
           />
-
-          {/* Tip card - conditionally render based on helpfulTips setting */}
-          {helpfulTips && currentTip && <TipCard tip={currentTip} />}
-
-          {/* Inventory items section with integrated search and filters */}
-          <View style={styles.inventorySection}>
-            {/* Unified inventory header with title and search */}
-            <View style={styles.inventoryHeaderContainer}>
-              <View style={styles.inventoryHeader}>
-                <Text style={styles.sectionTitle}>Your Inventory</Text>
-              </View>
-
-              {/* Search bar integrated with header */}
-              <View style={styles.searchContainer}>
-                <Ionicons
-                  name="search"
-                  size={18}
-                  color="#BBBBBB"
-                  style={styles.searchIcon}
+        }
+      >
+        {/* 1) TOP GREETING BANNER – same gradient family, single dip + rise */}
+        <View style={styles.topBanner}>
+          <LinearGradient
+            colors={["#3CBA8D", "#C8FACC"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }} // darker on the left, lighter on the right
+            style={styles.topBannerGradient}
+          >
+            {/* White wave at bottom */}
+            <View style={styles.topBannerWave}>
+              <Svg width={width} height={90} viewBox={`0 0 ${width} 90`}>
+                <Path
+                  d={`M0,65 
+                     Q${width * 0.30},95 ${width * 0.55},80 
+                     Q${width * 0.75},70 ${width * 0.9},78 
+                     Q${width * 1.02},86 ${width},82 
+                     L${width},90 L0,90 Z`}
+                  fill="#FFFFFF"
                 />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search your inventory..."
-                  placeholderTextColor="#BBBBBB"
-                  value={searchText}
-                  onChangeText={setSearchText}
-                />
-                {searchText.length > 0 && (
-                  <TouchableOpacity onPress={handleClearSearch}>
-                    <Ionicons name="close-circle" size={18} color="#BBBBBB" />
-                  </TouchableOpacity>
-                )}
-              </View>
+              </Svg>
             </View>
 
-            {/* Location filter buttons in a pill-style container */}
-            <View style={styles.filtersContainer}>
-              <View style={styles.locationFilterContainer}>
-                <Pressable
-                  style={[
-                    styles.locationButton,
-                    filter === "all" && styles.activeLocationButton,
-                  ]}
-                  onPress={() => setFilter("all")}
-                >
-                  <Text
-                    style={[
-                      styles.locationText,
-                      filter === "all" && styles.activeLocationText,
-                    ]}
-                  >
-                    All
-                  </Text>
-                </Pressable>
+            {/* Ensure no green strip below wave */}
+            <View style={styles.topBannerBottomFill} />
 
-                <Pressable
-                  style={[
-                    styles.locationButton,
-                    filter === "fridge" && styles.activeLocationButton,
-                  ]}
-                  onPress={() => setFilter("fridge")}
-                >
-                  <Text
-                    style={[
-                      styles.locationText,
-                      filter === "fridge" && styles.activeLocationText,
-                    ]}
-                  >
-                    Fridge ({fridgeCount})
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={[
-                    styles.locationButton,
-                    filter === "shelf" && styles.activeLocationButton,
-                  ]}
-                  onPress={() => setFilter("shelf")}
-                >
-                  <Text
-                    style={[
-                      styles.locationText,
-                      filter === "shelf" && styles.activeLocationText,
-                    ]}
-                  >
-                    Shelf ({shelfCount})
-                  </Text>
-                </Pressable>
-              </View>
+            <View style={styles.greetingBlock}>
+              <Text style={styles.greetingHeadline} numberOfLines={1}>
+                {getGreeting()}
+              </Text>
+              <Text style={styles.greetingName} numberOfLines={1}>
+                {name ?? ""}
+              </Text>
             </View>
+          </LinearGradient>
+        </View>
 
-            {/* Inventory items list */}
-            {loading ? (
-              <EmptyStateView
-                title=""
-                message="Loading items..."
-                isLoading={true}
-              />
-            ) : allItemGroups.length === 0 ? (
-              <EmptyStateView
-                title="No Items Found"
-                message="Add some items to your inventory!"
-                icon="cube-outline"
-                actionLabel="Add Your First Item"
-                onAction={() => router.push("/(tabs)/add")}
-              />
-            ) : !hasFilteredResults && searchText.trim() !== "" ? (
-              <EmptyStateView
-                title="No Matching Items"
-                message={`No items found matching "${searchText}". Try adjusting your search or filters.`}
-                icon="search"
-                actionLabel="Clear Search"
-                onAction={handleClearSearch}
-                isFiltered={true}
-                searchQuery={searchText}
-              />
-            ) : !hasFilteredResults ? (
-              <EmptyStateView
-                title={`No ${
-                  filter === "shelf"
-                    ? "Shelf"
-                    : filter === "fridge"
-                    ? "Fridge"
-                    : ""
-                } Items Found`}
-                message={`You don't have any items on your ${
-                  filter === "shelf"
-                    ? "shelf"
-                    : filter === "fridge"
-                    ? "fridge"
-                    : "inventory"
-                }.`}
-                icon="cube-outline"
-                actionLabel={`Add ${
-                  filter === "shelf"
-                    ? "Shelf"
-                    : filter === "fridge"
-                    ? "Fridge"
-                    : ""
-                } Item`}
-                onAction={() => router.push("/(tabs)/add")}
-              />
-            ) : (
-              filteredGroups.map((group) => (
-                <AnimatedItemGroupCard
-                  key={group.name}
-                  itemName={group.name}
-                  entries={group.entries.map((entry) => ({
-                    ...entry,
-                    expiryStatus: formatExpiry(entry.expiryDate),
-                  }))}
-                  onDecrement={handleEntryDecrement}
-                  onIncrement={handleEntryIncrement}
-                  onUseAll={handleEntryUseAll}
-                  onEditEntry={handleEditEntry}
-                  onDeleteEntry={handleDeleteEntry}
-                  onAddMore={() => handleAddMore(group.name)}
-                  initialExpanded={true}
-                  isNew={newItemGroups.has(group.name)}
-                />
-              ))
-            )}
+        {/* 2) THIS WEEK — toggle + cards */}
+        <View style={styles.twToggleWrap}>
+          <View style={styles.twToggleOuter}>
+            {/* Animated sliding pill background */}
+            <Animated.View
+              style={[
+                styles.twSlidingPill,
+                {
+                  transform: [{
+                    translateX: twSlideAnim.interpolate({
+                      inputRange: [0, 1, 2],
+                      outputRange: [0, 96, 192],
+                    }),
+                  }],
+                },
+                thisWeekTab === "expired"
+                  ? styles.twSlidingPillExpired
+                  : thisWeekTab === "recent"
+                  ? styles.twSlidingPillRecent
+                  : styles.twSlidingPillDefault,
+              ]}
+            />
+            {(["upcoming", "recent", "expired"] as const).map((tab) => {
+              const isActive = thisWeekTab === tab;
+              const iconColor =
+                tab === "expired"
+                  ? isActive
+                    ? "#fff"
+                    : "#b91c1c"
+                  : tab === "recent"
+                  ? isActive
+                    ? "#fff"
+                    : "#475569"
+                  : isActive
+                  ? "#fff"
+                  : "#166534";
+              const labelColor =
+                tab === "expired" && !isActive
+                  ? "#b91c1c"
+                  : tab === "recent" && !isActive
+                  ? "#475569"
+                  : undefined;
+              return (
+                <Pressable
+                  key={tab}
+                  style={styles.twToggleTab}
+                  onPress={() => setThisWeekTab(tab)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: isActive }}
+                >
+                  {tab === "upcoming" ? (
+                    <Hourglass size={14} color={iconColor} weight="fill" style={{ marginRight: 5 }} />
+                  ) : tab === "expired" ? (
+                    <WarningCircle size={14} color={iconColor} weight="fill" style={{ marginRight: 5 }} />
+                  ) : (
+                    <ClockCounterClockwise size={14} color={iconColor} weight="fill" style={{ marginRight: 5 }} />
+                  )}
+                  <Text
+                    style={[
+                      styles.twToggleTabText,
+                      isActive && styles.twToggleTabTextActive,
+                      labelColor ? { color: labelColor } : null,
+                    ]}
+                  >
+                    {tab === "upcoming" ? "Upcoming" : tab === "expired" ? "Expired" : "Recent"}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
+        </View>
+
+        <ScrollView
+          ref={twStripRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.twStrip}
+          style={styles.twStripOuter}
+        >
+            {(
+              thisWeekTab === "upcoming"
+                ? upcomingCards
+                : thisWeekTab === "expired"
+                  ? expiredCards
+                  : recentCards
+            ).length === 0 ? (
+              <View style={[styles.twEmptyCard, { minWidth: width - 32 }]}>
+                <Text style={styles.twEmpty}>
+                  {thisWeekTab === "upcoming"
+                    ? "Nothing expiring soon"
+                    : thisWeekTab === "expired"
+                      ? "No expired items"
+                      : "No recent activity"}
+                </Text>
+              </View>
+            ) : (
+              (
+                thisWeekTab === "upcoming"
+                  ? upcomingCards
+                  : thisWeekTab === "expired"
+                    ? expiredCards
+                    : recentCards
+              ).map((c) => {
+                const displayName = (c.title || "").trim() || "Item";
+                const qtyStr = `${c.quantity}${c.unit ? " " + c.unit : " pcs"}`;
+                const locImg =
+                  c.location === "shelf"
+                    ? require("@/assets/images/icons/shelf_icon.png")
+                    : require("@/assets/images/icons/fridge_icon.png");
+                const accent =
+                  c.kind === "wasted"
+                    ? { fg: UI.red, bg: UI.redBg, border: UI.redBorder }
+                    : c.kind === "used"
+                      ? { fg: UI.ok, bg: UI.okBg, border: UI.okBorder }
+                      : c.kind === "expired"
+                        ? { fg: UI.red, bg: UI.redBg, border: UI.redBorder }
+                        : { fg: UI.ok, bg: UI.okBg, border: UI.okBorder };
+                const chipText = c.kind === "wasted" ? "Wasted" : c.kind === "used" ? "Used" : undefined;
+                const daysLeft = c.kind === "expiring" ? getDaysUntilExpiry(c.expiryDate) : undefined;
+                const expiredDaysAgo =
+                  c.kind === "expired" ? getDaysAgo(c.expiryDate) : undefined;
+                const CategoryIcon = getCategoryIcon(c.category, c.title);
+                const dueLabel =
+                  typeof daysLeft !== "number"
+                    ? "—"
+                    : daysLeft <= 0
+                      ? "Today"
+                      : daysLeft === 1
+                        ? "1 day"
+                        : `${daysLeft} days`;
+
+                return (
+                  <Pressable
+                    key={`${c.kind}-${c.id}`}
+                    style={styles.twCard}
+                    onPress={() =>
+                      c.kind === "expiring"
+                        ? router.push({
+                            pathname: "/(tabs)/calendar",
+                            params: {
+                              date: c.expiryDate,
+                              itemId: c.id,
+                              nonce: `${Date.now()}-${Math.random()}`,
+                            },
+                          })
+                        : c.kind === "expired"
+                        ? router.push(
+                            `/(tabs)/calendar?view=timeline&itemId=${encodeURIComponent(
+                              c.id
+                            )}&nonce=${encodeURIComponent(
+                              `${Date.now()}-${Math.random()}`
+                            )}&openExpired=${
+                              c.kind === "expired" ? "true" : "false"
+                            }`
+                          )
+                        : router.push("/(tabs)/this-week")
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`${c.title}. ${c.statusText}`}
+                  >
+                    <View style={styles.twMainRow}>
+                      <View style={styles.twIconWrap}>
+                        <CategoryIcon size={18} color={accent.fg} weight="fill" />
+                      </View>
+                      <View style={styles.twBody}>
+                        <Text style={styles.twName} numberOfLines={1}>
+                          {displayName}
+                        </Text>
+                        <View style={styles.twMetaRow}>
+                          <Image source={locImg} style={styles.twMetaLocIcon} />
+                          <Text style={styles.twMeta} numberOfLines={1}>
+                            {qtyStr}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.twStatusBar,
+                        { backgroundColor: accent.bg },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.twStatusBarText,
+                          { color: accent.fg },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {c.kind === "expiring"
+                          ? dueLabel
+                          : c.kind === "expired"
+                          ? `Expired ${
+                              typeof expiredDaysAgo === "number"
+                                ? expiredDaysAgo === 0
+                                  ? "today"
+                                  : expiredDaysAgo === 1
+                                    ? "yesterday"
+                                    : `${expiredDaysAgo} days ago`
+                                : "recently"
+                            }`
+                          : c.statusText || chipText}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
         </ScrollView>
 
-        {currentEditItem && (
-          <EditItemModal
-            visible={editModalVisible}
-            onClose={() => {
-              setEditModalVisible(false);
-              setCurrentEditItem(null);
-            }}
-            onUpdate={handleUpdateItem}
-            onDelete={() => handleDeleteEntry(currentEditItem.id)}
-            itemData={{
-              ...currentEditItem,
-              name: currentEditItem.name || "",
-              quantity: currentEditItem.quantity || 0,
-              expiryDate:
-                currentEditItem.expiry_date || new Date().toISOString(),
-              location: currentEditItem.location || "fridge",
-              category: currentEditItem.category || "Other",
-              notes: currentEditItem.notes || "",
-            }}
-          />
+        <View style={styles.sectionGap} />
+
+        {/* Item history — one row; detail screen has Consumed / Thrown Away toggle */}
+        <Pressable
+          style={styles.itemHistoryCard}
+          onPress={() => router.push("/(tabs)/history")}
+          accessibilityRole="button"
+          accessibilityLabel="Item history"
+        >
+          <View style={styles.itemHistoryTextCol}>
+            <Text style={styles.itemHistoryTitle}>Item History</Text>
+            <Text style={styles.itemHistorySubtitle} numberOfLines={1}>
+              {historyTotals == null
+                ? "Loading…"
+                : `${historyTotals.used} Consumed · ${historyTotals.wasted} Thrown away`}
+            </Text>
+          </View>
+          <CaretRight size={18} color="#15803D" weight="bold" />
+        </Pressable>
+
+        <View style={styles.sectionGap} />
+
+        {/* Pinned items (max 2) */}
+        <View style={styles.pinnedHeaderRow}>
+          <View style={styles.pinnedTitleCluster}>
+            <Text style={styles.pinnedSectionTitle}>Pinned</Text>
+            <Pressable
+              onPress={openPinPicker}
+              style={styles.pinnedPinButton}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={
+                pinnedIds.length >= MAX_PINNED_ITEMS
+                  ? "Manage pinned items"
+                  : "Pin an item"
+              }
+            >
+              <PushPin
+                size={20}
+                color="#15803D"
+                weight={pinnedIds.length > 0 ? "fill" : "regular"}
+              />
+            </Pressable>
+          </View>
+        </View>
+        {pinnedItemsOrdered.length === 0 ? (
+          <View style={styles.pinnedEmptyWrap}>
+            <Text style={styles.pinnedEmptySubtitle}>
+              Pin up to 2 items for quick access.
+            </Text>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.pinnedList,
+              pinnedItemsOrdered.length === 2 && styles.pinnedListTwoCol,
+            ]}
+          >
+            {pinnedItemsOrdered.map((it) => {
+              const pinnedRowId = String(it.id);
+              const isTwoCol = pinnedItemsOrdered.length === 2;
+              const cardWidth = isTwoCol ? pinnedCardHalfW : pinnedStripInnerW;
+              const CategoryIcon = getCategoryIcon(it.category, it.name);
+              const locImg =
+                it.location === "shelf" ? shelfIconAsset : fridgeIconAsset;
+              const qtyStr = `${it.quantity}${
+                it.unit ? ` ${it.unit}` : " pcs"
+              }`;
+              const expLine = formatPinExpiryLine(it);
+              const catColor = expLine.expired ? "#DC2626" : "#15803D";
+              const rowExpanded =
+                (isTwoCol && expandedPinnedId !== null) ||
+                expandedPinnedId === pinnedRowId;
+              const animVal =
+                pinnedActionAnimRef.current[pinnedRowId] ??
+                (pinnedActionAnimRef.current[pinnedRowId] = new Animated.Value(
+                  rowExpanded ? 1 : 0
+                ));
+              return (
+                <View
+                  key={it.id}
+                  style={[
+                    styles.pinnedRow,
+                    { width: cardWidth },
+                    isTwoCol && styles.pinnedRowHalf,
+                  ]}
+                >
+                  <Pressable
+                    style={[
+                      styles.pinnedRowTop,
+                      isTwoCol && styles.pinnedRowTopCompact,
+                    ]}
+                    onPress={() =>
+                      setExpandedPinnedId((prev) =>
+                        prev === pinnedRowId ? null : pinnedRowId
+                      )
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Toggle actions for ${it.name}`}
+                    accessibilityState={{ expanded: rowExpanded }}
+                  >
+                    <View
+                      style={[
+                        styles.pinnedRowIcon,
+                        isTwoCol && styles.pinnedRowIconSmall,
+                        expLine.expired && styles.pinnedRowIconExpired,
+                      ]}
+                    >
+                      <CategoryIcon
+                        size={isTwoCol ? 18 : 20}
+                        color={catColor}
+                        weight="fill"
+                      />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={[
+                          styles.pinnedRowName,
+                          isTwoCol && styles.pinnedRowNameCompact,
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {it.name}
+                      </Text>
+                      <View style={styles.pinnedRowMetaRow}>
+                        <Image
+                          source={locImg}
+                          style={styles.pinnedRowLocIcon}
+                          resizeMode="contain"
+                        />
+                        <Text
+                          style={[
+                            styles.pinnedRowMeta,
+                            isTwoCol && styles.pinnedRowMetaCompact,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {qtyStr}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.pinnedRowExpiry,
+                          isTwoCol && styles.pinnedRowExpiryCompact,
+                          expLine.expired && styles.pinnedRowExpiryExpired,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {expLine.text}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <Animated.View
+                    style={[
+                      styles.pinnedRowActionsWrap,
+                      {
+                        height: animVal.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, PINNED_ACTION_ROW_H],
+                        }),
+                        opacity: animVal.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, 1],
+                        }),
+                        transform: [
+                          {
+                            translateY: animVal.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [6, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    <View style={styles.pinnedRowActions}>
+                      <TouchableOpacity
+                        style={styles.pinnedActionBtn}
+                        onPress={() => {
+                          setExpandedPinnedId((prev) =>
+                            prev === pinnedRowId ? null : prev
+                          );
+                          openInventoryEdit(it);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${it.name}`}
+                      >
+                        <Ionicons name="create-outline" size={14} color="#6B7280" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.pinnedConsumeBtn}
+                        onPress={() => {
+                          setExpandedPinnedId((prev) =>
+                            prev === pinnedRowId ? null : prev
+                          );
+                          setConsumeModalItem(it);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Consume ${it.name}`}
+                      >
+                        <Text style={styles.pinnedConsumeBtnText}>Consume</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.pinnedActionBtn}
+                        onPress={() => {
+                          setExpandedPinnedId((prev) =>
+                            prev === pinnedRowId ? null : prev
+                          );
+                          confirmDeleteInventoryItem(it);
+                        }}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${it.name}`}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </Animated.View>
+                </View>
+              );
+            })}
+          </View>
         )}
 
-        {/* Remove the floating action button since we now have a center tab bar button */}
-      </View>
-    </SafeAreaWrapper>
+        {pinnedItemsOrdered.length === 0 ? (
+          <Divider />
+        ) : (
+          <View style={styles.sectionGap} />
+        )}
+
+        <View
+          onLayout={(e) => {
+            inventorySectionYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <Text style={styles.inventorySectionTitle}>Inventory</Text>
+        </View>
+
+        <View style={styles.inventoryControlsCard}>
+          <View style={styles.inventoryToggleWrap}>
+            <View
+              style={styles.inventoryToggleOuter}
+              onLayout={(e) => setInventoryToggleWidth(e.nativeEvent.layout.width)}
+            >
+              <Animated.View
+                style={[
+                  styles.inventoryToggleSlidingPill,
+                  {
+                    width:
+                      inventoryToggleWidth > 0
+                        ? (inventoryToggleWidth - 12) / 2
+                        : undefined,
+                    opacity: inventoryToggleWidth > 0 ? 1 : 0,
+                    transform: [
+                      {
+                        translateX: inventoryToggleAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange:
+                            inventoryToggleWidth > 0
+                              ? [0, (inventoryToggleWidth - 12) / 2 + 4]
+                              : [0, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+              <Pressable
+                style={[
+                  styles.inventoryToggleTab,
+                  locationFilter === "fridge" && styles.inventoryToggleTabActive,
+                ]}
+                onPress={() => setLocationFilter("fridge")}
+                accessibilityRole="button"
+                accessibilityState={{ selected: locationFilter === "fridge" }}
+              >
+                <View style={styles.inventoryToggleContent}>
+                  <View style={styles.inventoryToggleLabelRow}>
+                    <Image
+                      source={fridgeIconAsset}
+                      style={[
+                        styles.inventoryToggleIcon,
+                        locationFilter === "fridge"
+                          ? styles.inventoryToggleIconActive
+                          : styles.inventoryToggleIconInactive,
+                      ]}
+                      resizeMode="contain"
+                    />
+                    <Text
+                      style={[
+                        styles.inventoryToggleText,
+                        locationFilter === "fridge" && styles.inventoryToggleTextActive,
+                      ]}
+                    >
+                      Fridge
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.inventoryToggleTab,
+                  locationFilter === "shelf" && styles.inventoryToggleTabActive,
+                ]}
+                onPress={() => setLocationFilter("shelf")}
+                accessibilityRole="button"
+                accessibilityState={{ selected: locationFilter === "shelf" }}
+              >
+                <View style={styles.inventoryToggleContent}>
+                  <View style={styles.inventoryToggleLabelRow}>
+                    <Image
+                      source={shelfIconAsset}
+                      style={[
+                        styles.inventoryToggleIcon,
+                        locationFilter === "shelf"
+                          ? styles.inventoryToggleIconActive
+                          : styles.inventoryToggleIconInactive,
+                      ]}
+                      resizeMode="contain"
+                    />
+                    <Text
+                      style={[
+                        styles.inventoryToggleText,
+                        locationFilter === "shelf" && styles.inventoryToggleTextActive,
+                      ]}
+                    >
+                      Shelf
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.searchBar}>
+            <MagnifyingGlass size={18} color="#94A3B8" />
+            <TextInput
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Search by name, date, or category."
+              placeholderTextColor="#94A3B8"
+              style={styles.searchInput}
+              returnKeyType="search"
+              onFocus={scrollInventoryIntoView}
+            />
+          </View>
+        </View>
+
+        <View
+          style={styles.inventoryList}
+          onLayout={(e) => {
+            inventoryListYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+          {searchText.trim().toLowerCase() === "all" && filteredItems.length > 40 ? (
+            <Text style={styles.searchHintText}>
+              Large list loaded. Try a specific keyword (for example, milk, dairy, or february).
+            </Text>
+          ) : null}
+          {loading ? (
+            <>
+              <View style={styles.skeleton} />
+              <View style={styles.skeleton} />
+              <View style={styles.skeleton} />
+            </>
+          ) : filteredItems.length === 0 ? (
+            searchText.trim().length > 0 ? (
+              <View style={styles.searchEmptyWrap}>
+                <Text style={styles.searchEmptyTitle}>No matches</Text>
+                <Text style={styles.searchEmptySubtitle}>
+                  Try another name, date, or category.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.searchEmptyWrap}>
+                <Text style={styles.searchEmptyTitle}>Search inventory</Text>
+                <Text style={styles.searchEmptySubtitle}>
+                  Enter a keyword, or type "all" to view every item.
+                </Text>
+              </View>
+            )
+          ) : (
+            filteredItems.map((it) => {
+              const rowId = String(it.id);
+              const expiryText = formatExpiry(it.expiry_date);
+              const expired = isFoodItemExpired(it);
+              const expiryDateObj = parseExpiryDate(it.expiry_date);
+              const expiryDateLabel = expiryDateObj
+                ? expiryDateObj.toLocaleDateString(undefined, {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "";
+              const daysUntilExpiry = getDaysUntilExpiry(it.expiry_date);
+              const expiredDaysAgo = expired ? getDaysAgo(it.expiry_date) : undefined;
+              const expiryRelative = formatExpiry(it.expiry_date);
+              const expiryStatusText = expired
+                ? `Expired ${
+                    typeof expiredDaysAgo === "number"
+                      ? expiredDaysAgo === 0
+                        ? "today"
+                        : expiredDaysAgo === 1
+                        ? "yesterday"
+                        : `${expiredDaysAgo} days ago`
+                      : "recently"
+                  }`
+                : expiryRelative === "Today"
+                ? "Expires today"
+                : expiryRelative === "Tomorrow"
+                ? "Expires tomorrow"
+                : `Expires in ${expiryRelative.toLowerCase()}`;
+              const CategoryIcon = getCategoryIcon(it.category, it.name);
+              const iconColor = expired ? "#B91C1C" : "#16A34A";
+              const qtyText = it.quantity
+                ? `${it.quantity}${it.unit ? ` ${it.unit}` : ""}`
+                : "";
+              const expanded = expandedInventoryId === rowId;
+              const animVal =
+                inventoryActionAnimRef.current[rowId] ??
+                (inventoryActionAnimRef.current[rowId] = new Animated.Value(
+                  expanded ? 1 : 0
+                ));
+
+              return (
+                <View key={rowId} style={styles.inventoryCalCard}>
+                  <Pressable
+                    style={styles.inventoryCalCardInner}
+                    onPress={() => toggleInventoryItemExpanded(rowId)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${it.name}. ${it.location}. ${expiryText}. ${
+                      expanded ? "Expanded" : "Tap for Edit, Consume, or Delete"
+                    }`}
+                    accessibilityState={{ expanded }}
+                  >
+                    <View style={styles.inventoryCalIconTile}>
+                      <CategoryIcon
+                        size={22}
+                        color={iconColor}
+                        weight="fill"
+                      />
+                    </View>
+                    <View style={styles.inventoryCalBody}>
+                      <View style={styles.inventoryCalTopRow}>
+                        <Text
+                          style={styles.inventoryCalName}
+                          numberOfLines={1}
+                        >
+                          {it.name}
+                        </Text>
+                      </View>
+                      <View style={styles.inventoryCalMetaRow}>
+                        <Text style={styles.inventoryCalMetaText}>
+                          {qtyText || "Quantity not set"}
+                        </Text>
+                      </View>
+                    </View>
+                    {!!expiryText ? (
+                      <View style={styles.inventoryCalRightCol}>
+                        <Text style={styles.inventoryCalDateLabelText} numberOfLines={1}>
+                          {expiryDateLabel || expiryText}
+                        </Text>
+                        <View
+                          style={[
+                            styles.inventoryCalDaysPill,
+                            expired
+                              ? styles.inventoryCalDaysPillExpired
+                              : styles.inventoryCalDaysPillSoon,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.inventoryCalDaysPillText,
+                              expired
+                                ? styles.inventoryCalDaysPillTextExpired
+                                : styles.inventoryCalDaysPillTextSoon,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {expiryStatusText}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                  <Animated.View
+                    style={[
+                      styles.inventoryCalActionsWrap,
+                      {
+                        height: animVal.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, INVENTORY_ACTION_ROW_H],
+                        }),
+                        opacity: animVal.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, 1],
+                        }),
+                        transform: [
+                          {
+                            translateY: animVal.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [6, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                    collapsable={false}
+                  >
+                    <View style={styles.inventoryCalActionRowOuter}>
+                      <View style={styles.inventoryCalActionRow}>
+                        <TouchableOpacity
+                          style={styles.inventoryCalActionBtn}
+                          onPress={() => openInventoryEdit(it)}
+                          activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit ${it.name}`}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={14}
+                            color="#6B7280"
+                          />
+                          <Text style={styles.inventoryCalActionEdit}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.inventoryCalUseBtn}
+                          onPress={() => {
+                            setExpandedInventoryId((prev) =>
+                              prev === rowId ? null : prev
+                            );
+                            setConsumeModalItem(it);
+                          }}
+                          activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Consume ${it.name}`}
+                        >
+                          <Text style={styles.inventoryCalUseBtnText}>
+                            Consume
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.inventoryCalActionBtn}
+                          onPress={() => confirmDeleteInventoryItem(it)}
+                          activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${it.name}`}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={14}
+                            color="#EF4444"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Animated.View>
+                </View>
+              );
+            })
+          )}
+        </View>
+
+        <View style={styles.sectionGap} />
+
+        <View style={{ height: 0 }} />
+      </ScrollView>
+
+      <ConsumeModal
+        visible={consumeModalItem !== null}
+        item={consumeModalItem}
+        onConfirm={handleInventoryConsumeConfirm}
+        onCancel={() => setConsumeModalItem(null)}
+      />
+
+      <Modal
+        visible={removeModalItem !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRemoveModalItem(null)}
+      >
+        <View style={styles.removeModalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setRemoveModalItem(null)}
+          />
+          <View style={styles.removeModalCard}>
+            <Text style={styles.removeModalTitle}>
+              {removeModalItem ? `Remove ${removeModalItem.name}?` : "Remove item?"}
+            </Text>
+
+            <View style={styles.removeOptionsRow}>
+              <TouchableOpacity
+                style={[styles.removeOptionSideBySide, styles.removeOptionPrimary]}
+                activeOpacity={0.9}
+                onPress={handleThrowAwayItem}
+              >
+                <Ionicons name="trash-outline" size={16} color="#B91C1C" />
+                <View style={styles.removeOptionTextCol}>
+                  <Text style={styles.removeOptionTitlePrimary}>Throw Away</Text>
+                  <Text style={styles.removeOptionBody}>Logged as waste</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.removeOptionSideBySide, styles.removeOptionSecondary]}
+                activeOpacity={0.9}
+                onPress={handleDeleteItem}
+              >
+                <Ionicons name="close" size={16} color="#111827" />
+                <View style={styles.removeOptionTextCol}>
+                  <Text style={styles.removeOptionTitleSecondary}>Delete</Text>
+                  <Text style={styles.removeOptionBody}>Removed from inventory</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.removeModalCancel}
+              activeOpacity={0.9}
+              onPress={() => setRemoveModalItem(null)}
+            >
+              <Text style={styles.removeModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={pinModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setPinModalVisible(false);
+          setPinSearchQuery("");
+        }}
+      >
+        <View style={styles.pinModalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setPinModalVisible(false);
+              setPinSearchQuery("");
+            }}
+            accessibilityLabel="Close pin picker"
+          />
+          <View style={styles.pinModalCenter} pointerEvents="box-none">
+            <View style={styles.pinModalCard}>
+              <View style={styles.pinModalHeaderRow}>
+                <View style={styles.pinModalHeaderSide}>
+                  <Pressable
+                    onPress={() => {
+                      setPinModalVisible(false);
+                      setPinSearchQuery("");
+                    }}
+                    style={styles.pinModalClosePlain}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel="Go back"
+                  >
+                    <CaretLeft size={18} color="#15803D" weight="regular" />
+                  </Pressable>
+                </View>
+                <Text style={styles.pinModalTitle}>Pin an item</Text>
+                <View style={styles.pinModalHeaderSide} />
+              </View>
+              {pinnedItemsOrdered.length > 0 && (
+                <View style={styles.pinModalPinnedSection}>
+                  <View style={styles.pinModalPinnedHeaderRow}>
+                    <View style={{ flex: 1 }} />
+                    <View style={styles.pinModalPinnedHighlightBadge}>
+                      <Text style={styles.pinModalPinnedHighlightBadgeText}>
+                        {pinnedIds.length}/{MAX_PINNED_ITEMS}
+                      </Text>
+                    </View>
+                  </View>
+                  {pinnedItemsOrdered.map((it, idx) => {
+                    const expired = isFoodItemExpired(it);
+                    const CategoryIcon = getCategoryIcon(it.category, it.name);
+                    const iconColor = expired ? "#DC2626" : "#15803D";
+                    const locImg =
+                      it.location === "shelf" ? shelfIconAsset : fridgeIconAsset;
+                    const qtyStr = `${it.quantity}${
+                      it.unit ? ` ${it.unit}` : " pcs"
+                    }`;
+                    const expLine = formatPinExpiryLine(it);
+                    return (
+                      <View
+                        key={it.id}
+                        style={[
+                          styles.pinModalPinnedRowCard,
+                          idx > 0 && styles.pinModalPinnedRowCardFollow,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.pinModalPinnedIconTile,
+                            expired && styles.pinPickIconExpired,
+                          ]}
+                        >
+                          <CategoryIcon
+                            size={15}
+                            color={iconColor}
+                            weight="fill"
+                          />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text
+                            style={styles.pinModalPinnedItemName}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
+                            {it.name}
+                          </Text>
+                          <View style={styles.pinModalPinnedMetaRow}>
+                            <Image
+                              source={locImg}
+                              style={styles.pinModalPinnedLocIcon}
+                              resizeMode="contain"
+                            />
+                            <Text
+                              style={[
+                                styles.pinModalPinnedMetaLine,
+                                expLine.expired &&
+                                  styles.pinModalPinnedMetaLineExpired,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {qtyStr} · {expLine.text}
+                            </Text>
+                          </View>
+                        </View>
+                        <Pressable
+                          style={styles.pinModalPinnedUnpin}
+                          onPress={() => removePinnedItem(it.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Unpin ${it.name}`}
+                          hitSlop={8}
+                        >
+                          <X size={14} color="#15803D" weight="regular" />
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+              <View style={styles.pinModalSearchBar}>
+                <MagnifyingGlass size={18} color="#64748B" weight="regular" />
+                <TextInput
+                  value={pinSearchQuery}
+                  onChangeText={setPinSearchQuery}
+                  placeholder="Search name or category…"
+                  placeholderTextColor="rgba(100,116,139,0.85)"
+                  style={styles.pinModalSearchInput}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
+              </View>
+              {pinnedIds.length >= MAX_PINNED_ITEMS && (
+                <View style={styles.pinModalAtMaxHint}>
+                  <Text style={styles.pinModalAtMaxHintText}>
+                    Unpin an item above to add another.
+                  </Text>
+                </View>
+              )}
+              <ScrollView
+                style={styles.pinModalList}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {pinPickerCandidates.length === 0 ? (
+                  <View style={styles.pinModalEmptyWrap}>
+                    <MagnifyingGlass
+                      size={32}
+                      color={UI.neutralBorder}
+                      weight="regular"
+                    />
+                    <Text style={styles.pinModalEmpty}>
+                      {(() => {
+                        const unpinnedCount = items.filter(
+                          (x) => !pinnedIds.includes(x.id)
+                        ).length;
+                        if (items.length === 0) {
+                          return "Add items to your inventory first.";
+                        }
+                        if (pinnedItemsOrdered.length > 0) {
+                          if (unpinnedCount === 0) {
+                            return "Nothing left to pin.";
+                          }
+                          return "No items match your search.";
+                        }
+                        if (unpinnedCount === 0) {
+                          return pinnedIds.length >= MAX_PINNED_ITEMS
+                            ? "That’s both pins — close to finish."
+                            : "Everything is already pinned.";
+                        }
+                        return "No items match your search.";
+                      })()}
+                    </Text>
+                  </View>
+                ) : (
+                  pinPickerCandidates.map((it, index) => {
+                    const expired = isFoodItemExpired(it);
+                    const CategoryIcon = getCategoryIcon(it.category, it.name);
+                    const iconColor = expired ? "#DC2626" : "#15803D";
+                    const locImg =
+                      it.location === "shelf" ? shelfIconAsset : fridgeIconAsset;
+                    const qtyStr = `${it.quantity}${
+                      it.unit ? ` ${it.unit}` : " pcs"
+                    }`;
+                    const expLine = formatPinExpiryLine(it);
+                    const last = index === pinPickerCandidates.length - 1;
+                    const atMaxPins = pinnedIds.length >= MAX_PINNED_ITEMS;
+                    return (
+                      <Pressable
+                        key={it.id}
+                        style={[
+                          styles.pinPickRow,
+                          last && styles.pinPickRowLast,
+                          atMaxPins && styles.pinPickRowDisabled,
+                        ]}
+                        onPress={() => addPinnedItem(it.id)}
+                        disabled={atMaxPins}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Pin ${it.name}`}
+                        accessibilityState={{ disabled: atMaxPins }}
+                      >
+                        <View
+                          style={[
+                            styles.pinPickIcon,
+                            expired && styles.pinPickIconExpired,
+                          ]}
+                        >
+                          <CategoryIcon
+                            size={20}
+                            color={iconColor}
+                            weight="fill"
+                          />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.pinPickName} numberOfLines={1}>
+                            {it.name}
+                          </Text>
+                          <View style={styles.pinPickQtyRow}>
+                            <Image
+                              source={locImg}
+                              style={styles.pinPickLocIcon}
+                              resizeMode="contain"
+                            />
+                            <Text style={styles.pinPickMeta} numberOfLines={1}>
+                              {qtyStr}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.pinPickExpiry,
+                              expLine.expired && styles.pinPickExpiryExpired,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {expLine.text}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
+    backgroundColor: UI.bg,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 0,
+  },
+  topBanner: {
+    marginHorizontal: -18,
+    height: 100,
+  },
+  topBannerGradient: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "flex-start",
+    overflow: "hidden",
+  },
+  topBannerWave: {
+    position: "absolute",
+    bottom: 10,
+    left: 0,
+    right: 0,
+  },
+  topBannerBottomFill: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 12,
     backgroundColor: "#FFFFFF",
   },
-  scrollView: {
-    flex: 1,
+  greetingBlock: {
+    paddingTop: 14,
+    paddingLeft: 0,
+    alignItems: "center",
   },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-    paddingTop: 10,
+  greetingHeadline: {
+    fontSize: 16,
+    color: "#FDFDF9",
+    letterSpacing: 0.25,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.25)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
-  inventorySection: {
-    marginTop: 10,
+  greetingName: {
+    marginTop: -10,
+    marginLeft: 0,
+    fontSize: 25,
+    color: "#1B5C3A",
+    letterSpacing: -0.5,
+    textTransform: "none",
+    fontFamily: "PlusJakartaSans_700Bold",
+    textAlign: "center",
   },
-  inventoryHeaderContainer: {
-    marginBottom: 12,
-  },
-  inventoryHeader: {
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333333",
-  },
-  searchContainer: {
+  sectionHeaderRow: {
+    marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#EEEEEE",
-    height: 48,
-    paddingHorizontal: 15,
+    justifyContent: "space-between",
   },
-  searchIcon: {
-    marginRight: 10,
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: UI.ink,
+  },
+  seeAll: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: UI.muted,
+  },
+  // This Week toggle — mirrors calendar toggle style
+  twToggleWrap: {
+    marginTop: 6,
+    marginBottom: 8,
+    alignItems: "center",
+  },
+  twToggleOuter: {
+    flexDirection: "row",
+    width: 300,
+    backgroundColor: "#fff",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: UI.neutralBorder,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    gap: 4,
+    overflow: "hidden",
+  },
+  twSlidingPill: {
+    position: "absolute",
+    left: 4,
+    top: 4,
+    bottom: 4,
+    width: 92,
+    borderRadius: 999,
+  },
+  twSlidingPillDefault: {
+    backgroundColor: "#15803D",
+  },
+  twSlidingPillRecent: {
+    backgroundColor: "#737a85",
+  },
+  twSlidingPillExpired: {
+    backgroundColor: "#B91C1C",
+  },
+  twToggleTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 7,
+    borderRadius: 999,
+    zIndex: 1,
+  },
+  twToggleTabText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4a8c35",
+  },
+  twToggleTabTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  twStripOuter: {
+    marginHorizontal: -18,
+  },
+  twStrip: {
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingTop: 2,
+    paddingBottom: 0,
+    gap: 8,
+  },
+  twCard: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    minWidth: 96,
+    maxWidth: 165,
+    alignSelf: "flex-start",
+    flexShrink: 0,
+    backgroundColor: "#FAFAFA",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: UI.neutralBorder,
+    overflow: "hidden",
+    paddingRight: 0,
+    paddingTop: 9,
+    paddingBottom: 0,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  twEmptyCard: {
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  twIconWrap: {
+    marginLeft: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 4,
+  },
+  twLocImg: {
+    width: 11,
+    height: 11,
+    resizeMode: "contain",
+    flexShrink: 0,
+  },
+  twBody: {
+    flexShrink: 1,
+  },
+  twName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+    lineHeight: 18,
+  },
+  twMeta: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  twMetaRow: {
+    marginTop: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  twMetaLocIcon: {
+    width: 9,
+    height: 9,
+    resizeMode: "contain",
+    tintColor: "#64748B",
+  },
+  twMainRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 3,
+    paddingRight: 10,
+  },
+  twStatusBar: {
+    marginTop: 6,
+    alignSelf: "stretch",
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
+  },
+  twStatusBarText: {
+    fontSize: 9,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  twEmpty: {
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  sectionGap: {
+    height: 15,
+  },
+  sectionLine: {
+    height: 0.5,
+    backgroundColor: UI.divider,
+    marginVertical: 10,
+  },
+  rowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: UI.card,
+    borderWidth: 0.5,
+    borderColor: UI.border,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginTop: 10,
+  },
+  rowAccentDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  rowTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: UI.ink,
+  },
+  rowSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: UI.muted,
+  },
+  rowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  itemHistoryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 4,
+    backgroundColor: UI.card,
+    borderWidth: 1,
+    borderColor: UI.ok,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  itemHistoryTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  itemHistoryTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#15803D",
+  },
+  itemHistorySubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: "600",
+    color: UI.muted,
+  },
+  pinnedHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  pinnedTitleCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  pinnedSectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#15803D",
+  },
+  inventorySectionTitle: {
+    alignSelf: "center",
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#15803D",
+    marginBottom: 10,
+  },
+  inventoryControlsCard: {
+    backgroundColor: "#22C55E",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#16A34A",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  pinnedPinButton: {
+    padding: 2,
+    marginTop: 1,
+  },
+  pinnedEmptyWrap: {
+    marginTop: 4,
+    marginBottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+  },
+  pinnedEmptySubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: "600",
+    color: UI.muted,
+    textAlign: "center",
+    lineHeight: 16,
+    maxWidth: 280,
+  },
+  pinnedList: {
+    marginTop: 10,
+    gap: 8,
+    alignItems: "center",
+  },
+  pinnedListTwoCol: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    alignSelf: "stretch",
+    width: "100%",
+    gap: 8,
+  },
+  pinnedRow: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    alignSelf: "center",
+    backgroundColor: UI.card,
+    borderWidth: 0.5,
+    borderColor: UI.border,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  pinnedRowHalf: {
+    paddingTop: 0,
+  },
+  pinnedRowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  pinnedRowTopCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: "center",
+  },
+  pinnedRowActionsWrap: {
+    overflow: "hidden",
+  },
+  pinnedRowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    minHeight: PINNED_ACTION_ROW_H,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    backgroundColor: "#FAFAFA",
+  },
+  pinnedActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 8,
+  },
+  pinnedConsumeBtn: {
+    flex: 0,
+    minWidth: 88,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "#22C55E",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 2,
+  },
+  pinnedConsumeBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  pinnedRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pinnedRowIconSmall: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+  },
+  pinnedRowIconExpired: {
+    backgroundColor: "#FFFFFF",
+  },
+  pinnedRowName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: UI.ink,
+  },
+  pinnedRowNameCompact: {
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  pinnedRowMetaRow: {
+    marginTop: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  pinnedRowLocIcon: {
+    width: 12,
+    height: 12,
+    tintColor: UI.muted,
+  },
+  pinnedRowMeta: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: UI.muted,
+    flex: 1,
+  },
+  pinnedRowMetaCompact: {
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  pinnedRowExpiry: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#16A34A",
+  },
+  pinnedRowExpiryCompact: {
+    fontSize: 10,
+  },
+  pinnedRowExpiryExpired: {
+    color: "#DC2626",
+  },
+  pinModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.4)",
+  },
+  pinModalCenter: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    paddingHorizontal: 22,
+  },
+  pinModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    maxHeight: "82%",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    elevation: 14,
+    overflow: "hidden",
+  },
+  pinModalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  pinModalHeaderSide: {
+    width: 32,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+  pinModalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
+    color: UI.ink,
+    letterSpacing: -0.2,
+    textAlign: "center",
+    includeFontPadding: false,
+  },
+  pinModalClosePlain: {
+    marginLeft: -2,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pinModalPinnedSection: {
+    marginTop: 8,
+  },
+  pinModalPinnedHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  pinModalPinnedHighlightBadge: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E2E8F0",
+  },
+  pinModalPinnedHighlightBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#15803D",
+    fontVariant: ["tabular-nums"],
+  },
+  pinModalPinnedRowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+  pinModalPinnedRowCardFollow: {
+    marginTop: 4,
+  },
+  pinModalPinnedIconTile: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#EEF2F6",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FAFAFA",
+  },
+  pinModalPinnedItemName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0F172A",
+    letterSpacing: -0.15,
+  },
+  pinModalPinnedMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 1,
+  },
+  pinModalPinnedLocIcon: {
+    width: 10,
+    height: 10,
+    tintColor: "#94A3B8",
+  },
+  pinModalPinnedMetaLine: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  pinModalPinnedMetaLineExpired: {
+    color: "#DC2626",
+  },
+  pinModalSearchBar: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  pinModalSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "400",
+    color: UI.ink,
+    paddingVertical: 0,
+  },
+  pinModalList: {
+    marginTop: 8,
+    maxHeight: 340,
+  },
+  pinModalAtMaxHint: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#BBF7D0",
+  },
+  pinModalAtMaxHintText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#166534",
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  pinModalPinnedUnpin: {
+    padding: 2,
+  },
+  pinPickRowDisabled: {
+    opacity: 0.45,
+  },
+  pinModalEmptyWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 28,
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  pinModalEmpty: {
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "500",
+    color: UI.muted,
+    lineHeight: 20,
+  },
+  pinPickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#EEF2F6",
+  },
+  pinPickRowLast: {
+    borderBottomWidth: 0,
+  },
+  pinPickIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E8F5E9",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0FDF4",
+  },
+  pinPickIconExpired: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  pinPickQtyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 3,
+  },
+  pinPickLocIcon: {
+    width: 13,
+    height: 13,
+    tintColor: UI.muted,
+  },
+  pinPickName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: UI.ink,
+  },
+  pinPickMeta: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: UI.muted,
+    flex: 1,
+  },
+  pinPickExpiry: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "600",
+    color: UI.muted,
+  },
+  pinPickExpiryExpired: {
+    color: "#DC2626",
+  },
+  searchBar: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    color: "#333333",
-    fontWeight: "400",
+    fontSize: 14,
+    fontWeight: "500",
+    color: UI.ink,
   },
-  filtersContainer: {
-    marginBottom: 16,
+  inventoryToggleWrap: {
+    marginTop: 0,
+    marginBottom: 0,
   },
-  locationFilterContainer: {
+  inventoryToggleOuter: {
     flexDirection: "row",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 20,
-    padding: 4,
+    backgroundColor: "rgba(255,255,255,0.20)",
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    gap: 4,
+    alignItems: "center",
+    borderWidth: 0,
+    position: "relative",
+    overflow: "hidden",
   },
-  locationButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  activeLocationButton: {
-    backgroundColor: "#22C55E",
-    shadowColor: "rgba(0,0,0,0.1)",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+  inventoryToggleSlidingPill: {
+    position: "absolute",
+    left: 4,
+    top: 4,
+    bottom: 4,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  locationText: {
-    fontSize: 13,
-    color: "#A1A1AB",
-    fontWeight: "500",
+  inventoryToggleTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    minHeight: 31,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 0,
+    zIndex: 1,
   },
-  activeLocationText: {
-    color: "#FFFFFF",
+  inventoryToggleTabActive: {
+    backgroundColor: "transparent",
+  },
+  inventoryToggleContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 0,
+  },
+  inventoryToggleLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+  },
+  inventoryToggleIcon: {
+    width: 16,
+    height: 16,
+  },
+  inventoryToggleIconActive: {
+    tintColor: "#15803D",
+  },
+  inventoryToggleIconInactive: {
+    tintColor: "#FFFFFF",
+    opacity: 0.85,
+  },
+  inventoryToggleText: {
+    fontSize: 13,
     fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  inventoryToggleTextActive: {
+    color: "#15803D",
+  },
+  inventoryList: {
+    marginTop: 10,
+    gap: 8,
+  },
+  searchHintText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748B",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  /** Calendar-style inventory cards (matches EnhancedCalendarScreen day items) */
+  inventoryCalCard: {
+    flexDirection: "column",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    overflow: "hidden",
+    marginBottom: 0,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  inventoryCalCardInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 10,
+    paddingRight: 10,
+    paddingVertical: 8,
+    minWidth: 0,
+    minHeight: 50,
+  },
+  inventoryCalIconTile: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+    borderRadius: 10,
+    backgroundColor: "transparent",
+  },
+  inventoryCalBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inventoryCalTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    minWidth: 0,
+  },
+  inventoryCalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  inventoryCalTextCol: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  inventoryCalName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+  inventoryCalMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  inventoryCalMetaText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  inventoryCalRightCol: {
+    marginLeft: 8,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 78,
+  },
+  inventoryCalDateLabelText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  inventoryCalDaysPill: {
+    marginTop: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  inventoryCalDaysPillSoon: {
+    backgroundColor: "#DCFCE7",
+  },
+  inventoryCalDaysPillExpired: {
+    backgroundColor: "#FEE2E2",
+  },
+  inventoryCalDaysPillText: {
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  inventoryCalDaysPillTextSoon: {
+    color: "#166534",
+  },
+  inventoryCalDaysPillTextExpired: {
+    color: "#991B1B",
+  },
+  inventoryCalActionsWrap: {
+    overflow: "hidden",
+  },
+  inventoryCalActionRowOuter: {
+    backgroundColor: "#FAFAFA",
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+  },
+  inventoryCalActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    minHeight: INVENTORY_ACTION_ROW_H,
+  },
+  inventoryCalActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 8,
+  },
+  inventoryCalActionEdit: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  inventoryCalUseBtn: {
+    flex: 1,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "#22C55E",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 4,
+  },
+  inventoryCalUseBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  removeModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.25)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  removeModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  removeModalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  removeOptionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+    marginBottom: 8,
+    gap: 8,
+  },
+  removeOptionSideBySide: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 6,
+  },
+  removeOptionPrimary: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FCA5A5",
+  },
+  removeOptionSecondary: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E5E7EB",
+  },
+  removeOptionTextCol: {
+    marginTop: 0,
+    alignItems: "flex-start",
+  },
+  removeOptionTitlePrimary: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#B91C1C",
+    marginBottom: 2,
+  },
+  removeOptionTitleSecondary: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  removeOptionBody: {
+    fontSize: 10.5,
+    fontWeight: "500",
+    color: "#6B7280",
+    textAlign: "left",
+  },
+  removeModalCancel: {
+    marginTop: 6,
+    borderRadius: 999,
+    backgroundColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+    alignSelf: "center",
+    paddingHorizontal: 32,
+  },
+  removeModalCancelText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#111827",
+  },
+  skeleton: {
+    height: 58,
+    borderRadius: 14,
+    backgroundColor: "rgba(232,230,224,0.55)",
+    borderWidth: 0.5,
+    borderColor: UI.border,
+  },
+  emptyCard: {
+    backgroundColor: UI.card,
+    borderWidth: 0.5,
+    borderColor: UI.border,
+    borderRadius: 14,
+    padding: 12,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: UI.ink,
+  },
+  emptyText: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+    color: UI.muted,
+  },
+  searchEmptyWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  searchEmptyTitle: {
+    fontSize: 15,
+    fontWeight: "400",
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  searchEmptySubtitle: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: "400",
+    color: "#6B7280",
+    textAlign: "center",
   },
 });

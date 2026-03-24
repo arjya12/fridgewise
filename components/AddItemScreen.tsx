@@ -448,11 +448,9 @@ export default function AddItemScreen() {
       >
         <ThemedText
           style={{
-            fontSize: 22,
-            fontWeight: "900",
-            fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+            fontSize: 20,
+            fontWeight: "700",
             color: "#FFF",
-            letterSpacing: 0.5,
             textAlign: "center",
           }}
         >

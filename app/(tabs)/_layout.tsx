@@ -180,6 +180,30 @@ export default function TabLayout() {
             ),
           }}
         />
+
+        {/* This Week - Accessible from Home */}
+        <Tabs.Screen
+          name="this-week"
+          options={{
+            title: "This Week",
+            href: null, // Hide from tab bar - accessible from Home
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="time-outline" color={color} size={24} />
+            ),
+          }}
+        />
+
+        {/* History - Accessible from Home */}
+        <Tabs.Screen
+          name="history"
+          options={{
+            title: "History",
+            href: null, // Hide from tab bar - accessible from Home
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="time-outline" color={color} size={24} />
+            ),
+          }}
+        />
       </Tabs>
     </SafeAreaView>
   );

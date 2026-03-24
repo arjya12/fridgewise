@@ -28,6 +28,8 @@ export function ConsumeModal({
   onCancel,
 }: ConsumeModalProps) {
   const maxQty = item ? (typeof item.quantity === "number" ? item.quantity : 1) : 1;
+  const isMultiQty = maxQty > 1;
+  const halfQty = Math.floor(maxQty / 2);
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
@@ -53,6 +55,15 @@ export function ConsumeModal({
   if (!item) return null;
 
   const locationLabel = item.location === "fridge" ? "Fridge" : "Shelf";
+  const isConsumeAllSelected = isMultiQty && quantity >= maxQty;
+  const showMinAction = isMultiQty && quantity > halfQty;
+
+  const handleToggleMinMax = () => {
+    setQuantity((prev) => {
+      if (!isMultiQty) return prev;
+      return prev > halfQty ? 1 : maxQty;
+    });
+  };
 
   return (
     <Modal
@@ -69,7 +80,7 @@ export function ConsumeModal({
           >
             <Text style={styles.question}>How much did you use?</Text>
             <Text style={styles.availability}>
-              {maxQty} {unit} available in {locationLabel}
+              Available: {maxQty} {unit} in {locationLabel}
             </Text>
 
             <View style={styles.quantitySection}>
@@ -89,9 +100,31 @@ export function ConsumeModal({
                   disabled={quantity >= maxQty}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.qtyBtnText, quantity >= maxQty && styles.qtyBtnTextDisabled]}>+</Text>
+                  <Text
+                    style={[
+                      styles.qtyBtnText,
+                      quantity >= maxQty && styles.qtyBtnTextDisabled,
+                    ]}
+                  >
+                    +
+                  </Text>
                 </TouchableOpacity>
               </View>
+              {isMultiQty ? (
+                <TouchableOpacity
+                  style={styles.maxLinkWrap}
+                  onPress={handleToggleMinMax}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showMinAction
+                      ? "Set quantity to minimum"
+                      : `Set quantity to max ${maxQty}`
+                  }
+                >
+                  <Text style={styles.maxLinkText}>{showMinAction ? "Min" : "Max"}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <View style={styles.actions}>
@@ -103,7 +136,9 @@ export function ConsumeModal({
                 onPress={handleConfirm}
                 activeOpacity={0.8}
               >
-                <Text style={styles.confirmBtnText}>Consume</Text>
+                <Text style={styles.confirmBtnText}>
+                  {isConsumeAllSelected ? "Consume all" : "Consume"}
+                </Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -191,6 +226,18 @@ const styles = StyleSheet.create({
     color: "#334155",
     minWidth: 40,
     textAlign: "center",
+  },
+  maxLinkWrap: {
+    marginTop: 8,
+    alignSelf: "center",
+  },
+  maxLinkText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#15803D",
+  },
+  maxLinkTextDisabled: {
+    color: "#94A3B8",
   },
   actions: {
     flexDirection: "row",

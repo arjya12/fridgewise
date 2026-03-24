@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   Easing,
+  InteractionManager,
   Image,
   FlatList,
   KeyboardAvoidingView,
@@ -130,8 +131,15 @@ export interface EnhancedCalendarScreenProps {
   onItemPress?:   (item: FoodItem) => void;
   onItemEdit?:    (item: FoodItem) => void;
   onItemDelete?:  (item: FoodItem) => void;
+  onItemThrowAway?: (item: FoodItem) => void;
   onConsume?:     (item: FoodItem) => void;
   onAddItem?:     () => void;
+  initialViewMode?: "calendar" | "timeline";
+  initialDate?: string;
+  initialDateToken?: string;
+  initialFocusItemId?: string;
+  initialFocusToken?: string;
+  initialOpenExpired?: boolean;
   enablePerformanceMonitoring?: boolean;
   style?: any;
 }
@@ -166,7 +174,7 @@ function getExpiryUrgencyLabel(expiryDate: string | null | undefined, todayIso: 
   // Past: "X days past" / "X M Y days past" (mirror of future format)
   if (diff < 0) {
     const abs = Math.abs(diff);
-    if (abs === 1) return "1 day past";
+    if (abs === 1) return "yesterday";
     if (abs < 30) return `${abs} days past`;
     const months = Math.floor(abs / 30);
     const days = abs % 30;
@@ -187,10 +195,18 @@ function getExpiryUrgencyLabel(expiryDate: string | null | undefined, todayIso: 
 // ─── Core screen ─────────────────────────────────────────────────────────────
 
 function EnhancedCalendarScreenCore({
+  foodItemsService,
   onItemPress,
   onItemEdit,
   onItemDelete,
+  onItemThrowAway,
   onConsume,
+  initialViewMode = "calendar",
+  initialDate,
+  initialDateToken,
+  initialFocusItemId,
+  initialFocusToken,
+  initialOpenExpired = false,
   enablePerformanceMonitoring = true,
   style,
 }: EnhancedCalendarScreenProps) {
@@ -209,16 +225,39 @@ function EnhancedCalendarScreenCore({
   const backgroundColor = useThemeColor({}, "background");
   const textColor       = useThemeColor({}, "text");
 
-  const [viewMode, setViewMode] = React.useState<ViewMode>("calendar");
+  const [viewMode, setViewMode] = React.useState<ViewMode>(initialViewMode);
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [tempMonth, setTempMonth] = useState(currentMonth.month);
   const [tempYear, setTempYear] = useState(currentMonth.year);
   const [timelinePastCollapsed, setTimelinePastCollapsed] = useState(true);
   const [timelineExpandedIds, setTimelineExpandedIds] = useState<Set<string>>(new Set());
+  const [preferredExpandedItemId, setPreferredExpandedItemId] = useState<string | null>(null);
   const timelineItemAnimRef = useRef<Record<string, Animated.Value>>({});
+  const timelineScrollRef = useRef<ScrollView>(null);
+  const calendarScrollRef = useRef<ScrollView>(null);
+  const dayPanelYRef = useRef(0);
+  const appliedTimelineFocusKeyRef = useRef<string | null>(null);
+  const scrolledTimelineFocusKeyRef = useRef<string | null>(null);
   const expiredDropdownAnim = useRef(new Animated.Value(0)).current;
   const [showExpiredBox, setShowExpiredBox] = useState(false);
   const [removeModalItem, setRemoveModalItem] = useState<FoodItem | null>(null);
+
+  React.useEffect(() => {
+    setViewMode(initialViewMode);
+  }, [initialViewMode]);
+
+  React.useEffect(() => {
+    if (!initialDate) return;
+    const d = new Date(initialDate + "T00:00:00");
+    if (Number.isNaN(d.getTime())) return;
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+    setCurrentMonth({ year: y, month: m });
+    selectDate(dateStr);
+  }, [initialDate, initialDateToken, setCurrentMonth, selectDate]);
 
   const WHEEL_ITEM_H = 32;
   const WHEEL_VISIBLE = 5; // odd count = true centered highlight
@@ -390,6 +429,30 @@ function EnhancedCalendarScreenCore({
     setExpandedItemIds(firstId == null ? new Set() : new Set([firstId]));
   }, [selectedDate]);
 
+  React.useEffect(() => {
+    if (initialViewMode !== "calendar" || !initialFocusItemId) return;
+    const targetId = String(initialFocusItemId);
+    const existsOnSelectedDate = sortedDayItems.some((it) => String(it.id) === targetId);
+    if (!existsOnSelectedDate) return;
+
+    setExpandedItemIds(new Set([targetId]));
+
+    let task: { cancel?: () => void } | null = null;
+    const t = setTimeout(() => {
+      task = InteractionManager.runAfterInteractions(() => {
+        calendarScrollRef.current?.scrollTo({
+          y: Math.max(0, dayPanelYRef.current - 24),
+          animated: true,
+        });
+      });
+    }, 120);
+
+    return () => {
+      clearTimeout(t);
+      task?.cancel?.();
+    };
+  }, [initialViewMode, initialFocusItemId, initialFocusToken, sortedDayItems]);
+
   const toggleDayItemExpanded = useCallback((itemId: string) => {
     setExpandedItemIds((prev) => {
       const next = new Set(prev);
@@ -466,7 +529,13 @@ function EnhancedCalendarScreenCore({
       if (unique.size === 1) {
         const diff = diffs[0];
         if (diff < 0) {
-          commonExpiryLabel = "Already expired";
+          const daysPast = Math.abs(diff);
+          commonExpiryLabel =
+            daysPast === 0
+              ? "Expired today"
+              : daysPast === 1
+                ? "Expired yesterday"
+                : `Expired ${daysPast} days ago`;
           commonExpiryBg = "#FEE2E2";
           commonExpiryColor = "#991B1B";
         } else if (diff === 0) {
@@ -529,10 +598,86 @@ function EnhancedCalendarScreenCore({
   }, [timelineByDate.past, timelineByDate.upcoming]);
 
   React.useEffect(() => {
-    if (firstTimelineItemId) setTimelineExpandedIds(new Set([firstTimelineItemId]));
-  }, [firstTimelineItemId]);
+    if (initialViewMode !== "timeline") return;
+    const focusKey = `${initialFocusToken ?? "no-token"}:${initialFocusItemId ?? "no-item"}:${initialOpenExpired ? "expired-open" : "expired-closed"}`;
+    if (appliedTimelineFocusKeyRef.current === focusKey) return;
+    const targetIdRaw = initialFocusItemId || firstTimelineItemId;
+    const targetId = targetIdRaw ? String(targetIdRaw) : null;
+    if (!targetId) return;
+
+    appliedTimelineFocusKeyRef.current = focusKey;
+    if (initialOpenExpired) {
+      setTimelinePastCollapsed(false);
+    }
+    // Ensure the intended item action row is the one opened.
+    setPreferredExpandedItemId(targetId);
+    setTimelineExpandedIds(new Set([targetId]));
+  }, [
+    initialViewMode,
+    initialFocusItemId,
+    initialFocusToken,
+    initialOpenExpired,
+    firstTimelineItemId,
+  ]);
+
+  React.useEffect(() => {
+    if (initialViewMode !== "timeline" || !initialFocusItemId) return;
+    const focusKey = `${initialFocusToken ?? "no-token"}:${initialFocusItemId}:${initialOpenExpired ? "expired-open" : "expired-closed"}`;
+    if (scrolledTimelineFocusKeyRef.current === focusKey) return;
+
+    const targetId = String(initialFocusItemId);
+    const estimateTargetY = () => {
+      const groups: Array<{ items: FoodItem[]; kind: "past" | "upcoming" }> = [];
+      if (!timelinePastCollapsed) {
+        timelineByDate.past.forEach((g) => groups.push({ items: g.items, kind: "past" }));
+      }
+      timelineByDate.upcoming.forEach((g) => groups.push({ items: g.items, kind: "upcoming" }));
+
+      let y = 0;
+      for (const g of groups) {
+        // Approx header block per date section
+        y += g.kind === "past" ? 56 : 48;
+        for (const it of g.items) {
+          if (String(it.id) === targetId) {
+            return Math.max(0, y - 36);
+          }
+          // Approx expanded item card height budget
+          y += timelineExpandedIds.has(it.id) ? 124 : 76;
+        }
+        y += 10; // section spacing
+      }
+      return 0;
+    };
+
+    let task: { cancel?: () => void } | null = null;
+    const t = setTimeout(() => {
+      task = InteractionManager.runAfterInteractions(() => {
+        timelineScrollRef.current?.scrollTo({
+          y: estimateTargetY(),
+          animated: true,
+        });
+        scrolledTimelineFocusKeyRef.current = focusKey;
+      });
+    }, initialOpenExpired ? 220 : 120);
+    return () => {
+      clearTimeout(t);
+      task?.cancel?.();
+    };
+  }, [
+    initialViewMode,
+    initialFocusItemId,
+    initialFocusToken,
+    initialOpenExpired,
+    showExpiredBox,
+    timelinePastCollapsed,
+    timelineExpandedIds,
+    timelineByDate.past.length,
+    timelineByDate.upcoming.length,
+  ]);
 
   const toggleTimelineItemExpanded = useCallback((itemId: string) => {
+    // User interaction takes over from deep-link preferred expansion.
+    setPreferredExpandedItemId(null);
     setTimelineExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(itemId)) next.delete(itemId);
@@ -574,12 +719,29 @@ function EnhancedCalendarScreenCore({
     }
   }, [timelinePastCollapsed]);
 
-  const handleThrowAway = useCallback(() => {
+  const handleThrowAway = useCallback(async () => {
     if (!removeModalItem) return;
-    // For now this shares behavior with Delete; can diverge later.
-    onItemDelete?.(removeModalItem);
-    setRemoveModalItem(null);
-  }, [removeModalItem, onItemDelete]);
+    try {
+      if (onItemThrowAway) {
+        await Promise.resolve(onItemThrowAway(removeModalItem));
+      } else {
+        const qty =
+          typeof removeModalItem.quantity === "number" &&
+          removeModalItem.quantity > 0
+            ? removeModalItem.quantity
+            : 1;
+        if (foodItemsService?.logUsage) {
+          await foodItemsService.logUsage(removeModalItem.id, "wasted", qty);
+        } else {
+          onItemDelete?.(removeModalItem);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to throw away item:", e);
+    } finally {
+      setRemoveModalItem(null);
+    }
+  }, [removeModalItem, foodItemsService, onItemDelete, onItemThrowAway]);
 
   const handleDeleteItem = useCallback(() => {
     if (!removeModalItem) return;
@@ -827,6 +989,7 @@ function EnhancedCalendarScreenCore({
               {/* Calendar panel */}
               <View style={{ width: screenWidth, flex: 1 }}>
             <ScrollView
+              ref={calendarScrollRef}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={S.calScrollContent}
               keyboardShouldPersistTaps="handled"
@@ -990,7 +1153,12 @@ function EnhancedCalendarScreenCore({
               </GestureDetector>
 
               {/* ── Selected day panel ── */}
-              <View style={S.dayPanel}>
+              <View
+                style={S.dayPanel}
+                onLayout={(e) => {
+                  dayPanelYRef.current = e.nativeEvent.layout.y;
+                }}
+              >
                   {/* Panel header */}
                   <View style={S.dayPanelHeader}>
                     <View style={S.dayPanelHeaderLeft}>
@@ -1054,7 +1222,13 @@ function EnhancedCalendarScreenCore({
                             metaColor = "#EF4444";
                             tagBg = "#FEE2E2";
                             tagColor = "#991B1B";
-                            tagLabel = "Already expired";
+                            const daysPast = Math.abs(diff);
+                            tagLabel =
+                              daysPast === 0
+                                ? "Expired today"
+                                : daysPast === 1
+                                  ? "Expired yesterday"
+                                  : `Expired ${daysPast} days ago`;
                           } else if (diff <= 3) {
                             barColor = "#F59E0B";
                             cardBg = "#FFFBEB";
@@ -1097,7 +1271,7 @@ function EnhancedCalendarScreenCore({
                           const iconNode = (
                             <CategoryIcon
                               size={22}
-                              color="#16A34A"
+                              color={diff < 0 ? "#B91C1C" : "#16A34A"}
                               weight="fill"
                             />
                           );
@@ -1253,6 +1427,7 @@ function EnhancedCalendarScreenCore({
               {/* Timeline panel */}
               <View style={{ width: screenWidth, flex: 1 }}>
             <ScrollView
+              ref={timelineScrollRef}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={S.timelineScrollContent}
             >
@@ -1317,7 +1492,9 @@ function EnhancedCalendarScreenCore({
                                   ));
                                 return renderTimelineDayItem(
                                   item,
-                                  timelineExpandedIds.has(item.id),
+                                  preferredExpandedItemId
+                                    ? String(item.id) === preferredExpandedItemId
+                                    : timelineExpandedIds.has(item.id),
                                   () => toggleTimelineItemExpanded(item.id),
                                   animVal,
                                 );
@@ -1377,7 +1554,9 @@ function EnhancedCalendarScreenCore({
                               ));
                             return renderTimelineDayItem(
                               item,
-                              timelineExpandedIds.has(item.id),
+                              preferredExpandedItemId
+                                ? String(item.id) === preferredExpandedItemId
+                                : timelineExpandedIds.has(item.id),
                               () => toggleTimelineItemExpanded(item.id),
                               animVal,
                             );

@@ -7,6 +7,19 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import {
+  Fraunces_400Regular_Italic,
+  Fraunces_700Bold_Italic,
+} from "@expo-google-fonts/fraunces";
+import {
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from "@expo-google-fonts/plus-jakarta-sans";
+import {
+  DMMono_400Regular,
+  DMMono_500Medium,
+} from "@expo-google-fonts/dm-mono";
+
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CalendarProvider } from "@/contexts/CalendarContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
@@ -45,6 +58,12 @@ export default function RootLayout() {
   // Remove colorScheme detection - always use light theme
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
+    Fraunces_400Regular_Italic,
+    Fraunces_700Bold_Italic,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    DMMono_400Regular,
+    DMMono_500Medium,
   });
 
   // Initialize notifications when the app starts
