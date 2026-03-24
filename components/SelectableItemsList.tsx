@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { getFoodIcon } from "../utils/foodIconMapping";
+import { formatQuantityWithUnit } from "../utils/formatQuantityUnit";
 
 interface SelectableItemsListProps {
   items: FoodItemWithUrgency[];
@@ -362,7 +363,10 @@ function SelectableItemCard({
             {item.name}
           </Text>
           <Text style={[styles.itemDetails, { color: textColor }]}>
-            {item.quantity} {item.unit} • {item.location}
+            {formatQuantityWithUnit(item.quantity, item.unit, {
+              fallbackUnit: "pcs",
+            })}{" "}
+            • {item.location}
           </Text>
           <Text style={[styles.itemExpiry, { color: textColor }]}>
             {item.urgency.description}

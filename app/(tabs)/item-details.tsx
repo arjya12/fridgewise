@@ -61,7 +61,7 @@ export default function ItemDetailsScreen() {
 
   useEffect(() => {
     if (!id) {
-      router.back();
+      setLoading(false);
       return;
     }
 
@@ -125,8 +125,10 @@ export default function ItemDetailsScreen() {
     // Show confirmation
     Alert.alert(
       "Item Used",
-      `You've used ${entry.quantity} ${
-        entry.quantity > 1 ? "units" : "unit"
+      `You've used ${
+        entry.quantity === 1
+          ? "1 item"
+          : `${entry.quantity} items`
       } of ${itemName}`,
       [{ text: "OK" }]
     );

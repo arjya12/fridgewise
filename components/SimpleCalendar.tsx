@@ -44,6 +44,10 @@ export function SimpleCalendar({
       ? new Date(selectedDate.getFullYear(), selectedDate.getMonth())
       : new Date()
   );
+  useEffect(() => {
+    if (!selectedDate) return;
+    setCurrentDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+  }, [selectedDate]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();

@@ -1,7 +1,5 @@
 import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
-import { Colors } from "@/constants/Colors";
-import { useColorScheme } from "@/hooks/useColorScheme";
+import ScreenLayout from "@/components/ScreenLayout";
 import { FoodItem } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,9 +8,8 @@ import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Easing,
@@ -32,7 +29,6 @@ import {
 
 import { useCalendar } from "@/contexts/CalendarContext";
 import {
-  SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import {
@@ -53,23 +49,44 @@ import {
 } from "phosphor-react-native";
 import { SimpleCalendar } from "./SimpleCalendar";
 
-// Move these up before their first use
 const commonUnits = [
+  // most used (quick picks)
   "pcs",
   "kg",
   "g",
-  "lb",
-  "servings",
   "L",
-  "ml",
+  "servings",
+
+  // everyday cooking
+  "cup",
+  "tbsp",
+  "tsp",
+
+  // common grocery counts
+  "dozen",
+  "slice",
+  "bunch",
+  "clove",
+
+  // weight alternatives
+  "lb",
+  "oz",
+  "fl oz",
+  "ml", 
+
+  // containers
   "pack",
-  "can",
-  "jar",
-  "bottle",
   "box",
   "bag",
-  "oz",
-  "portion",
+  "bottle",
+  "jar",
+  "can",
+  "carton",
+  "tray",
+
+  // food-specific forms
+  "block",
+  "stick"
 ];
 
 const CATEGORY_OPTIONS: {
@@ -93,6 +110,27 @@ const CATEGORY_OPTIONS: {
 ];
 const CATEGORY_LABELS = CATEGORY_OPTIONS.map((o) => o.label);
 
+const parseYmdToLocalDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) {
+    const dt = new Date(value);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  return new Date(y, mo - 1, d);
+};
+
+const formatLocalDateToYmd = (date?: Date | null): string | undefined => {
+  if (!date) return undefined;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 const CHIPS_PER_ROW = 7;
 const CATEGORY_ROW_1 = CATEGORY_OPTIONS.slice(0, CHIPS_PER_ROW);
 const CATEGORY_ROW_2 = CATEGORY_OPTIONS.slice(CHIPS_PER_ROW);
@@ -106,6 +144,8 @@ export default function AddItemScreen() {
     unit?: string;
     location?: "fridge" | "shelf";
     category?: string;
+    expiryDate?: string;
+    notes?: string;
   }>();
   const isEditing = params.edit === "true" && Boolean(params.id);
   const hasPrefill =
@@ -129,8 +169,6 @@ export default function AddItemScreen() {
   const [notes, setNotes] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(isEditing);
-  const colorScheme = useColorScheme();
   const [notesFocused, setNotesFocused] = useState(false);
   const [showUnitDropdown, setShowUnitDropdown] = useState(false);
   const unitDropdownTriggerRef = useRef<View>(null);
@@ -213,24 +251,29 @@ export default function AddItemScreen() {
     loadExistingItems();
   }, [isEditing, params.id]);
 
-  // Apply prefill from groceries when params change (non-editing)
-  useEffect(() => {
-    if (!isEditing && hasPrefill) {
-      if (params.name) setName(params.name);
-      if (params.quantity) setQuantity(params.quantity);
-      if (params.unit) setUnit(params.unit);
-      if (params.location) setLocation(params.location);
-      if (params.category) setCategory(params.category);
+  // Apply prefill from navigation params before paint to prevent old-item flicker
+  useLayoutEffect(() => {
+    if (params.name) setName(params.name);
+    if (params.quantity) setQuantity(params.quantity);
+    if (params.unit) setUnit(params.unit);
+    if (params.location) setLocation(params.location);
+    if (params.category) setCategory(params.category);
+    if (typeof params.expiryDate === "string") {
+      setExpiryDate(parseYmdToLocalDate(params.expiryDate));
+    }
+    if (typeof params.notes === "string") {
+      setNotes(params.notes);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    isEditing,
-    hasPrefill,
+    params.id,
     params.name,
     params.quantity,
     params.unit,
     params.location,
     params.category,
+    params.expiryDate,
+    params.notes,
   ]);
 
   // Reset form and success state when screen comes into focus
@@ -279,7 +322,6 @@ export default function AddItemScreen() {
 
   const loadItemData = async () => {
     try {
-      setInitialLoading(true);
       // Get items and find the one with matching ID
       const items = await foodItemsService.getItems();
       const item = items.find((item) => item.id === params.id);
@@ -293,17 +335,13 @@ export default function AddItemScreen() {
         // Map legacy categories to chip set (Dairy, Meat, Vegetables, Fruits, Beverages, Other)
         setCategory(CATEGORY_LABELS.includes(cat) ? cat : cat ? "Other" : "");
         setNotes(item.notes || "");
-        if (item.expiry_date) {
-          setExpiryDate(new Date(item.expiry_date));
-        }
+        setExpiryDate(parseYmdToLocalDate(item.expiry_date ?? undefined));
       } else {
         Alert.alert("Error", "Item not found");
         router.back();
       }
     } catch (error: any) {
       Alert.alert("Error", error.message);
-    } finally {
-      setInitialLoading(false);
     }
   };
 
@@ -333,85 +371,21 @@ export default function AddItemScreen() {
         unit: unit.trim() || undefined,
         location,
         category: category.trim() || undefined,
-        expiry_date: expiryDate?.toISOString().split("T")[0],
+        expiry_date: formatLocalDateToYmd(expiryDate),
         notes: notes.trim() || undefined,
       };
 
       if (isEditing) {
         await foodItemsService.updateItem(params.id!, itemData);
-        // Immediately propagate changes to calendar/state
-        try {
-          invalidateCache();
-          await refresh();
-        } catch {}
-        setShowSuccess(true);
-        successAnim.setValue(0);
-        successPop.setValue(0);
-        Animated.parallel([
-          Animated.timing(successAnim, {
-            toValue: 1,
-            duration: 220,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.spring(successPop, {
-            toValue: 1,
-            speed: 20,
-            bounciness: 10,
-            useNativeDriver: true,
-          }),
-        ]).start();
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 450,
-          useNativeDriver: true,
-        }).start(() => {
-          setTimeout(() => {
-            router.back();
-          }, 600);
-        });
       } else {
         await foodItemsService.addItem(itemData);
-        // Immediately propagate new item to calendar/state
-        try {
-          invalidateCache();
-          await refresh();
-        } catch {}
-        setShowSuccess(true);
-        successAnim.setValue(0);
-        successPop.setValue(0);
-        Animated.parallel([
-          Animated.timing(successAnim, {
-            toValue: 1,
-            duration: 220,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.spring(successPop, {
-            toValue: 1,
-            speed: 20,
-            bounciness: 10,
-            useNativeDriver: true,
-          }),
-        ]).start();
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 450,
-          useNativeDriver: true,
-        }).start(() => {
-          setTimeout(() => {
-            router.back();
-          }, 600);
-        });
-
-        // Reset form only if adding new item
-        setName("");
-        setQuantity("1");
-        setUnit("pcs");
-        setCategory("");
-        setExpiryDate(null);
-        setNotes("");
       }
+      // Refresh calendar/state in background; don't block navigation.
+      try {
+        invalidateCache();
+        void refresh();
+      } catch {}
+      router.back();
     } catch (error: any) {
       Alert.alert("Error", error.message);
     } finally {
@@ -419,20 +393,13 @@ export default function AddItemScreen() {
     }
   };
 
-  if (initialLoading) {
-    return (
-      <ThemedView style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator
-          size="large"
-          color={Colors[colorScheme ?? "light"].tint}
-        />
-      </ThemedView>
-    );
-  }
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#FFF" }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+    <ScreenLayout topInsetColor="#22C55E" backgroundColor="#FFF">
+      <StatusBar
+        barStyle="dark-content"
+        translucent
+        backgroundColor="transparent"
+      />
       {/* Add Item / Edit Item Heading with green background */}
       <View
         style={{
@@ -982,6 +949,7 @@ export default function AddItemScreen() {
                 }}
               >
                 <SimpleCalendar
+                  key={`calendar-${String(params.id ?? "new")}`}
                   selectedDate={expiryDate}
                   onSelect={(date: Date) => setExpiryDate(date)}
                   onWeeksChange={(weeks) => setCalendarWeeks(weeks)}
@@ -1144,7 +1112,7 @@ export default function AddItemScreen() {
           </Animated.View>
         </>
       )}
-    </SafeAreaView>
+    </ScreenLayout>
   );
 }
 

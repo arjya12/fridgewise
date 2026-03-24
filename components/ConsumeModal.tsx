@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
 
 export interface ConsumeModalProps {
   visible: boolean;
@@ -37,8 +38,6 @@ export function ConsumeModal({
       setQuantity(1);
     }
   }, [visible, item]);
-
-  const unit = item?.unit ?? "pcs";
 
   const handleDecrement = () => {
     setQuantity((prev) => Math.max(1, prev - 1));
@@ -80,7 +79,8 @@ export function ConsumeModal({
           >
             <Text style={styles.question}>How much did you use?</Text>
             <Text style={styles.availability}>
-              Available: {maxQty} {unit} in {locationLabel}
+              Available: {formatQuantityWithUnit(maxQty, item.unit, { fallbackUnit: "pcs" })} in{" "}
+              {locationLabel}
             </Text>
 
             <View style={styles.quantitySection}>

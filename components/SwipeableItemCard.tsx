@@ -14,6 +14,7 @@ import {
   PanGestureHandler,
   PanGestureHandlerGestureEvent,
 } from "react-native-gesture-handler";
+import { formatQuantityWithUnit } from "../utils/formatQuantityUnit";
 
 interface SwipeableItemCardProps {
   item: FoodItemWithUrgency;
@@ -235,7 +236,9 @@ export default function SwipeableItemCard({
 
               <View style={styles.detailsRow}>
                 <Text style={[styles.details, { color: textColor }]}>
-                  {item.quantity} {item.unit}
+                  {formatQuantityWithUnit(item.quantity, item.unit, {
+                    fallbackUnit: "pcs",
+                  })}
                 </Text>
                 <View style={styles.locationBadge}>
                   <Ionicons

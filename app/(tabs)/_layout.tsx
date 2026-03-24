@@ -20,6 +20,10 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: true,
+          lazy: true,
+          freezeOnBlur: true,
+          detachInactiveScreens: false,
+          animation: "none",
         }}
         tabBar={(props) => <EnhancedTabBar {...props} />}
       >
@@ -30,6 +34,7 @@ export default function TabLayout() {
           name="index"
           options={{
             title: "Home",
+            lazy: false,
             tabBarIcon: ({ color }) => (
               <Ionicons name="home-outline" color={color} size={24} />
             ),
@@ -42,6 +47,7 @@ export default function TabLayout() {
           name="calendar"
           options={{
             title: "Calendar",
+            lazy: false,
             tabBarIcon: ({ color }) => (
               <Ionicons name="calendar-outline" color={color} size={24} />
             ),
@@ -54,6 +60,7 @@ export default function TabLayout() {
           name="shopping-list"
           options={{
             title: "Groceries",
+            lazy: false,
             tabBarIcon: ({ color }) => (
               <Ionicons name="basket-outline" color={color} size={24} />
             ),
@@ -66,6 +73,7 @@ export default function TabLayout() {
           name="more"
           options={{
             title: "More",
+            lazy: false,
             tabBarIcon: ({ color }) => (
               <Ionicons name="ellipsis-horizontal" color={color} size={24} />
             ),

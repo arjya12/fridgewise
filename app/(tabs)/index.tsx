@@ -5,9 +5,11 @@ import {
   Animated,
   Easing,
   Alert,
+  LayoutAnimation,
   Image,
   Keyboard,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,9 +17,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Archive,
   AppleLogo,
@@ -49,6 +52,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Dimensions } from "react-native";
 
 import { ConsumeModal } from "@/components/ConsumeModal";
+import ScreenLayout from "@/components/ScreenLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   loadPinnedItemIds,
@@ -58,6 +62,7 @@ import {
 import { FoodItem, supabase, UsageLog } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
 import { formatExpiry } from "@/utils/formatExpiry";
+import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
 
 type LocationFilter = "all" | "fridge" | "shelf";
 
@@ -137,6 +142,23 @@ const fridgeIconAsset = require("@/assets/images/icons/fridge_icon.png");
 const shelfIconAsset = require("@/assets/images/icons/shelf_icon.png");
 const PINNED_ACTION_ROW_H = 44;
 const INVENTORY_ACTION_ROW_H = 44;
+
+const runSmoothLayout = () => {
+  LayoutAnimation.configureNext({
+    duration: 220,
+    update: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+    },
+    delete: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+    create: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+  });
+};
 
 function parseExpiryYmd(iso?: string): string | null {
   if (!iso || iso.length < 10) return null;
@@ -298,6 +320,8 @@ export default function HomeScreen() {
   const [items, setItems] = useState<FoodItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+  const lastLoadedAtRef = useRef(0);
 
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("fridge");
   const [inventoryToggleWidth, setInventoryToggleWidth] = useState(0);
@@ -372,8 +396,12 @@ export default function HomeScreen() {
       }
     >
   >([]);
-  const [expiredCount, setExpiredCount] = useState<number>(0);
   const [historyTotals, setHistoryTotals] = useState<{ used: number; wasted: number } | null>(null);
+  const [homeMetaLoading, setHomeMetaLoading] = useState(true);
+  const historyTotalsCacheRef = useRef<{
+    value: { used: number; wasted: number };
+    at: number;
+  } | null>(null);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinSearchQuery, setPinSearchQuery] = useState("");
@@ -391,8 +419,42 @@ export default function HomeScreen() {
   const pinnedStripInnerW = width - 36;
   const pinnedCardHalfW = Math.floor((pinnedStripInnerW - 8) / 2);
 
-  const loadHomeMeta = useCallback(async () => {
+  const loadHistoryTotals = useCallback(async () => {
     try {
+      const now = Date.now();
+      const cache = historyTotalsCacheRef.current;
+      if (cache && now - cache.at < 5 * 60_000) {
+        setHistoryTotals(cache.value);
+        return;
+      }
+
+      const [{ count: usedCount, error: usedErr }, { count: wastedCount, error: wastedErr }] =
+        await Promise.all([
+          supabase
+            .from("usage_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "used"),
+          supabase
+            .from("usage_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "wasted"),
+        ]);
+
+      if (usedErr) throw usedErr;
+      if (wastedErr) throw wastedErr;
+      const next = { used: usedCount ?? 0, wasted: wastedCount ?? 0 };
+      historyTotalsCacheRef.current = { value: next, at: now };
+      setHistoryTotals(next);
+    } catch (e) {
+      console.warn("History totals load failed", e);
+    }
+  }, []);
+
+  const loadHomeMeta = useCallback(async (options?: { showLoading?: boolean; itemsSource?: FoodItem[] }) => {
+    const showLoading = options?.showLoading ?? true;
+    const itemsSource = options?.itemsSource;
+    try {
+      if (showLoading) setHomeMetaLoading(true);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       // "Recent" window: last 7 days up to end of today
@@ -401,17 +463,24 @@ export default function HomeScreen() {
       const recentEnd = new Date(today);
       recentEnd.setHours(23, 59, 59, 999);
 
-      const [expiring, expired] = await Promise.all([
-        foodItemsService.getExpiringItems(7),
-        foodItemsService.getExpiredItems(),
-      ]);
+      if (itemsSource && itemsSource.length > 0) {
+        const localExpiring = itemsSource.filter((it) => {
+          const d = getDaysUntilExpiry(it.expiry_date);
+          return typeof d === "number" && d >= 0 && d <= 7;
+        });
+        const localExpired = itemsSource.filter((it) => isFoodItemExpired(it));
+        setThisWeekExpiring(localExpiring);
+        setThisWeekExpired(localExpired);
+      } else {
+        const [expiring, expired] = await Promise.all([
+          foodItemsService.getExpiringItems(7),
+          foodItemsService.getExpiredItems(),
+        ]);
+        setThisWeekExpiring(expiring as unknown as FoodItem[]);
+        setThisWeekExpired(expired as unknown as FoodItem[]);
+      }
 
-      setThisWeekExpiring(expiring as unknown as FoodItem[]);
-      setThisWeekExpired(expired as unknown as FoodItem[]);
-      setExpiredCount(expired.length);
-
-      // Recent usage logs (last 7 days) + join name
-      const { data: logs, error } = await supabase
+      const logsResult = await supabase
         .from("usage_logs")
         .select(
           `
@@ -428,42 +497,37 @@ export default function HomeScreen() {
         .lte("logged_at", recentEnd.toISOString())
         .order("logged_at", { ascending: false });
 
-      if (error) throw error;
-      setThisWeekLogs((logs as any) ?? []);
+      if (logsResult.error) throw logsResult.error;
+      setThisWeekLogs((logsResult.data as any) ?? []);
 
-      // All-time totals
-      const [{ count: usedCount, error: usedErr }, { count: wastedCount, error: wastedErr }] =
-        await Promise.all([
-          supabase
-            .from("usage_logs")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "used"),
-          supabase
-            .from("usage_logs")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "wasted"),
-        ]);
-
-      if (usedErr) throw usedErr;
-      if (wastedErr) throw wastedErr;
-      setHistoryTotals({ used: usedCount ?? 0, wasted: wastedCount ?? 0 });
+      // Totals are heavier; load them in background so cards appear faster.
+      void loadHistoryTotals();
 
     } catch (e) {
       // keep screen usable even if some meta calls fail
       console.warn("Home meta load failed", e);
+    } finally {
+      if (showLoading) setHomeMetaLoading(false);
     }
-  }, []);
+  }, [loadHistoryTotals]);
 
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (options?: { showLoader?: boolean }) => {
+    const showLoader = options?.showLoader ?? true;
+    let releasedLoader = false;
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       const data = await foodItemsService.getItems();
       setItems(data);
-      await loadHomeMeta();
+      lastLoadedAtRef.current = Date.now();
+      if (showLoader) {
+        setLoading(false);
+        releasedLoader = true;
+      }
+      void loadHomeMeta({ showLoading: showLoader, itemsSource: data as FoodItem[] });
     } catch (error: any) {
       Alert.alert("Error", error?.message ?? "Failed to load items");
     } finally {
-      setLoading(false);
+      if (showLoader && !releasedLoader) setLoading(false);
     }
   }, [loadHomeMeta]);
 
@@ -473,7 +537,13 @@ export default function HomeScreen() {
         router.replace({ pathname: "/(auth)/welcome" });
         return;
       }
-      loadItems();
+      const now = Date.now();
+      const shouldSkipBackgroundReload =
+        hasLoadedOnceRef.current && now - lastLoadedAtRef.current < 30_000;
+      if (!shouldSkipBackgroundReload) {
+        loadItems({ showLoader: !hasLoadedOnceRef.current });
+      }
+      hasLoadedOnceRef.current = true;
       if (!userProfile) getUserProfile();
       loadPinnedItemIds(user.id).then(setPinnedIds);
     }, [user, userProfile, getUserProfile, loadItems])
@@ -752,9 +822,15 @@ export default function HomeScreen() {
     try {
       const item = items.find((i) => i.id === itemId);
       if (!item) return;
+      runSmoothLayout();
+      setItems((prev) => prev.filter((i) => i.id !== itemId));
+      setExpandedInventoryId((prev) => (prev === String(itemId) ? null : prev));
+      setExpandedPinnedId((prev) => (prev === String(itemId) ? null : prev));
       await foodItemsService.logUsage(itemId, "used", item.quantity);
-      await loadItems();
+      await removePinnedItem(itemId);
+      await loadHomeMeta({ showLoading: false });
     } catch (error: any) {
+      await loadItems({ showLoader: false });
       Alert.alert("Error", error?.message ?? "Failed to mark used");
     }
   };
@@ -768,7 +844,18 @@ export default function HomeScreen() {
     setExpandedInventoryId(null);
     router.push({
       pathname: "/(tabs)/add",
-      params: { edit: "true", id: item.id },
+      params: {
+        edit: "true",
+        nonce: `${Date.now()}-${Math.random()}`,
+        id: item.id,
+        name: item.name,
+        quantity: String(item.quantity),
+        unit: item.unit || "pcs",
+        location: item.location as "fridge" | "shelf",
+        category: item.category || "",
+        expiryDate: item.expiry_date || "",
+        notes: item.notes || "",
+      },
     });
   }, []);
 
@@ -784,16 +871,19 @@ export default function HomeScreen() {
     setExpandedPinnedId((prev) => (prev === String(item.id) ? null : prev));
     try {
       const qty = typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
+      runSmoothLayout();
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
       await foodItemsService.logUsage(item.id, "wasted", qty);
       await removePinnedItem(item.id);
-      await loadItems();
+      await loadHomeMeta({ showLoading: false });
     } catch (error: any) {
+      await loadItems({ showLoader: false });
       Alert.alert(
         "Error",
         error?.message ?? "Failed to throw away item. Please try again."
       );
     }
-  }, [removeModalItem, loadItems, removePinnedItem]);
+  }, [removeModalItem, loadHomeMeta, loadItems, removePinnedItem]);
 
   const handleDeleteItem = useCallback(async () => {
     if (!removeModalItem) return;
@@ -802,34 +892,53 @@ export default function HomeScreen() {
     setExpandedInventoryId((prev) => (prev === String(item.id) ? null : prev));
     setExpandedPinnedId((prev) => (prev === String(item.id) ? null : prev));
     try {
+      runSmoothLayout();
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
       await foodItemsService.deleteItem(item.id);
       await removePinnedItem(item.id);
-      await loadItems();
+      await loadHomeMeta({ showLoading: false });
     } catch (error: any) {
+      await loadItems({ showLoader: false });
       Alert.alert(
         "Error",
         error?.message ?? "Failed to delete item. Please try again."
       );
     }
-  }, [removeModalItem, loadItems, removePinnedItem]);
+  }, [removeModalItem, loadHomeMeta, loadItems, removePinnedItem]);
 
   const handleInventoryConsumeConfirm = useCallback(
     async (quantity: number) => {
       if (!consumeModalItem) return;
-      const id = consumeModalItem.id;
+      const currentItem = consumeModalItem;
+      const id = currentItem.id;
       setConsumeModalItem(null);
       setExpandedInventoryId((prev) => (prev === String(id) ? null : prev));
       try {
+        runSmoothLayout();
+        if (quantity >= currentItem.quantity) {
+          setItems((prev) => prev.filter((i) => i.id !== id));
+          setExpandedPinnedId((prev) => (prev === String(id) ? null : prev));
+        } else {
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === id ? { ...i, quantity: Math.max(0, i.quantity - quantity) } : i
+            )
+          );
+        }
         await foodItemsService.markItemUsed(id, quantity);
-        await loadItems();
+        if (quantity >= currentItem.quantity) {
+          await removePinnedItem(id);
+        }
+        await loadHomeMeta({ showLoading: false });
       } catch (error: any) {
+        await loadItems({ showLoader: false });
         Alert.alert(
           "Error",
           error?.message ?? "Failed to log consumption. Please try again."
         );
       }
     },
-    [consumeModalItem, loadItems]
+    [consumeModalItem, loadHomeMeta, loadItems, removePinnedItem]
   );
 
   useEffect(() => {
@@ -872,6 +981,17 @@ export default function HomeScreen() {
       }
     });
   }, [expandedInventoryId, filteredItems]);
+
+  useEffect(() => {
+    const isFabric = Boolean((globalThis as any)?.nativeFabricUIManager);
+    if (
+      Platform.OS === "android" &&
+      !isFabric &&
+      UIManager.setLayoutAnimationEnabledExperimental
+    ) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
 
   const upcomingCards = useMemo<ThisWeekCard[]>(() => {
     return thisWeekExpiring.map((it) => ({
@@ -947,9 +1067,26 @@ export default function HomeScreen() {
       return { ...base, kind: "wasted" as const, statusText: `Thrown ${agoText}` };
     });
   }, [thisWeekLogs, items]);
+  const activeThisWeekCards =
+    thisWeekTab === "upcoming"
+      ? upcomingCards
+      : thisWeekTab === "expired"
+      ? expiredCards
+      : recentCards;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "right", "left"]}>
+    <ScreenLayout
+      topInsetColor="#3CBA8D"
+      topInsetContent={
+        <LinearGradient
+          colors={["#3CBA8D", "#C8FACC"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={{ flex: 1 }}
+        />
+      }
+      backgroundColor="#FFFFFF"
+    >
       <ScrollView
         ref={homeScrollRef}
         contentContainerStyle={[
@@ -1088,13 +1225,12 @@ export default function HomeScreen() {
           contentContainerStyle={styles.twStrip}
           style={styles.twStripOuter}
         >
-            {(
-              thisWeekTab === "upcoming"
-                ? upcomingCards
-                : thisWeekTab === "expired"
-                  ? expiredCards
-                  : recentCards
-            ).length === 0 ? (
+            {homeMetaLoading ? (
+              <View style={[styles.twLoadingCard, { minWidth: width - 32 }]}>
+                <View style={styles.twLoadingLineLg} />
+                <View style={styles.twLoadingLineSm} />
+              </View>
+            ) : activeThisWeekCards.length === 0 ? (
               <View style={[styles.twEmptyCard, { minWidth: width - 32 }]}>
                 <Text style={styles.twEmpty}>
                   {thisWeekTab === "upcoming"
@@ -1105,15 +1241,11 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              (
-                thisWeekTab === "upcoming"
-                  ? upcomingCards
-                  : thisWeekTab === "expired"
-                    ? expiredCards
-                    : recentCards
-              ).map((c) => {
+              activeThisWeekCards.map((c) => {
                 const displayName = (c.title || "").trim() || "Item";
-                const qtyStr = `${c.quantity}${c.unit ? " " + c.unit : " pcs"}`;
+                const qtyStr = formatQuantityWithUnit(c.quantity, c.unit, {
+                  fallbackUnit: "pcs",
+                });
                 const locImg =
                   c.location === "shelf"
                     ? require("@/assets/images/icons/shelf_icon.png")
@@ -1230,11 +1362,13 @@ export default function HomeScreen() {
         >
           <View style={styles.itemHistoryTextCol}>
             <Text style={styles.itemHistoryTitle}>Item History</Text>
-            <Text style={styles.itemHistorySubtitle} numberOfLines={1}>
-              {historyTotals == null
-                ? "Loading…"
-                : `${historyTotals.used} Consumed · ${historyTotals.wasted} Thrown away`}
-            </Text>
+            {historyTotals == null ? (
+              <View style={styles.itemHistorySubtitleSkeleton} />
+            ) : (
+              <Text style={styles.itemHistorySubtitle} numberOfLines={1}>
+                {`${historyTotals.used} Consumed · ${historyTotals.wasted} Thrown away`}
+              </Text>
+            )}
           </View>
           <CaretRight size={18} color="#15803D" weight="bold" />
         </Pressable>
@@ -1264,7 +1398,24 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
-        {pinnedItemsOrdered.length === 0 ? (
+        {loading && items.length === 0 && pinnedIds.length > 0 ? (
+          <View
+            style={[
+              styles.pinnedLoadingWrap,
+              pinnedIds.length >= 2 && styles.pinnedLoadingWrapTwoCol,
+            ]}
+          >
+            <View
+              style={[
+                styles.pinnedLoadingBar,
+                pinnedIds.length >= 2 && styles.pinnedLoadingBarHalf,
+              ]}
+            />
+            {pinnedIds.length >= 2 ? (
+              <View style={[styles.pinnedLoadingBar, styles.pinnedLoadingBarHalf]} />
+            ) : null}
+          </View>
+        ) : pinnedItemsOrdered.length === 0 ? (
           <View style={styles.pinnedEmptyWrap}>
             <Text style={styles.pinnedEmptySubtitle}>
               Pin up to 2 items for quick access.
@@ -1284,9 +1435,9 @@ export default function HomeScreen() {
               const CategoryIcon = getCategoryIcon(it.category, it.name);
               const locImg =
                 it.location === "shelf" ? shelfIconAsset : fridgeIconAsset;
-              const qtyStr = `${it.quantity}${
-                it.unit ? ` ${it.unit}` : " pcs"
-              }`;
+              const qtyStr = formatQuantityWithUnit(it.quantity, it.unit, {
+                fallbackUnit: "pcs",
+              });
               const expLine = formatPinExpiryLine(it);
               const catColor = expLine.expired ? "#DC2626" : "#15803D";
               const rowExpanded =
@@ -1581,7 +1732,7 @@ export default function HomeScreen() {
               Large list loaded. Try a specific keyword (for example, milk, dairy, or february).
             </Text>
           ) : null}
-          {loading ? (
+          {loading && searchText.trim().length > 0 ? (
             <>
               <View style={styles.skeleton} />
               <View style={styles.skeleton} />
@@ -1637,7 +1788,9 @@ export default function HomeScreen() {
               const CategoryIcon = getCategoryIcon(it.category, it.name);
               const iconColor = expired ? "#B91C1C" : "#16A34A";
               const qtyText = it.quantity
-                ? `${it.quantity}${it.unit ? ` ${it.unit}` : ""}`
+                ? formatQuantityWithUnit(it.quantity, it.unit, {
+                    fallbackUnit: "pcs",
+                  })
                 : "";
               const expanded = expandedInventoryId === rowId;
               const animVal =
@@ -1904,9 +2057,9 @@ export default function HomeScreen() {
                     const iconColor = expired ? "#DC2626" : "#15803D";
                     const locImg =
                       it.location === "shelf" ? shelfIconAsset : fridgeIconAsset;
-                    const qtyStr = `${it.quantity}${
-                      it.unit ? ` ${it.unit}` : " pcs"
-                    }`;
+                    const qtyStr = formatQuantityWithUnit(it.quantity, it.unit, {
+                      fallbackUnit: "pcs",
+                    });
                     const expLine = formatPinExpiryLine(it);
                     return (
                       <View
@@ -2030,9 +2183,9 @@ export default function HomeScreen() {
                     const iconColor = expired ? "#DC2626" : "#15803D";
                     const locImg =
                       it.location === "shelf" ? shelfIconAsset : fridgeIconAsset;
-                    const qtyStr = `${it.quantity}${
-                      it.unit ? ` ${it.unit}` : " pcs"
-                    }`;
+                    const qtyStr = formatQuantityWithUnit(it.quantity, it.unit, {
+                      fallbackUnit: "pcs",
+                    });
                     const expLine = formatPinExpiryLine(it);
                     const last = index === pinPickerCandidates.length - 1;
                     const atMaxPins = pinnedIds.length >= MAX_PINNED_ITEMS;
@@ -2095,7 +2248,7 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </ScreenLayout>
   );
 }
 
@@ -2263,6 +2416,25 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingHorizontal: 12,
   },
+  twLoadingCard: {
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 42,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  twLoadingLineLg: {
+    width: 136,
+    height: 11,
+    borderRadius: 999,
+    backgroundColor: "#E5E7EB",
+  },
+  twLoadingLineSm: {
+    width: 92,
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: "#ECEFF3",
+  },
   twIconWrap: {
     marginLeft: 0,
     width: 30,
@@ -2397,6 +2569,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: UI.muted,
   },
+  itemHistorySubtitleSkeleton: {
+    marginTop: 6,
+    width: 190,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
+  },
   pinnedHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2449,6 +2628,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 16,
     maxWidth: 280,
+  },
+  pinnedLoadingWrap: {
+    marginTop: 10,
+    gap: 8,
+  },
+  pinnedLoadingWrapTwoCol: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    width: "100%",
+  },
+  pinnedLoadingBar: {
+    height: 64,
+    borderRadius: 14,
+    backgroundColor: "#E5E7EB",
+    opacity: 0.8,
+  },
+  pinnedLoadingBarHalf: {
+    flex: 1,
   },
   pinnedList: {
     marginTop: 10,

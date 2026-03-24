@@ -3,7 +3,8 @@
  * Sleek, minimal, product-ready UI aligned with FridgeWise.
  */
 
-import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import ScreenLayout from "@/components/ScreenLayout";
+import SkeletonBlock from "@/components/SkeletonBlock";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +47,7 @@ import { Swipeable } from "react-native-gesture-handler";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
 
 // =============================================================================
 // INTERFACES
@@ -117,6 +119,7 @@ export default function ShoppingListScreen() {
   const STORAGE_KEY = "fridgewise_shopping_list_v1";
   const insets = useSafeAreaInsets();
   const [shoppingList, setShoppingList] = useState<GroceryItem[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const swipeRefs = useRef<Record<string, Swipeable | null>>({});
   const [addOpen, setAddOpen] = useState(false);
@@ -168,6 +171,8 @@ export default function ShoppingListScreen() {
         setShoppingList(restored);
       } catch (e) {
         console.warn("Failed to load shopping list", e);
+      } finally {
+        setInitialLoading(false);
       }
     })();
   }, []);
@@ -348,9 +353,11 @@ export default function ShoppingListScreen() {
           {!collapsed && (
             <View style={styles.categoryGroupBody}>
               {section.data.map((sectionItem: GroceryItem, index: number) => {
-                const meta = sectionItem.unit
-                  ? `${sectionItem.quantity} ${sectionItem.unit}`
-                  : String(sectionItem.quantity);
+                const meta = formatQuantityWithUnit(
+                  sectionItem.quantity,
+                  sectionItem.unit,
+                  { fallbackUnit: "pcs" }
+                );
                 const muted = sectionItem.completed;
                 const isLast = index === section.data.length - 1;
                 return (
@@ -486,7 +493,9 @@ export default function ShoppingListScreen() {
     }
 
     // Fallback (shouldn't be hit often) – single item card
-    const meta = item.unit ? `${item.quantity} ${item.unit}` : String(item.quantity);
+    const meta = formatQuantityWithUnit(item.quantity, item.unit, {
+      fallbackUnit: "pcs",
+    });
     const muted = item.status !== "list";
 
     return (
@@ -602,7 +611,7 @@ export default function ShoppingListScreen() {
   const subtitle = `${activeCount} ${activeCount === 1 ? "item" : "items"} left`;
 
   return (
-    <SafeAreaWrapper usePadding edges={["top"]}>
+    <ScreenLayout topInsetColor="#22C55E" backgroundColor="#FFFFFF">
       <ThemedView style={[styles.container, { backgroundColor }]}>
         {/* Full-width green banner header (like Add Item) */}
         <View
@@ -645,18 +654,35 @@ export default function ShoppingListScreen() {
           }
           renderSectionHeader={() => null}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyBox}>
-                <Text style={[styles.emptyText, { color: textColor }]}>
-                  Your list is empty
-                </Text>
-                <Text style={styles.emptySubtext}>
-                  Tap “Add item” to start. Use the left circle for purchased,
-                  and the fridge icon to move items into your fridge with an
-                  expiry date.
-                </Text>
+            initialLoading ? (
+              <View style={styles.loadingSkeletonWrap}>
+                <View style={styles.loadingSkeletonCard}>
+                  <SkeletonBlock width="40%" height={16} />
+                  <SkeletonBlock width="70%" height={12} style={{ marginTop: 10 }} />
+                </View>
+                <View style={styles.loadingSkeletonCard}>
+                  <SkeletonBlock width="46%" height={16} />
+                  <SkeletonBlock width="62%" height={12} style={{ marginTop: 10 }} />
+                </View>
+                <View style={styles.loadingSkeletonCard}>
+                  <SkeletonBlock width="36%" height={16} />
+                  <SkeletonBlock width="58%" height={12} style={{ marginTop: 10 }} />
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyBox}>
+                  <Text style={[styles.emptyText, { color: textColor }]}>
+                    Your list is empty
+                  </Text>
+                  <Text style={styles.emptySubtext}>
+                    Tap “Add item” to start. Use the left circle for purchased,
+                    and the fridge icon to move items into your fridge with an
+                    expiry date.
+                  </Text>
+                </View>
+              </View>
+            )
           }
           ListFooterComponent={<View style={{ height: 24 }} />}
         />
@@ -889,7 +915,7 @@ export default function ShoppingListScreen() {
           </View>
         </Modal>
       </ThemedView>
-    </SafeAreaWrapper>
+    </ScreenLayout>
   );
 }
 
@@ -951,6 +977,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
     color: "#6B7280",
+  },
+  loadingSkeletonWrap: {
+    gap: 10,
+    paddingHorizontal: 2,
+    paddingTop: 2,
+  },
+  loadingSkeletonCard: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
   },
   countPill: {
     minWidth: 32,

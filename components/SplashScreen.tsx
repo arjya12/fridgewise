@@ -1,12 +1,12 @@
 import { setPendingResetPasswordUrl } from '@/lib/pendingResetUrl';
+import { StatusBar } from "expo-status-bar";
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import React, { useEffect } from 'react';
 import { Dimensions, Image, StyleSheet, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
-
-const BACKGROUND_COLOR = 'rgb(204, 245, 201)'; // Updated light green
+const BACKGROUND_COLOR = 'rgb(204, 245, 201)';
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -37,6 +37,7 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="dark" backgroundColor={BACKGROUND_COLOR} translucent={false} />
       <Image
         source={require('../assets/images/launchpng.png')}
         style={styles.logo}

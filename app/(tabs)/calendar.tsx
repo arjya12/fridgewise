@@ -1,15 +1,18 @@
 import { ConsumeModal } from "@/components/ConsumeModal";
 import { EnhancedCalendarScreen } from "@/components/EnhancedCalendarScreen";
+import ScreenLayout from "@/components/ScreenLayout";
+import SkeletonBlock from "@/components/SkeletonBlock";
 import { useCalendar } from "@/contexts/CalendarContext";
 import { FoodItem } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
 import { router, useFocusEffect, useGlobalSearchParams } from "expo-router";
-import React, { useCallback, useState } from "react";
-import { Alert, StyleSheet } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useCallback, useRef, useState } from "react";
+import { Alert, StyleSheet, View } from "react-native";
 
 export default function CalendarScreen() {
-  const { refresh, markItemUsed } = useCalendar();
+  const { refresh, markItemUsed, state } = useCalendar();
+  const hasRefreshedOnceRef = useRef(false);
+  const lastRefreshAtRef = useRef(0);
   const [consumeItem, setConsumeItem] = useState<FoodItem | null>(null);
   const params = useGlobalSearchParams<{
     view?: string;
@@ -41,8 +44,14 @@ export default function CalendarScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refresh();
-    }, [refresh])
+      const now = Date.now();
+      const hasFreshData = state.items.length > 0 && now - lastRefreshAtRef.current < 30_000;
+      if (hasRefreshedOnceRef.current && hasFreshData) return;
+      hasRefreshedOnceRef.current = true;
+      refresh().finally(() => {
+        lastRefreshAtRef.current = Date.now();
+      });
+    }, [refresh, state.items.length])
   );
 
   const handleItemPress = useCallback((item: any) => {
@@ -55,7 +64,18 @@ export default function CalendarScreen() {
   const handleItemEdit = useCallback((item: any) => {
     router.push({
       pathname: "/(tabs)/add",
-      params: { edit: "true", id: item.id },
+      params: {
+        edit: "true",
+        nonce: `${Date.now()}-${Math.random()}`,
+        id: item.id,
+        name: item.name,
+        quantity: String(item.quantity),
+        unit: item.unit || "pcs",
+        location: item.location,
+        category: item.category || "",
+        expiryDate: item.expiry_date || "",
+        notes: item.notes || "",
+      },
     });
   }, []);
 
@@ -118,32 +138,46 @@ export default function CalendarScreen() {
       flex: 1,
       backgroundColor,
     },
+    initialSkeletonWrap: {
+      flex: 1,
+      alignItems: "center",
+      paddingTop: 16,
+      paddingHorizontal: 12,
+    },
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <EnhancedCalendarScreen
-        foodItemsService={foodItemsService}
-        onItemPress={handleItemPress}
-        onItemEdit={handleItemEdit}
-        onItemDelete={(item) => handleDeleteItem(item.id)}
-        onItemThrowAway={handleThrowAwayItem}
-        onConsume={handleConsumeClick}
-        onAddItem={() => router.push("/(tabs)/add")}
-        initialViewMode={openIntent.view}
-        initialDate={openIntent.date}
-        initialDateToken={openIntent.nonce}
-        initialFocusItemId={openIntent.itemId}
-        initialFocusToken={openIntent.nonce}
-        initialOpenExpired={!!openIntent.openExpired}
-        enablePerformanceMonitoring={true}
-      />
+    <ScreenLayout topInsetColor="#22C55E" backgroundColor="#FFFFFF">
+      {state.loading && state.items.length === 0 ? (
+        <View style={styles.initialSkeletonWrap}>
+          <SkeletonBlock width="90%" height={44} borderRadius={20} />
+          <SkeletonBlock width="70%" height={28} borderRadius={14} style={{ marginTop: 14 }} />
+          <SkeletonBlock width="94%" height={320} borderRadius={16} style={{ marginTop: 14 }} />
+        </View>
+      ) : (
+        <EnhancedCalendarScreen
+          foodItemsService={foodItemsService}
+          onItemPress={handleItemPress}
+          onItemEdit={handleItemEdit}
+          onItemDelete={(item) => handleDeleteItem(item.id)}
+          onItemThrowAway={handleThrowAwayItem}
+          onConsume={handleConsumeClick}
+          onAddItem={() => router.push("/(tabs)/add")}
+          initialViewMode={openIntent.view}
+          initialDate={openIntent.date}
+          initialDateToken={openIntent.nonce}
+          initialFocusItemId={openIntent.itemId}
+          initialFocusToken={openIntent.nonce}
+          initialOpenExpired={!!openIntent.openExpired}
+          enablePerformanceMonitoring={true}
+        />
+      )}
       <ConsumeModal
         visible={consumeItem != null}
         item={consumeItem}
         onConfirm={handleConsumeConfirm}
         onCancel={handleConsumeCancel}
       />
-    </SafeAreaView>
+    </ScreenLayout>
   );
 }

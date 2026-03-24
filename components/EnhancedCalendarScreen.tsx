@@ -3,7 +3,7 @@
  * All logic/hooks unchanged. Full visual overhaul.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -51,6 +51,7 @@ import {
 } from "../hooks/useEnhancedCalendar";
 import { useThemeColor } from "../hooks/useThemeColor";
 import { FoodItem } from "../lib/supabase";
+import { formatQuantityWithUnit } from "../utils/formatQuantityUnit";
 
 // ─── Asset & icon helpers ────────────────────────────────────────────────────
 
@@ -425,17 +426,40 @@ function EnhancedCalendarScreenCore({
   }, [itemsForSelectedDate, todayStr]);
 
   React.useEffect(() => {
+    // Single source of truth for which day item is expanded.
+    // If navigation asks us to focus an item on this date, prefer that item.
+    if (initialViewMode === "calendar" && initialFocusItemId) {
+      const targetId = String(initialFocusItemId);
+      const existsOnSelectedDate = sortedDayItems.some(
+        (it) => String(it.id) === targetId
+      );
+      if (existsOnSelectedDate) {
+        setExpandedItemIds(new Set([targetId]));
+        sortedDayItems.forEach((it) => {
+          const id = String(it.id);
+          const toValue = id === targetId ? 1 : 0;
+          const anim = dayItemAnimRef.current[id];
+          if (anim) anim.setValue(toValue);
+        });
+        return;
+      }
+    }
+
     const firstId = sortedDayItems[0]?.id;
     setExpandedItemIds(firstId == null ? new Set() : new Set([firstId]));
-  }, [selectedDate]);
+  }, [
+    selectedDate,
+    sortedDayItems,
+    initialViewMode,
+    initialFocusItemId,
+    initialFocusToken,
+  ]);
 
-  React.useEffect(() => {
+  useLayoutEffect(() => {
     if (initialViewMode !== "calendar" || !initialFocusItemId) return;
     const targetId = String(initialFocusItemId);
     const existsOnSelectedDate = sortedDayItems.some((it) => String(it.id) === targetId);
     if (!existsOnSelectedDate) return;
-
-    setExpandedItemIds(new Set([targetId]));
 
     let task: { cancel?: () => void } | null = null;
     const t = setTimeout(() => {
@@ -845,7 +869,9 @@ function EnhancedCalendarScreenCore({
     ) => {
       const isShelf = (item.location || "fridge") === "shelf";
       const qtyText = item.quantity
-        ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}`
+        ? formatQuantityWithUnit(item.quantity, item.unit, {
+            fallbackUnit: "pcs",
+          })
         : "";
       const CategoryIcon = getCategoryIconComponent(item.category);
       const diff = diffDaysFromToday(item.expiry_date as any, todayStr);
@@ -1261,9 +1287,9 @@ function EnhancedCalendarScreenCore({
                           const isShelf =
                             (item.location || "fridge") === "shelf";
                           const qtyText = item.quantity
-                            ? `${item.quantity}${
-                                item.unit ? ` ${item.unit}` : ""
-                              }`
+                            ? formatQuantityWithUnit(item.quantity, item.unit, {
+                                fallbackUnit: "pcs",
+                              })
                             : "";
 
                           const CategoryIcon =

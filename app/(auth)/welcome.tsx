@@ -1,4 +1,4 @@
-import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import ScreenLayout from "@/components/ScreenLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
@@ -420,7 +420,18 @@ export default function WelcomeScreen() {
     (!password || password.trim().length === 0);
 
   return (
-    <SafeAreaWrapper usePadding edges={["top"]}>
+    <ScreenLayout
+      topInsetColor="#C8FACC"
+      topInsetContent={
+        <LinearGradient
+          colors={["#C8FACC", "#3CBA8D"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={{ flex: 1 }}
+        />
+      }
+      backgroundColor="#FFFFFF"
+    >
       <View style={styles.container}>
         {/* Preload icons so they don't pop in on first login open */}
         <View style={{ height: 0, width: 0, overflow: "hidden" }}>
@@ -435,7 +446,7 @@ export default function WelcomeScreen() {
           <LinearGradient
             colors={["#C8FACC", "#3CBA8D"]}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            end={{ x: 1, y: 0 }}
             style={styles.gradient}
           >
             <Animated.Image
@@ -481,7 +492,9 @@ export default function WelcomeScreen() {
               {/* Divider */}
               <View style={styles.dividerContainer}>
                 <View style={styles.divider} />
-                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerTextWrap}>
+                  <Text style={styles.dividerText}>or</Text>
+                </View>
                 <View style={styles.divider} />
               </View>
               {!showLogin && (
@@ -756,7 +769,7 @@ export default function WelcomeScreen() {
           </Animated.View>
         )}
       </View>
-    </SafeAreaWrapper>
+    </ScreenLayout>
   );
 }
 
@@ -809,7 +822,7 @@ const styles = StyleSheet.create({
   createButton: {
     width: "80%",
     borderRadius: 32,
-    marginBottom: 18,
+    marginBottom: 10,
     shadowColor: "#197C47",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.18,
@@ -829,8 +842,17 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     width: "80%",
-    marginVertical: 8,
+    minHeight: 26,
+    marginTop: 0,
+    marginBottom: 10,
+  },
+  dividerTextWrap: {
+    height: 26,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 12,
   },
   divider: {
     flex: 1,
@@ -839,10 +861,13 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   dividerText: {
-    marginHorizontal: 12,
     color: "#197C47",
     fontSize: 15,
+    lineHeight: 16,
     fontWeight: "600",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+    transform: [{ translateY: -1 }],
   },
   loginButton: {
     width: "80%",

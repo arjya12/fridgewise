@@ -39,7 +39,9 @@ import {
 } from "phosphor-react-native";
 
 import { useAuth } from "@/contexts/AuthContext";
+import SkeletonBlock from "@/components/SkeletonBlock";
 import { supabase, UsageLog } from "@/lib/supabase";
+import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
 
 const fridgeIconAsset = require("@/assets/images/icons/fridge_icon.png");
 const shelfIconAsset = require("@/assets/images/icons/shelf_icon.png");
@@ -69,6 +71,7 @@ type Row = {
   unit?: string;
   category?: string;
   location: "fridge" | "shelf";
+  wasExpiredAtLogTime: boolean;
 };
 
 function matchesHistorySearch(r: Row, rawQuery: string): boolean {
@@ -98,6 +101,7 @@ type LogWithItem = UsageLog & {
     category?: string;
     location?: string;
     unit?: string;
+    expiry_date?: string;
   } | null;
 };
 
@@ -113,6 +117,16 @@ function toIsoYmd(d: Date): string {
   const day = d.getDate();
   const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
   return `${y}-${pad(m)}-${pad(day)}`;
+}
+
+function wasExpiredOnOrBefore(expiryDate?: string, at?: Date): boolean {
+  if (!expiryDate || !at) return false;
+  const expiry = new Date(expiryDate);
+  if (Number.isNaN(expiry.getTime())) return false;
+  const compare = new Date(at);
+  expiry.setHours(0, 0, 0, 0);
+  compare.setHours(0, 0, 0, 0);
+  return expiry.getTime() < compare.getTime();
 }
 
 function getCategoryIcon(category?: string, name?: string) {
@@ -151,8 +165,11 @@ function getCategoryIcon(category?: string, name?: string) {
 
 export default function HistoryScreen() {
   const { user } = useAuth();
+  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [logs, setLogs] = useState<LogWithItem[]>([]);
+  const hasLoadedOnceRef = useRef(false);
+  const lastLoadedAtRef = useRef<number>(0);
   const params = useLocalSearchParams<{ filter?: string }>();
   const [historyTab, setHistoryTab] = useState<"used" | "wasted">("used");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -167,24 +184,30 @@ export default function HistoryScreen() {
   }, [params.filter]);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("usage_logs")
-      .select(
+    try {
+      const { data, error } = await supabase
+        .from("usage_logs")
+        .select(
+          `
+          *,
+          food_items!usage_logs_item_id_fkey (
+            name,
+            category,
+            location,
+            unit,
+            expiry_date
+          )
         `
-        *,
-        food_items!usage_logs_item_id_fkey (
-          name,
-          category,
-          location,
-          unit
         )
-      `
-      )
-      .in("status", ["used", "wasted"])
-      .order("logged_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
-    setLogs((data as any) ?? []);
+        .in("status", ["used", "wasted"])
+        .order("logged_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      setLogs((data as any) ?? []);
+      lastLoadedAtRef.current = Date.now();
+    } finally {
+      setInitialLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -193,6 +216,14 @@ export default function HistoryScreen() {
         router.replace({ pathname: "/(auth)/welcome" });
         return;
       }
+      const now = Date.now();
+      if (
+        hasLoadedOnceRef.current &&
+        now - lastLoadedAtRef.current < 30_000
+      ) {
+        return;
+      }
+      hasLoadedOnceRef.current = true;
       load();
     }, [user, load])
   );
@@ -226,6 +257,7 @@ export default function HistoryScreen() {
         unit: l.food_items?.unit,
         category: l.food_items?.category,
         location,
+        wasExpiredAtLogTime: wasExpiredOnOrBefore(l.food_items?.expiry_date, dt),
       };
     });
   }, [logs]);
@@ -313,16 +345,14 @@ export default function HistoryScreen() {
   };
 
   const qtyLabel = (r: Row) => {
-    const u = r.unit?.trim();
-    if (u) return `${r.qty} ${u}`;
-    return `${r.qty} pcs`;
+    return formatQuantityWithUnit(r.qty, r.unit, { fallbackUnit: "pcs" });
   };
 
   const renderHistoryRow = useCallback(
     (r: Row) => {
       const CategoryIcon = getCategoryIcon(r.category, r.name);
       const iconColor =
-        r.status === "wasted" ? "#B91C1C" : "#16A34A";
+        r.status === "wasted" || r.wasExpiredAtLogTime ? "#B91C1C" : "#16A34A";
       const isShelf = r.location === "shelf";
       return (
         <View key={r.id} style={styles.row}>
@@ -489,7 +519,34 @@ export default function HistoryScreen() {
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.list}>
-                {filteredUsed.length === 0 ? (
+                {initialLoading ? (
+                  <>
+                    <View style={styles.skeletonRow}>
+                      <SkeletonBlock width={36} height={36} borderRadius={10} />
+                      <View style={{ flex: 1 }}>
+                        <SkeletonBlock width="55%" height={14} />
+                        <SkeletonBlock
+                          width="70%"
+                          height={11}
+                          style={styles.skeletonGap}
+                        />
+                        <SkeletonBlock width="45%" height={10} style={styles.skeletonGap} />
+                      </View>
+                    </View>
+                    <View style={styles.skeletonRow}>
+                      <SkeletonBlock width={36} height={36} borderRadius={10} />
+                      <View style={{ flex: 1 }}>
+                        <SkeletonBlock width="48%" height={14} />
+                        <SkeletonBlock
+                          width="64%"
+                          height={11}
+                          style={styles.skeletonGap}
+                        />
+                        <SkeletonBlock width="40%" height={10} style={styles.skeletonGap} />
+                      </View>
+                    </View>
+                  </>
+                ) : filteredUsed.length === 0 ? (
                   !anyUsed ? (
                     <View style={styles.emptyMinimal}>
                       <Text style={styles.emptyOnboardingTitle}>
@@ -529,7 +586,34 @@ export default function HistoryScreen() {
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.list}>
-                {filteredWasted.length === 0 ? (
+                {initialLoading ? (
+                  <>
+                    <View style={styles.skeletonRow}>
+                      <SkeletonBlock width={36} height={36} borderRadius={10} />
+                      <View style={{ flex: 1 }}>
+                        <SkeletonBlock width="55%" height={14} />
+                        <SkeletonBlock
+                          width="70%"
+                          height={11}
+                          style={styles.skeletonGap}
+                        />
+                        <SkeletonBlock width="45%" height={10} style={styles.skeletonGap} />
+                      </View>
+                    </View>
+                    <View style={styles.skeletonRow}>
+                      <SkeletonBlock width={36} height={36} borderRadius={10} />
+                      <View style={{ flex: 1 }}>
+                        <SkeletonBlock width="48%" height={14} />
+                        <SkeletonBlock
+                          width="64%"
+                          height={11}
+                          style={styles.skeletonGap}
+                        />
+                        <SkeletonBlock width="40%" height={10} style={styles.skeletonGap} />
+                      </View>
+                    </View>
+                  </>
+                ) : filteredWasted.length === 0 ? (
                   !anyWasted ? (
                     <View style={styles.emptyMinimal}>
                       <Text style={styles.emptyOnboardingTitle}>
@@ -710,6 +794,20 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 10,
+  },
+  skeletonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: UI.card,
+    borderWidth: 1,
+    borderColor: UI.border,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  skeletonGap: {
+    marginTop: 6,
   },
   row: {
     flexDirection: "row",
