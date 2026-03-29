@@ -1,51 +1,63 @@
 /**
  * Single source of truth for food category labels, picker options, icons, and display names.
  */
-import type { Icon } from "phosphor-react-native";
+import type { Icon as PhosphorIcon } from "phosphor-react-native";
 import {
-  AppleLogoIcon,
-  BeerBottleIcon,
-  BoneIcon,
-  BreadIcon,
   CarrotIcon,
   CoffeeIcon,
   CookieIcon,
   CookingPotIcon,
   CylinderIcon,
-  DropIcon,
   EggIcon,
   FishIcon,
-  ForkKnifeIcon,
-  GrainsIcon,
   HandbagIcon,
   JarIcon,
   PackageIcon,
-  PepperIcon,
   SnowflakeIcon,
 } from "phosphor-react-native";
+import { BakeryBaguetteIcon } from "@/lib/icons/BakeryBaguetteIcon";
+import { SoySauceIcon } from "@/lib/icons/SoySauceIcon";
+import { DairyLucideMilkIcon } from "@/lib/icons/DairyLucideMilkIcon";
+import { DeliLucideSandwichIcon } from "@/lib/icons/DeliLucideSandwichIcon";
+import { FruitsLucideGrapeIcon } from "@/lib/icons/FruitsLucideGrapeIcon";
+import { GiSaltShakerIcon } from "@/lib/icons/GiSaltShakerIcon";
+import { GrainsLucideWheatIcon } from "@/lib/icons/GrainsLucideWheatIcon";
+import { MeatLucideBeefIcon } from "@/lib/icons/MeatLucideBeefIcon";
+
+/** Phosphor icons + Lucide / custom SVG wrappers (Bakery bread, Dairy, condiment bottle, …). */
+export type CategoryIconComponent =
+  | PhosphorIcon
+  | typeof BakeryBaguetteIcon
+  | typeof DairyLucideMilkIcon
+  | typeof SoySauceIcon
+  | typeof DeliLucideSandwichIcon
+  | typeof FruitsLucideGrapeIcon
+  | typeof GiSaltShakerIcon
+  | typeof GrainsLucideWheatIcon
+  | typeof MeatLucideBeefIcon;
 
 export type FoodCategoryOption = {
   label: string;
-  Icon: Icon;
+  Icon: CategoryIconComponent;
 };
 
 /** Inventory / add-item order (matches previous AddItemScreen). */
 export const FOOD_CATEGORY_OPTIONS: FoodCategoryOption[] = [
-  { label: "Dairy", Icon: DropIcon },
-  { label: "Meat", Icon: BoneIcon },
+  { label: "Dairy", Icon: DairyLucideMilkIcon },
+  { label: "Meat", Icon: MeatLucideBeefIcon },
   { label: "Seafood", Icon: FishIcon },
-  { label: "Deli", Icon: ForkKnifeIcon },
+  { label: "Deli", Icon: DeliLucideSandwichIcon },
   { label: "Vegetables", Icon: CarrotIcon },
-  { label: "Fruits", Icon: AppleLogoIcon },
-  { label: "Bakery", Icon: BreadIcon },
+  { label: "Fruits", Icon: FruitsLucideGrapeIcon },
+  { label: "Bakery", Icon: BakeryBaguetteIcon },
   { label: "Eggs", Icon: EggIcon },
-  { label: "Grains", Icon: GrainsIcon },
+  { label: "Grains", Icon: GrainsLucideWheatIcon },
   { label: "Canned", Icon: CylinderIcon },
   { label: "Snacks", Icon: CookieIcon },
   { label: "Beverages", Icon: CoffeeIcon },
-  { label: "Condiments", Icon: BeerBottleIcon },
+  { label: "Condiments", Icon: SoySauceIcon },
   { label: "Sauces", Icon: JarIcon },
-  { label: "Spices", Icon: PepperIcon },
+  { label: "Spices", Icon: GiSaltShakerIcon },
   { label: "Ready-to-eat", Icon: CookingPotIcon },
   { label: "Frozen", Icon: SnowflakeIcon },
   { label: "Other", Icon: PackageIcon },
@@ -183,25 +195,25 @@ const DEFAULT_ICON = PackageIcon;
 export function getFoodCategoryIcon(
   category?: string | null,
   name?: string | null
-): Icon {
+): CategoryIconComponent {
   const label = (category || "").toLowerCase().trim();
   const n = (name || "").toLowerCase().trim();
 
-  if (label === "dairy" || label.includes("milk")) return DropIcon;
-  if (label === "meat" || label === "protein") return BoneIcon;
+  if (label === "dairy" || label.includes("milk")) return DairyLucideMilkIcon;
+  if (label === "meat" || label === "protein") return MeatLucideBeefIcon;
   if (label === "seafood" || label === "fish") return FishIcon;
-  if (label === "deli") return ForkKnifeIcon;
+  if (label === "deli") return DeliLucideSandwichIcon;
   if (label === "vegetable" || label === "vegetables" || label === "veg") return CarrotIcon;
-  if (label === "fruit" || label === "fruits") return AppleLogoIcon;
-  if (label === "bakery" || label === "bread") return BreadIcon;
+  if (label === "fruit" || label === "fruits") return FruitsLucideGrapeIcon;
+  if (label === "bakery" || label === "bread") return BakeryBaguetteIcon;
   if (label === "egg" || label === "eggs") return EggIcon;
-  if (label === "grains" || label === "grain") return GrainsIcon;
+  if (label === "grains" || label === "grain") return GrainsLucideWheatIcon;
   if (label === "canned") return CylinderIcon;
   if (label === "snacks") return CookieIcon;
   if (label === "beverages") return CoffeeIcon;
-  if (label === "condiments") return BeerBottleIcon;
+  if (label === "condiments") return SoySauceIcon;
   if (label === "sauces" || label === "sauce") return JarIcon;
-  if (label === "spices" || label === "spice") return PepperIcon;
+  if (label === "spices" || label === "spice") return GiSaltShakerIcon;
   if (
     label === "ready-to-eat" ||
     label === "ready to eat" ||
@@ -213,26 +225,30 @@ export function getFoodCategoryIcon(
   if (label === "household") return PackageIcon;
   if (label === "other") return PackageIcon;
 
-  if (n.includes("milk") || n.includes("yogurt") || n.includes("cheese")) return DropIcon;
+  if (n.includes("milk") || n.includes("yogurt") || n.includes("cheese"))
+    return DairyLucideMilkIcon;
   if (n.includes("chicken") || n.includes("beef") || n.includes("pork") || n.includes("meat"))
-    return BoneIcon;
+    return MeatLucideBeefIcon;
   if (n.includes("salmon") || n.includes("tuna") || n.includes("fish") || n.includes("shrimp"))
     return FishIcon;
-  if (n.includes("deli") || n.includes("salami") || n.includes("prosciutto")) return ForkKnifeIcon;
+  if (n.includes("deli") || n.includes("salami") || n.includes("prosciutto"))
+    return DeliLucideSandwichIcon;
   if (n.includes("carrot") || n.includes("broccoli") || n.includes("lettuce") || n.includes("spinach"))
     return CarrotIcon;
   if (n.includes("apple") || n.includes("banana") || n.includes("orange") || n.includes("grape"))
-    return AppleLogoIcon;
+    return FruitsLucideGrapeIcon;
   if (n.includes("bread") || n.includes("toast") || n.includes("bun") || n.includes("bagel"))
-    return BreadIcon;
+    return BakeryBaguetteIcon;
   if (n.includes("egg")) return EggIcon;
   if (n.includes("rice") || n.includes("pasta") || n.includes("oat") || n.includes("grain"))
-    return GrainsIcon;
-  if (n.includes(" canned") || n.startsWith("can ") || n.includes(" tin ")) return CylinderIcon;
+    return GrainsLucideWheatIcon;
+  if (n.includes(" canned") || n.startsWith("can ") || n.includes(" tin "))
+    return CylinderIcon;
   if (n.includes("cookie") || n.includes("chips") || n.includes("snack")) return CookieIcon;
   if (n.includes("coffee") || n.includes("tea") || n.includes("juice") || n.includes("soda"))
     return CoffeeIcon;
-  if (n.includes("ketchup") || n.includes("mayo") || n.includes("mustard")) return BeerBottleIcon;
+  if (n.includes("ketchup") || n.includes("mayo") || n.includes("mustard"))
+    return SoySauceIcon;
   if (
     n.includes("cinnamon") ||
     n.includes("paprika") ||
@@ -241,7 +257,7 @@ export function getFoodCategoryIcon(
     n.includes("nutmeg") ||
     n.includes("cardamom")
   )
-    return PepperIcon;
+    return GiSaltShakerIcon;
   if (n.includes("sauce") || n.includes("dressing") || n.includes("marinade")) return JarIcon;
   if (n.includes("frozen") || n.includes("ice")) return SnowflakeIcon;
   return DEFAULT_ICON;

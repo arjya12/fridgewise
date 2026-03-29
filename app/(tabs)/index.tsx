@@ -1890,7 +1890,7 @@ export default function HomeScreen() {
                       expanded ? "Expanded" : "Tap for Edit, Consume, or Delete"
                     }`}
                     accessibilityState={{ expanded }}
-                  >
+                  >      
                     <View style={styles.inventoryCalIconTile}>
                       <CategoryIcon
                         size={22}

@@ -1,10 +1,12 @@
 /**
  * Reports use the same category → icon rules as the rest of the app.
  */
-import type { Icon } from "phosphor-react-native";
-import { getFoodCategoryIcon } from "@/lib/foodCategories";
+import {
+  getFoodCategoryIcon,
+  type CategoryIconComponent,
+} from "@/lib/foodCategories";
 
-export type CategoryIconComponent = Icon;
+export type { CategoryIconComponent };
 
 export function getReportCategoryIcon(
   category?: string | null,
