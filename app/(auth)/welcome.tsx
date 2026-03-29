@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -45,6 +46,7 @@ export default function WelcomeScreen() {
   const loginErrorAnim = useRef(new Animated.Value(0)).current;
   const [isResetMode, setIsResetMode] = useState(false);
   const [resetCooldownSeconds, setResetCooldownSeconds] = useState(0);
+  const [rememberMe, setRememberMe] = useState(true);
 
   // 60-second cooldown timer after requesting password reset
   useEffect(() => {
@@ -145,6 +147,11 @@ export default function WelcomeScreen() {
       ]).start();
     });
     setLoginError(null);
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+    setEmailFocused(false);
+    setPasswordFocused(false);
     setIsResetMode(false);
     setResetCooldownSeconds(0);
   }
@@ -180,7 +187,7 @@ export default function WelcomeScreen() {
     }
     setLoading(true);
     try {
-      await signIn(email, password);
+      await signIn(email, password, { rememberMe });
       router.replace("/(tabs)");
     } catch (error) {
       setLoginError({
@@ -202,8 +209,9 @@ export default function WelcomeScreen() {
       return;
     }
     try {
+      const resetRedirectUrl = Linking.createURL("reset-password");
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: "fridgewise://reset-password",
+        redirectTo: resetRedirectUrl,
       });
       if (error) throw error;
       setLoginError({
@@ -235,7 +243,7 @@ export default function WelcomeScreen() {
 
   // Slide the modal down from the login button (approx 350px from top)
   const { width: screenWidth } = Dimensions.get("window");
-  const modalWidth = 340;
+  const modalWidth = 300;
   const slideDown: any = {
     top: screenHeight * 0.5 - 20,
     left: screenWidth * 0.5,
@@ -245,7 +253,7 @@ export default function WelcomeScreen() {
       {
         translateY: slideAnim.interpolate({
           inputRange: [0, 1, 2],
-          outputRange: [350, -180, 350],
+          outputRange: [350, -165, 350],
         }),
       },
     ],
@@ -542,7 +550,7 @@ export default function WelcomeScreen() {
                 onPress={handleCloseLogin}
                 accessibilityLabel="Close login"
               >
-                <Ionicons name="close" size={22} color="#197C47" />
+                <Ionicons name="close" size={20} color="#197C47" />
               </TouchableOpacity>
               <Text style={styles.loginHeading}>
                 {isResetMode ? "Reset Password" : "Sign in to FridgeWise"}
@@ -611,7 +619,7 @@ export default function WelcomeScreen() {
                 >
                   <Ionicons
                     name="mail-outline"
-                    size={20}
+                    size={18}
                     color="#9CA3AF"
                     style={styles.inputIcon}
                   />
@@ -646,7 +654,7 @@ export default function WelcomeScreen() {
                   >
                     <Ionicons
                       name="lock-closed-outline"
-                      size={20}
+                      size={18}
                       color="#9CA3AF"
                       style={styles.inputIcon}
                     />
@@ -678,10 +686,33 @@ export default function WelcomeScreen() {
                     >
                       <Ionicons
                         name={showPassword ? "eye-outline" : "eye-off-outline"}
-                        size={20}
-                        color="#9CA3AF"
+                        size={18}
+                        color="#197C47"
                       />
                     </TouchableOpacity>
+                  </View>
+                )}
+                {!isResetMode && (
+                  <View style={styles.rememberRow}>
+                    <TouchableOpacity
+                      style={styles.rememberCheckboxTouchable}
+                      onPress={() => setRememberMe(!rememberMe)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: rememberMe }}
+                      accessibilityLabel="Remember me"
+                    >
+                      <View
+                        style={[
+                          styles.rememberCheckbox,
+                          rememberMe && styles.rememberCheckboxChecked,
+                        ]}
+                      >
+                        {rememberMe && (
+                          <Ionicons name="checkmark" size={12} color="#fff" />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                    <Text style={styles.rememberLabel}>Remember me</Text>
                   </View>
                 )}
                 <TouchableOpacity
@@ -891,14 +922,15 @@ const styles = StyleSheet.create({
   loginModal: {
     position: "absolute",
     backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 28,
-    padding: 18,
+    borderRadius: 22,
+    padding: 14,
+    paddingTop: 12,
     zIndex: 20,
     shadowColor: "#197C47",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 10,
     overflow: "hidden",
   },
   loginModalInner: {
@@ -907,24 +939,25 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: "absolute",
-    top: 6,
-    right: 6,
+    top: 4,
+    right: 4,
     zIndex: 10,
     backgroundColor: "#f3f3f3",
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 2,
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     alignItems: "center",
     justifyContent: "center",
   },
   loginHeading: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: "700",
     color: "#197C47",
-    marginBottom: 18,
+    marginBottom: 14,
     textAlign: "center",
-    marginTop: 12,
+    marginTop: 8,
+    paddingHorizontal: 4,
   },
   form: {
     flex: 1,
@@ -936,8 +969,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E0E0E0",
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    marginBottom: 9,
     backgroundColor: "#FFFFFF",
   },
   inputGroupFocused: {
@@ -977,26 +1011,57 @@ const styles = StyleSheet.create({
     borderColor: "rgba(185,28,28,0.18)",
   },
   inputIcon: {
-    marginRight: 12,
+    marginRight: 8,
   },
   input: {
     flex: 1,
     color: "#197C47",
-    fontSize: 16,
+    fontSize: 15,
     backgroundColor: "#FFFFFF",
     borderWidth: 0,
   },
   eyeIcon: {
-    padding: 4,
+    padding: 2,
+  },
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    width: "100%",
+    marginBottom: 10,
+  },
+  rememberCheckboxTouchable: {
+    padding: 6,
+    marginRight: 4,
+  },
+  rememberCheckbox: {
+    width: 16,
+    height: 16,
+    borderWidth: 1.5,
+    borderColor: "#197C47",
+    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  rememberCheckboxChecked: {
+    backgroundColor: "#197C47",
+    borderColor: "#197C47",
+  },
+  rememberLabel: {
+    fontSize: 13,
+    color: "#6B7280",
+    fontWeight: "500",
   },
   forgotPassword: {
     alignItems: "center",
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: 6,
+    marginBottom: 8,
   },
   forgotPasswordText: {
     color: "#197C47",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
   },
   resetCooldownRow: {
@@ -1027,10 +1092,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   button: {
-    width: "80%",
+    width: "88%",
     alignSelf: "center",
-    borderRadius: 32,
-    paddingVertical: 14,
+    borderRadius: 24,
+    paddingVertical: 11,
     alignItems: "center",
     backgroundColor: "#197C47",
   },
@@ -1039,7 +1104,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
   },
 });

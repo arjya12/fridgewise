@@ -35,6 +35,9 @@ import {
   CoffeeIcon,
   BeerBottleIcon,
   CookingPotIcon,
+  CylinderIcon,
+  ForkKnifeIcon,
+  JarIcon,
   SnowflakeIcon,
   PackageIcon,
 } from "phosphor-react-native";
@@ -50,6 +53,7 @@ import {
   useEnhancedCalendar,
 } from "../hooks/useEnhancedCalendar";
 import { useThemeColor } from "../hooks/useThemeColor";
+import { ItemCardPendingOverlay } from "./ItemCardPendingOverlay";
 import { FoodItem } from "../lib/supabase";
 import { formatQuantityWithUnit } from "../utils/formatQuantityUnit";
 
@@ -95,15 +99,24 @@ function getCategoryIconComponent(category?: string) {
   if (label === "dairy") return DropIcon;
   if (label === "meat") return BoneIcon;
   if (label === "seafood") return FishIcon;
+  if (label === "deli") return ForkKnifeIcon;
   if (label === "vegetables" || label === "vegetable") return CarrotIcon;
   if (label === "fruits" || label === "fruit") return AppleLogoIcon;
   if (label === "bakery" || label === "bread") return BreadIcon;
   if (label === "eggs" || label === "egg") return EggIcon;
   if (label === "grains" || label === "grain") return GrainsIcon;
+  if (label === "canned") return CylinderIcon;
   if (label === "snacks") return CookieIcon;
   if (label === "beverages") return CoffeeIcon;
   if (label === "condiments") return BeerBottleIcon;
-  if (label === "prepared meals") return CookingPotIcon;
+  if (label === "sauces" || label === "sauce") return JarIcon;
+  if (
+    label === "ready-to-eat" ||
+    label === "ready to eat" ||
+    label === "prepared meals" ||
+    label === "prepared meal"
+  )
+    return CookingPotIcon;
   if (label === "frozen") return SnowflakeIcon;
   if (label === "other") return PackageIcon;
   return PackageIcon;
@@ -133,6 +146,10 @@ export interface EnhancedCalendarScreenProps {
   onItemEdit?:    (item: FoodItem) => void;
   onItemDelete?:  (item: FoodItem) => void;
   onItemThrowAway?: (item: FoodItem) => void;
+  /** Opens quantity picker for waste (parent shows ThrowAwayModal) */
+  onRequestThrowAwayQuantity?: (item: FoodItem) => void;
+  /** Show saving spinner on the matching item row/card */
+  pendingItemId?: string | null;
   onConsume?:     (item: FoodItem) => void;
   onAddItem?:     () => void;
   initialViewMode?: "calendar" | "timeline";
@@ -201,6 +218,8 @@ function EnhancedCalendarScreenCore({
   onItemEdit,
   onItemDelete,
   onItemThrowAway,
+  onRequestThrowAwayQuantity,
+  pendingItemId = null,
   onConsume,
   initialViewMode = "calendar",
   initialDate,
@@ -243,9 +262,12 @@ function EnhancedCalendarScreenCore({
   const [showExpiredBox, setShowExpiredBox] = useState(false);
   const [removeModalItem, setRemoveModalItem] = useState<FoodItem | null>(null);
 
+  // Re-apply when parent passes new navigation intent (nonce). Otherwise switching
+  // to Timeline locally leaves viewMode as "timeline" while initialViewMode stays
+  // "calendar" — Home → upcoming must snap back to calendar when params refresh.
   React.useEffect(() => {
     setViewMode(initialViewMode);
-  }, [initialViewMode]);
+  }, [initialViewMode, initialFocusToken, initialDateToken]);
 
   React.useEffect(() => {
     if (!initialDate) return;
@@ -743,29 +765,34 @@ function EnhancedCalendarScreenCore({
     }
   }, [timelinePastCollapsed]);
 
-  const handleThrowAway = useCallback(async () => {
+  const openThrowAwayQuantityFromRemoveSheet = useCallback(() => {
     if (!removeModalItem) return;
-    try {
-      if (onItemThrowAway) {
-        await Promise.resolve(onItemThrowAway(removeModalItem));
-      } else {
-        const qty =
-          typeof removeModalItem.quantity === "number" &&
-          removeModalItem.quantity > 0
-            ? removeModalItem.quantity
-            : 1;
-        if (foodItemsService?.logUsage) {
-          await foodItemsService.logUsage(removeModalItem.id, "wasted", qty);
-        } else {
-          onItemDelete?.(removeModalItem);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to throw away item:", e);
-    } finally {
-      setRemoveModalItem(null);
+    const item = removeModalItem;
+    setRemoveModalItem(null);
+    if (onRequestThrowAwayQuantity) {
+      onRequestThrowAwayQuantity(item);
+      return;
     }
-  }, [removeModalItem, foodItemsService, onItemDelete, onItemThrowAway]);
+    void (async () => {
+      try {
+        if (onItemThrowAway) {
+          await Promise.resolve(onItemThrowAway(item));
+        } else {
+          const qty =
+            typeof item.quantity === "number" && item.quantity > 0
+              ? item.quantity
+              : 1;
+          if (foodItemsService?.logUsage) {
+            await foodItemsService.logUsage(item.id, "wasted", qty);
+          } else {
+            onItemDelete?.(item);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to throw away item:", e);
+      }
+    })();
+  }, [removeModalItem, foodItemsService, onItemDelete, onItemThrowAway, onRequestThrowAwayQuantity]);
 
   const handleDeleteItem = useCallback(() => {
     if (!removeModalItem) return;
@@ -877,6 +904,8 @@ function EnhancedCalendarScreenCore({
       const diff = diffDaysFromToday(item.expiry_date as any, todayStr);
       const iconColor = diff < 0 ? "#B91C1C" : "#16A34A";
 
+      const rowPending = pendingItemId != null && String(item.id) === String(pendingItemId);
+
       return (
         <View key={item.id} style={S.timelineItemCard}>
           <Pressable style={S.dayItemCardInner} onPress={onToggleExpand}>
@@ -952,10 +981,11 @@ function EnhancedCalendarScreenCore({
               </TouchableOpacity>
             </View>
           </Animated.View>
+          <ItemCardPendingOverlay visible={rowPending} />
         </View>
       );
     },
-    [onItemEdit, onConsume, onItemPress, onItemDelete, todayStr]
+    [onItemEdit, onConsume, onItemPress, onItemDelete, todayStr, pendingItemId]
   );
 
   const formatTimelineDate = useCallback((dateStr: string) => {
@@ -1081,16 +1111,15 @@ function EnhancedCalendarScreenCore({
 
                       const dayItems: FoodItem[] = ds ? getDateItems(ds) : [];
 
-                      // Group by category label and sum quantities
-                      const categoryMap = new Map<string, { quantity: number; item: FoodItem }>();
+                      // Group by category label — pill shows number of line items, not total qty (g/pcs)
+                      const categoryMap = new Map<string, { itemCount: number; item: FoodItem }>();
                       dayItems.forEach((item: FoodItem) => {
                         const key = (item.category || "Other").trim();
                         const prev = categoryMap.get(key);
-                        const qty = typeof item.quantity === "number" ? item.quantity : 1;
                         if (prev) {
-                          prev.quantity += qty;
+                          prev.itemCount += 1;
                         } else {
-                          categoryMap.set(key, { quantity: qty, item });
+                          categoryMap.set(key, { itemCount: 1, item });
                         }
                       });
 
@@ -1138,7 +1167,7 @@ function EnhancedCalendarScreenCore({
 
                           {/* Category pills row */}
                           <View style={S.dayPillsRow}>
-                            {pillEntries.slice(0, 2).map(([cat, { quantity, item }]) => {
+                            {pillEntries.slice(0, 2).map(([cat, { itemCount, item }]) => {
                               const IconComp = getCategoryIconComponent(item.category);
                               return (
                                 <View
@@ -1153,7 +1182,7 @@ function EnhancedCalendarScreenCore({
                                 >
                                   <IconComp size={10} color={pillColor} weight="fill" />
                                   <Text style={[S.dayPillText, { color: pillColor }]}>
-                                    ×{quantity}
+                                    ×{itemCount}
                                   </Text>
                                 </View>
                               );
@@ -1417,6 +1446,12 @@ function EnhancedCalendarScreenCore({
                                 </TouchableOpacity>
                               </View>
                               </Animated.View>
+                              <ItemCardPendingOverlay
+                                visible={
+                                  pendingItemId != null &&
+                                  String(item.id) === String(pendingItemId)
+                                }
+                              />
                             </View>
                           );
                         })}
@@ -1617,7 +1652,7 @@ function EnhancedCalendarScreenCore({
                 <TouchableOpacity
                   style={[S.removeOptionSideBySide, S.removeOptionPrimary]}
                   activeOpacity={0.9}
-                  onPress={handleThrowAway}
+                  onPress={openThrowAwayQuantityFromRemoveSheet}
                 >
                   <Ionicons name="trash-outline" size={16} color="#B91C1C" />
                   <View style={S.removeOptionTextCol}>
@@ -2146,6 +2181,7 @@ const S = StyleSheet.create({
 
   // ── Item card (white card + left urgency bar + action row) ──
   dayItemCard: {
+    position: "relative",
     flexDirection: "column",
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
@@ -2596,6 +2632,7 @@ const S = StyleSheet.create({
     gap: 5,
   },
   timelineItemCard: {
+    position: "relative",
     flexDirection: "column",
     backgroundColor: "#FFFFFF",
     borderRadius: 14,

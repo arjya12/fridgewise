@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   Image,
+  InteractionManager,
   Modal,
   Pressable,
   RefreshControl,
@@ -28,10 +29,13 @@ import {
   Coffee,
   Cookie,
   CookingPot,
+  Cylinder,
   Drop,
   Egg,
   Fish,
+  ForkKnife,
   Grains,
+  Jar,
   Package,
   Snowflake,
   MagnifyingGlass,
@@ -141,24 +145,35 @@ function getCategoryIcon(category?: string, name?: string) {
   if (label === "bakery" || label === "bread") return Bread;
   if (label === "egg" || label === "eggs") return Egg;
   if (label === "grains" || label === "grain") return Grains;
+  if (label === "canned") return Cylinder;
   if (label === "snacks") return Cookie;
   if (label === "beverages") return Coffee;
   if (label === "condiments") return BeerBottle;
-  if (label === "prepared meals" || label === "prepared meal") return CookingPot;
+  if (label === "sauces" || label === "sauce") return Jar;
+  if (
+    label === "ready-to-eat" ||
+    label === "ready to eat" ||
+    label === "prepared meals" ||
+    label === "prepared meal"
+  )
+    return CookingPot;
   if (label === "frozen") return Snowflake;
   if (label === "other") return Package;
 
   if (n.includes("milk") || n.includes("yogurt") || n.includes("cheese")) return Drop;
   if (n.includes("chicken") || n.includes("beef") || n.includes("pork") || n.includes("meat")) return Bone;
   if (n.includes("salmon") || n.includes("tuna") || n.includes("fish") || n.includes("shrimp")) return Fish;
+  if (n.includes("deli") || n.includes("salami") || n.includes("prosciutto")) return ForkKnife;
   if (n.includes("carrot") || n.includes("broccoli") || n.includes("lettuce") || n.includes("spinach")) return Carrot;
   if (n.includes("apple") || n.includes("banana") || n.includes("orange") || n.includes("grape")) return AppleLogo;
   if (n.includes("bread") || n.includes("toast") || n.includes("bun") || n.includes("bagel")) return Bread;
   if (n.includes("egg")) return Egg;
   if (n.includes("rice") || n.includes("pasta") || n.includes("oat") || n.includes("grain")) return Grains;
+  if (n.includes(" canned") || n.startsWith("can ") || n.includes(" tin ")) return Cylinder;
   if (n.includes("cookie") || n.includes("chips") || n.includes("snack")) return Cookie;
   if (n.includes("coffee") || n.includes("tea") || n.includes("juice") || n.includes("soda")) return Coffee;
-  if (n.includes("sauce") || n.includes("ketchup") || n.includes("mayo") || n.includes("mustard")) return BeerBottle;
+  if (n.includes("ketchup") || n.includes("mayo") || n.includes("mustard")) return BeerBottle;
+  if (n.includes("sauce") || n.includes("dressing") || n.includes("marinade")) return Jar;
   if (n.includes("frozen") || n.includes("ice")) return Snowflake;
   return Package;
 }
@@ -170,8 +185,15 @@ export default function HistoryScreen() {
   const [logs, setLogs] = useState<LogWithItem[]>([]);
   const hasLoadedOnceRef = useRef(false);
   const lastLoadedAtRef = useRef<number>(0);
-  const params = useLocalSearchParams<{ filter?: string }>();
+  const params = useLocalSearchParams<{ filter?: string; focusLogId?: string }>();
   const [historyTab, setHistoryTab] = useState<"used" | "wasted">("used");
+  const [highlightLogId, setHighlightLogId] = useState<string | null>(null);
+  const usedScrollRef = useRef<ScrollView>(null);
+  const wastedScrollRef = useRef<ScrollView>(null);
+  const processedFocusKeyRef = useRef<string | null>(null);
+  /** Y offset within the list container — used for accurate scrollTo with many rows */
+  const rowOffsetUsedRef = useRef<Record<string, number>>({});
+  const rowOffsetWastedRef = useRef<Record<string, number>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -182,6 +204,12 @@ export default function HistoryScreen() {
       setHistoryTab(params.filter);
     }
   }, [params.filter]);
+
+  useEffect(() => {
+    if (!params.focusLogId) {
+      processedFocusKeyRef.current = null;
+    }
+  }, [params.focusLogId]);
 
   const load = useCallback(async () => {
     try {
@@ -201,7 +229,7 @@ export default function HistoryScreen() {
         )
         .in("status", ["used", "wasted"])
         .order("logged_at", { ascending: false })
-        .limit(200);
+        .limit(400);
       if (error) throw error;
       setLogs((data as any) ?? []);
       lastLoadedAtRef.current = Date.now();
@@ -216,16 +244,19 @@ export default function HistoryScreen() {
         router.replace({ pathname: "/(auth)/welcome" });
         return;
       }
+      const fromDeepLink =
+        typeof params.focusLogId === "string" && params.focusLogId.length > 0;
       const now = Date.now();
       if (
+        !fromDeepLink &&
         hasLoadedOnceRef.current &&
         now - lastLoadedAtRef.current < 30_000
       ) {
         return;
       }
       hasLoadedOnceRef.current = true;
-      load();
-    }, [user, load])
+      void load();
+    }, [user, load, params.focusLogId])
   );
 
   const allRows = useMemo<Row[]>(() => {
@@ -281,6 +312,63 @@ export default function HistoryScreen() {
     if (!q) return base;
     return base.filter((r) => matchesHistorySearch(r, q));
   }, [allRows, searchQuery]);
+
+  const scheduleScrollToLog = useCallback((fid: string, tab: "used" | "wasted") => {
+    const scrollRef = tab === "used" ? usedScrollRef : wastedScrollRef;
+    const offsets = tab === "used" ? rowOffsetUsedRef : rowOffsetWastedRef;
+    const leadMs = tab === "wasted" ? 300 : 120;
+
+    const tryScroll = (attempt: number) => {
+      const y = offsets.current[fid];
+      if (typeof y === "number" && scrollRef.current) {
+        scrollRef.current.scrollTo({
+          y: Math.max(0, y - 52),
+          animated: true,
+        });
+        return;
+      }
+      if (attempt < 55) {
+        setTimeout(() => tryScroll(attempt + 1), attempt < 8 ? 32 : 48);
+      }
+    };
+
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(() => tryScroll(0), leadMs);
+    });
+  }, []);
+
+  useEffect(() => {
+    const fid =
+      typeof params.focusLogId === "string" && params.focusLogId.length > 0
+        ? params.focusLogId
+        : null;
+    if (!fid || initialLoading) return;
+
+    const tab: "used" | "wasted" =
+      params.filter === "wasted" ? "wasted" : "used";
+    const dedupeKey = `${tab}:${fid}`;
+    if (processedFocusKeyRef.current === dedupeKey) return;
+
+    const usedList = allRows.filter((r) => r.status === "used");
+    const wastedList = allRows.filter((r) => r.status === "wasted");
+    const list = tab === "used" ? usedList : wastedList;
+    const idx = list.findIndex((r) => r.id === fid);
+    if (idx < 0) return;
+
+    processedFocusKeyRef.current = dedupeKey;
+    setHistoryTab(tab);
+    setSearchQuery("");
+    setHighlightLogId(fid);
+    const clearHi = setTimeout(() => setHighlightLogId(null), 3600);
+
+    scheduleScrollToLog(fid, tab);
+
+    requestAnimationFrame(() => {
+      router.setParams({ focusLogId: undefined, filter: undefined });
+    });
+
+    return () => clearTimeout(clearHi);
+  }, [initialLoading, params.focusLogId, params.filter, allRows, scheduleScrollToLog]);
 
   const anyUsed = counts.used > 0;
   const anyWasted = counts.wasted > 0;
@@ -349,13 +437,31 @@ export default function HistoryScreen() {
   };
 
   const renderHistoryRow = useCallback(
-    (r: Row) => {
+    (r: Row, panel: "used" | "wasted") => {
       const CategoryIcon = getCategoryIcon(r.category, r.name);
       const iconColor =
         r.status === "wasted" || r.wasExpiredAtLogTime ? "#B91C1C" : "#16A34A";
       const isShelf = r.location === "shelf";
+      const isHi = highlightLogId === r.id;
+      const hiStyle =
+        isHi && r.status === "wasted"
+          ? styles.rowHighlightWaste
+          : isHi
+            ? styles.rowHighlightConsume
+            : null;
       return (
-        <View key={r.id} style={styles.row}>
+        <View
+          key={r.id}
+          style={[styles.row, hiStyle]}
+          onLayout={(e) => {
+            const y = e.nativeEvent.layout.y;
+            if (panel === "used") {
+              rowOffsetUsedRef.current[r.id] = y;
+            } else {
+              rowOffsetWastedRef.current[r.id] = y;
+            }
+          }}
+        >
           <View style={styles.rowIconTile}>
             <CategoryIcon size={22} color={iconColor} weight="fill" />
           </View>
@@ -396,7 +502,7 @@ export default function HistoryScreen() {
         </View>
       );
     },
-    [deletingId]
+    [deletingId, highlightLogId]
   );
 
   const confirmDeleteFromModal = useCallback(async () => {
@@ -504,6 +610,7 @@ export default function HistoryScreen() {
             ]}
           >
             <ScrollView
+              ref={usedScrollRef}
               style={[styles.panelScroll, { width: screenWidth }]}
               contentContainerStyle={[
                 styles.scrollContent,
@@ -566,11 +673,12 @@ export default function HistoryScreen() {
                     </View>
                   )
                 ) : (
-                  filteredUsed.map((r) => renderHistoryRow(r))
+                  filteredUsed.map((r) => renderHistoryRow(r, "used"))
                 )}
               </View>
             </ScrollView>
             <ScrollView
+              ref={wastedScrollRef}
               style={[styles.panelScroll, { width: screenWidth }]}
               contentContainerStyle={[
                 styles.scrollContent,
@@ -633,7 +741,7 @@ export default function HistoryScreen() {
                     </View>
                   )
                 ) : (
-                  filteredWasted.map((r) => renderHistoryRow(r))
+                  filteredWasted.map((r) => renderHistoryRow(r, "wasted"))
                 )}
               </View>
             </ScrollView>
@@ -819,6 +927,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 10,
+  },
+  /** Focus-from-home: subtle green (consumed) vs red (thrown away) */
+  rowHighlightConsume: {
+    backgroundColor: "rgba(220, 252, 232, 0.78)",
+    borderColor: "rgba(22, 101, 52, 0.22)",
+    borderWidth: 1,
+  },
+  rowHighlightWaste: {
+    backgroundColor: "rgba(254, 226, 226, 0.78)",
+    borderColor: "rgba(185, 28, 28, 0.22)",
+    borderWidth: 1,
   },
   rowIconTile: {
     width: 36,

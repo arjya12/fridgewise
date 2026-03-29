@@ -29,6 +29,7 @@ import {
   Coffee,
   Cookie,
   CookingPot,
+  Cylinder,
   CaretLeft,
   CaretRight,
   Carrot,
@@ -36,8 +37,10 @@ import {
   Drop,
   Egg,
   Fish,
+  ForkKnife,
   Grains,
   Hourglass,
+  Jar,
   MagnifyingGlass,
   Package,
   PushPin,
@@ -52,6 +55,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Dimensions } from "react-native";
 
 import { ConsumeModal } from "@/components/ConsumeModal";
+import { ItemCardPendingOverlay } from "@/components/ItemCardPendingOverlay";
+import { ThrowAwayModal } from "@/components/ThrowAwayModal";
 import ScreenLayout from "@/components/ScreenLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -166,10 +171,15 @@ function parseExpiryYmd(iso?: string): string | null {
 }
 
 function parseExpiryDate(iso?: string): Date | null {
+  if (!iso) return null;
   const ymd = parseExpiryYmd(iso);
-  if (!ymd) return null;
-  const d = new Date(`${ymd}T12:00:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
+  if (ymd) {
+    const midday = new Date(`${ymd}T12:00:00`);
+    if (!Number.isNaN(midday.getTime())) return midday;
+  }
+  // Fallback for non-ISO variants that still parse in JS/engine
+  const direct = new Date(iso);
+  return Number.isNaN(direct.getTime()) ? null : direct;
 }
 
 function isFoodItemExpired(item: FoodItem): boolean {
@@ -223,15 +233,24 @@ const getCategoryIcon = (category?: string, name?: string) => {
   if (label === "dairy" || label.includes("milk")) return Drop;
   if (label === "meat" || label === "protein") return Bone;
   if (label === "seafood" || label === "fish") return Fish;
+  if (label === "deli") return ForkKnife;
   if (label === "vegetable" || label === "vegetables" || label === "veg") return Carrot;
   if (label === "fruit" || label === "fruits") return AppleLogo;
   if (label === "bakery" || label === "bread") return Bread;
   if (label === "egg" || label === "eggs") return Egg;
   if (label === "grains" || label === "grain") return Grains;
+  if (label === "canned") return Cylinder;
   if (label === "snacks") return Cookie;
   if (label === "beverages") return Coffee;
   if (label === "condiments") return BeerBottle;
-  if (label === "prepared meals" || label === "prepared meal") return CookingPot;
+  if (label === "sauces" || label === "sauce") return Jar;
+  if (
+    label === "ready-to-eat" ||
+    label === "ready to eat" ||
+    label === "prepared meals" ||
+    label === "prepared meal"
+  )
+    return CookingPot;
   if (label === "frozen") return Snowflake;
   if (label === "other") return Package;
 
@@ -239,14 +258,17 @@ const getCategoryIcon = (category?: string, name?: string) => {
   if (n.includes("milk") || n.includes("yogurt") || n.includes("cheese")) return Drop;
   if (n.includes("chicken") || n.includes("beef") || n.includes("pork") || n.includes("meat")) return Bone;
   if (n.includes("salmon") || n.includes("tuna") || n.includes("fish") || n.includes("shrimp")) return Fish;
+  if (n.includes("deli") || n.includes("salami") || n.includes("prosciutto")) return ForkKnife;
   if (n.includes("carrot") || n.includes("broccoli") || n.includes("lettuce") || n.includes("spinach")) return Carrot;
   if (n.includes("apple") || n.includes("banana") || n.includes("orange") || n.includes("grape")) return AppleLogo;
   if (n.includes("bread") || n.includes("toast") || n.includes("bun") || n.includes("bagel")) return Bread;
   if (n.includes("egg")) return Egg;
   if (n.includes("rice") || n.includes("pasta") || n.includes("oat") || n.includes("grain")) return Grains;
+  if (n.includes(" canned") || n.startsWith("can ") || n.includes(" tin ")) return Cylinder;
   if (n.includes("cookie") || n.includes("chips") || n.includes("snack")) return Cookie;
   if (n.includes("coffee") || n.includes("tea") || n.includes("juice") || n.includes("soda")) return Coffee;
-  if (n.includes("sauce") || n.includes("ketchup") || n.includes("mayo") || n.includes("mustard")) return BeerBottle;
+  if (n.includes("ketchup") || n.includes("mayo") || n.includes("mustard")) return BeerBottle;
+  if (n.includes("sauce") || n.includes("dressing") || n.includes("marinade")) return Jar;
   if (n.includes("frozen") || n.includes("ice")) return Snowflake;
   return Package;
 };
@@ -412,18 +434,24 @@ export default function HomeScreen() {
   );
   const inventoryActionAnimRef = useRef<Record<string, Animated.Value>>({});
   const [consumeModalItem, setConsumeModalItem] = useState<FoodItem | null>(null);
+  const [throwAwayModalItem, setThrowAwayModalItem] = useState<FoodItem | null>(null);
   const [removeModalItem, setRemoveModalItem] = useState<FoodItem | null>(null);
+  /** Spinner overlay on the row/card while consume / throw / delete / use-all hits the server */
+  const [homeItemActionPendingId, setHomeItemActionPendingId] = useState<string | null>(
+    null
+  );
 
   const name = firstNameFromProfile(userProfile?.full_name, user?.email);
   const { width } = Dimensions.get("window");
   const pinnedStripInnerW = width - 36;
   const pinnedCardHalfW = Math.floor((pinnedStripInnerW - 8) / 2);
 
-  const loadHistoryTotals = useCallback(async () => {
+  const loadHistoryTotals = useCallback(async (options?: { force?: boolean }) => {
+    if (!user?.id) return;
     try {
       const now = Date.now();
       const cache = historyTotalsCacheRef.current;
-      if (cache && now - cache.at < 5 * 60_000) {
+      if (!options?.force && cache && now - cache.at < 5 * 60_000) {
         setHistoryTotals(cache.value);
         return;
       }
@@ -433,10 +461,12 @@ export default function HomeScreen() {
           supabase
             .from("usage_logs")
             .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
             .eq("status", "used"),
           supabase
             .from("usage_logs")
             .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
             .eq("status", "wasted"),
         ]);
 
@@ -447,12 +477,17 @@ export default function HomeScreen() {
       setHistoryTotals(next);
     } catch (e) {
       console.warn("History totals load failed", e);
+      setHistoryTotals((prev) => prev ?? { used: 0, wasted: 0 });
     }
-  }, []);
+  }, [user?.id]);
 
   const loadHomeMeta = useCallback(async (options?: { showLoading?: boolean; itemsSource?: FoodItem[] }) => {
     const showLoading = options?.showLoading ?? true;
     const itemsSource = options?.itemsSource;
+    if (!user?.id) {
+      if (showLoading) setHomeMetaLoading(false);
+      return;
+    }
     try {
       if (showLoading) setHomeMetaLoading(true);
       const today = new Date();
@@ -463,21 +498,32 @@ export default function HomeScreen() {
       const recentEnd = new Date(today);
       recentEnd.setHours(23, 59, 59, 999);
 
-      if (itemsSource && itemsSource.length > 0) {
+      const [expiringResult, expiredResult] = await Promise.allSettled([
+        foodItemsService.getExpiringItems(7),
+        foodItemsService.getExpiredItems(),
+      ]);
+
+      if (expiringResult.status === "fulfilled") {
+        setThisWeekExpiring(expiringResult.value as unknown as FoodItem[]);
+      } else if (itemsSource && itemsSource.length > 0) {
+        // Fallback to local derivation if backend call fails
         const localExpiring = itemsSource.filter((it) => {
           const d = getDaysUntilExpiry(it.expiry_date);
           return typeof d === "number" && d >= 0 && d <= 7;
         });
-        const localExpired = itemsSource.filter((it) => isFoodItemExpired(it));
         setThisWeekExpiring(localExpiring);
+      } else {
+        setThisWeekExpiring([]);
+      }
+
+      if (expiredResult.status === "fulfilled") {
+        setThisWeekExpired(expiredResult.value as unknown as FoodItem[]);
+      } else if (itemsSource && itemsSource.length > 0) {
+        // Fallback to local derivation if backend call fails
+        const localExpired = itemsSource.filter((it) => isFoodItemExpired(it));
         setThisWeekExpired(localExpired);
       } else {
-        const [expiring, expired] = await Promise.all([
-          foodItemsService.getExpiringItems(7),
-          foodItemsService.getExpiredItems(),
-        ]);
-        setThisWeekExpiring(expiring as unknown as FoodItem[]);
-        setThisWeekExpired(expired as unknown as FoodItem[]);
+        setThisWeekExpired([]);
       }
 
       const logsResult = await supabase
@@ -492,6 +538,7 @@ export default function HomeScreen() {
           )
         `
         )
+        .eq("user_id", user.id)
         .in("status", ["used", "wasted"])
         .gte("logged_at", recentStart.toISOString())
         .lte("logged_at", recentEnd.toISOString())
@@ -500,36 +547,35 @@ export default function HomeScreen() {
       if (logsResult.error) throw logsResult.error;
       setThisWeekLogs((logsResult.data as any) ?? []);
 
-      // Totals are heavier; load them in background so cards appear faster.
-      void loadHistoryTotals();
-
+      await loadHistoryTotals({ force: true });
     } catch (e) {
       // keep screen usable even if some meta calls fail
       console.warn("Home meta load failed", e);
+      await loadHistoryTotals({ force: false });
+      setHistoryTotals((prev) => prev ?? { used: 0, wasted: 0 });
     } finally {
       if (showLoading) setHomeMetaLoading(false);
     }
-  }, [loadHistoryTotals]);
+  }, [loadHistoryTotals, user?.id]);
 
   const loadItems = useCallback(async (options?: { showLoader?: boolean }) => {
     const showLoader = options?.showLoader ?? true;
-    let releasedLoader = false;
     try {
       if (showLoader) setLoading(true);
       const data = await foodItemsService.getItems();
       setItems(data);
       lastLoadedAtRef.current = Date.now();
-      if (showLoader) {
-        setLoading(false);
-        releasedLoader = true;
+      if (showLoader && user?.id) {
+        const pinned = await loadPinnedItemIds(user.id);
+        setPinnedIds(pinned);
       }
-      void loadHomeMeta({ showLoading: showLoader, itemsSource: data as FoodItem[] });
+      await loadHomeMeta({ showLoading: showLoader, itemsSource: data as FoodItem[] });
     } catch (error: any) {
       Alert.alert("Error", error?.message ?? "Failed to load items");
     } finally {
-      if (showLoader && !releasedLoader) setLoading(false);
+      if (showLoader) setLoading(false);
     }
-  }, [loadHomeMeta]);
+  }, [loadHomeMeta, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -537,15 +583,10 @@ export default function HomeScreen() {
         router.replace({ pathname: "/(auth)/welcome" });
         return;
       }
-      const now = Date.now();
-      const shouldSkipBackgroundReload =
-        hasLoadedOnceRef.current && now - lastLoadedAtRef.current < 30_000;
-      if (!shouldSkipBackgroundReload) {
-        loadItems({ showLoader: !hasLoadedOnceRef.current });
-      }
+      // Always refresh on focus so Expired/Recent labels stay current.
+      loadItems({ showLoader: !hasLoadedOnceRef.current });
       hasLoadedOnceRef.current = true;
       if (!userProfile) getUserProfile();
-      loadPinnedItemIds(user.id).then(setPinnedIds);
     }, [user, userProfile, getUserProfile, loadItems])
   );
 
@@ -647,6 +688,7 @@ export default function HomeScreen() {
         router.push({
           pathname: "/(tabs)/calendar",
           params: {
+            view: "calendar",
             date: ymd,
             itemId: item.id,
             nonce,
@@ -786,9 +828,12 @@ export default function HomeScreen() {
     );
   }, [items, locationFilter, searchText]);
 
+  const showHomeSkeleton =
+    loading || homeMetaLoading || historyTotals === null;
+
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadItems();
+    await loadItems({ showLoader: false });
     setRefreshing(false);
   };
 
@@ -819,19 +864,23 @@ export default function HomeScreen() {
   };
 
   const handleEntryUseAll = async (itemId: string) => {
+    const id = String(itemId);
     try {
       const item = items.find((i) => i.id === itemId);
       if (!item) return;
+      setHomeItemActionPendingId(id);
+      await foodItemsService.logUsage(itemId, "used", item.quantity);
       runSmoothLayout();
       setItems((prev) => prev.filter((i) => i.id !== itemId));
-      setExpandedInventoryId((prev) => (prev === String(itemId) ? null : prev));
-      setExpandedPinnedId((prev) => (prev === String(itemId) ? null : prev));
-      await foodItemsService.logUsage(itemId, "used", item.quantity);
+      setExpandedInventoryId((prev) => (prev === id ? null : prev));
+      setExpandedPinnedId((prev) => (prev === id ? null : prev));
       await removePinnedItem(itemId);
       await loadHomeMeta({ showLoading: false });
     } catch (error: any) {
       await loadItems({ showLoader: false });
       Alert.alert("Error", error?.message ?? "Failed to mark used");
+    } finally {
+      setHomeItemActionPendingId(null);
     }
   };
 
@@ -863,82 +912,179 @@ export default function HomeScreen() {
     setRemoveModalItem(item);
   }, []);
 
-  const handleThrowAwayItem = useCallback(async () => {
-    if (!removeModalItem) return;
-    const item = removeModalItem;
-    setRemoveModalItem(null);
-    setExpandedInventoryId((prev) => (prev === String(item.id) ? null : prev));
-    setExpandedPinnedId((prev) => (prev === String(item.id) ? null : prev));
-    try {
-      const qty = typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
-      runSmoothLayout();
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-      await foodItemsService.logUsage(item.id, "wasted", qty);
-      await removePinnedItem(item.id);
-      await loadHomeMeta({ showLoading: false });
-    } catch (error: any) {
-      await loadItems({ showLoader: false });
-      Alert.alert(
-        "Error",
-        error?.message ?? "Failed to throw away item. Please try again."
-      );
-    }
-  }, [removeModalItem, loadHomeMeta, loadItems, removePinnedItem]);
+  const executeThrowAwayForItem = useCallback(
+    (currentItem: FoodItem, quantity: number) => {
+      const id = String(currentItem.id);
+      const pinnedIdsSnapshot = [...pinnedIds];
+      const fullWaste = quantity >= currentItem.quantity;
+      const nextPinned = fullWaste
+        ? pinnedIdsSnapshot.filter((pid) => String(pid) !== id)
+        : pinnedIdsSnapshot;
 
-  const handleDeleteItem = useCallback(async () => {
-    if (!removeModalItem) return;
-    const item = removeModalItem;
-    setRemoveModalItem(null);
-    setExpandedInventoryId((prev) => (prev === String(item.id) ? null : prev));
-    setExpandedPinnedId((prev) => (prev === String(item.id) ? null : prev));
-    try {
-      runSmoothLayout();
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-      await foodItemsService.deleteItem(item.id);
-      await removePinnedItem(item.id);
-      await loadHomeMeta({ showLoading: false });
-    } catch (error: any) {
-      await loadItems({ showLoader: false });
-      Alert.alert(
-        "Error",
-        error?.message ?? "Failed to delete item. Please try again."
-      );
-    }
-  }, [removeModalItem, loadHomeMeta, loadItems, removePinnedItem]);
+      setExpandedInventoryId((prev) => (prev === id ? null : prev));
+      setHomeItemActionPendingId(id);
 
-  const handleInventoryConsumeConfirm = useCallback(
-    async (quantity: number) => {
-      if (!consumeModalItem) return;
-      const currentItem = consumeModalItem;
-      const id = currentItem.id;
-      setConsumeModalItem(null);
-      setExpandedInventoryId((prev) => (prev === String(id) ? null : prev));
-      try {
-        runSmoothLayout();
-        if (quantity >= currentItem.quantity) {
-          setItems((prev) => prev.filter((i) => i.id !== id));
-          setExpandedPinnedId((prev) => (prev === String(id) ? null : prev));
-        } else {
-          setItems((prev) =>
-            prev.map((i) =>
-              i.id === id ? { ...i, quantity: Math.max(0, i.quantity - quantity) } : i
-            )
+      void (async () => {
+        try {
+          await foodItemsService.logUsage(currentItem.id, "wasted", quantity);
+          runSmoothLayout();
+          if (fullWaste) {
+            setItems((prev) => prev.filter((i) => String(i.id) !== id));
+            setExpandedPinnedId((prev) => (prev === id ? null : prev));
+            setPinnedIds(nextPinned);
+            if (user?.id) {
+              await savePinnedItemIds(user.id, nextPinned);
+            }
+          } else {
+            setItems((prev) =>
+              prev.map((i) =>
+                String(i.id) === id
+                  ? { ...i, quantity: Math.max(0, i.quantity - quantity) }
+                  : i
+              )
+            );
+          }
+          await loadHomeMeta({ showLoading: false });
+        } catch (error: any) {
+          await loadItems({ showLoader: false });
+          Alert.alert(
+            "Error",
+            error?.message ?? "Failed to throw away item. Please try again."
           );
+        } finally {
+          setHomeItemActionPendingId(null);
         }
-        await foodItemsService.markItemUsed(id, quantity);
-        if (quantity >= currentItem.quantity) {
-          await removePinnedItem(id);
+      })();
+    },
+    [pinnedIds, user?.id, loadHomeMeta, loadItems]
+  );
+
+  const openThrowAwayQuantityModal = useCallback(() => {
+    if (!removeModalItem) return;
+    const item = removeModalItem;
+    setRemoveModalItem(null);
+    const maxQty =
+      typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
+    if (maxQty <= 1) {
+      executeThrowAwayForItem(item, 1);
+      return;
+    }
+    setThrowAwayModalItem(item);
+  }, [removeModalItem, executeThrowAwayForItem]);
+
+  const handleThrowAwayConfirm = useCallback(
+    (quantity: number) => {
+      if (!throwAwayModalItem) return;
+      const item = throwAwayModalItem;
+      setThrowAwayModalItem(null);
+      executeThrowAwayForItem(item, quantity);
+    },
+    [throwAwayModalItem, executeThrowAwayForItem]
+  );
+
+  const handleDeleteItem = useCallback(() => {
+    if (!removeModalItem) return;
+    const item = removeModalItem;
+    const id = String(item.id);
+    const pinnedIdsSnapshot = [...pinnedIds];
+    const nextPinned = pinnedIdsSnapshot.filter((pid) => String(pid) !== id);
+
+    setRemoveModalItem(null);
+    setExpandedInventoryId((prev) => (prev === id ? null : prev));
+    setExpandedPinnedId((prev) => (prev === id ? null : prev));
+    setHomeItemActionPendingId(id);
+
+    void (async () => {
+      try {
+        await foodItemsService.deleteItem(item.id);
+        runSmoothLayout();
+        setItems((prev) => prev.filter((i) => i.id !== item.id));
+        setPinnedIds(nextPinned);
+        if (user?.id) {
+          await savePinnedItemIds(user.id, nextPinned);
         }
         await loadHomeMeta({ showLoading: false });
       } catch (error: any) {
+        setPinnedIds(pinnedIdsSnapshot);
         await loadItems({ showLoader: false });
         Alert.alert(
           "Error",
-          error?.message ?? "Failed to log consumption. Please try again."
+          error?.message ?? "Failed to delete item. Please try again."
         );
+      } finally {
+        setHomeItemActionPendingId(null);
       }
+    })();
+  }, [removeModalItem, pinnedIds, user?.id, loadHomeMeta, loadItems]);
+
+  const executeConsumeForItem = useCallback(
+    (currentItem: FoodItem, quantity: number) => {
+      const id = String(currentItem.id);
+      const pinnedIdsSnapshot = [...pinnedIds];
+      const fullConsume = quantity >= currentItem.quantity;
+      const nextPinned = fullConsume
+        ? pinnedIdsSnapshot.filter((pid) => String(pid) !== id)
+        : pinnedIdsSnapshot;
+
+      setExpandedInventoryId((prev) => (prev === id ? null : prev));
+      setHomeItemActionPendingId(id);
+
+      void (async () => {
+        try {
+          await foodItemsService.markItemUsed(currentItem.id, quantity);
+          runSmoothLayout();
+          if (fullConsume) {
+            setItems((prev) => prev.filter((i) => String(i.id) !== id));
+            setExpandedPinnedId((prev) => (prev === id ? null : prev));
+            setPinnedIds(nextPinned);
+            if (user?.id) {
+              await savePinnedItemIds(user.id, nextPinned);
+            }
+          } else {
+            setItems((prev) =>
+              prev.map((i) =>
+                String(i.id) === id
+                  ? { ...i, quantity: Math.max(0, i.quantity - quantity) }
+                  : i
+              )
+            );
+          }
+          await loadHomeMeta({ showLoading: false });
+        } catch (error: any) {
+          await loadItems({ showLoader: false });
+          Alert.alert(
+            "Error",
+            error?.message ?? "Failed to log consumption. Please try again."
+          );
+        } finally {
+          setHomeItemActionPendingId(null);
+        }
+      })();
     },
-    [consumeModalItem, loadHomeMeta, loadItems, removePinnedItem]
+    [pinnedIds, user?.id, loadHomeMeta, loadItems]
+  );
+
+  const requestConsumeModal = useCallback(
+    (it: FoodItem) => {
+      const maxQty =
+        typeof it.quantity === "number" && it.quantity > 0 ? it.quantity : 1;
+      if (maxQty <= 1) {
+        executeConsumeForItem(it, 1);
+        return;
+      }
+      setConsumeModalItem(it);
+    },
+    [executeConsumeForItem]
+  );
+
+  const handleInventoryConsumeConfirm = useCallback(
+    (quantity: number) => {
+      if (!consumeModalItem) return;
+      const item = consumeModalItem;
+      setConsumeModalItem(null);
+      executeConsumeForItem(item, quantity);
+    },
+    [consumeModalItem, executeConsumeForItem]
   );
 
   useEffect(() => {
@@ -1225,7 +1371,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.twStrip}
           style={styles.twStripOuter}
         >
-            {homeMetaLoading ? (
+            {showHomeSkeleton ? (
               <View style={[styles.twLoadingCard, { minWidth: width - 32 }]}>
                 <View style={styles.twLoadingLineLg} />
                 <View style={styles.twLoadingLineSm} />
@@ -1281,6 +1427,7 @@ export default function HomeScreen() {
                         ? router.push({
                             pathname: "/(tabs)/calendar",
                             params: {
+                              view: "calendar",
                               date: c.expiryDate,
                               itemId: c.id,
                               nonce: `${Date.now()}-${Math.random()}`,
@@ -1296,7 +1443,15 @@ export default function HomeScreen() {
                               c.kind === "expired" ? "true" : "false"
                             }`
                           )
-                        : router.push("/(tabs)/this-week")
+                        : c.kind === "used" || c.kind === "wasted"
+                          ? router.push({
+                              pathname: "/(tabs)/history",
+                              params: {
+                                filter: c.kind,
+                                focusLogId: c.id,
+                              },
+                            })
+                          : router.push("/(tabs)/this-week")
                     }
                     accessibilityRole="button"
                     accessibilityLabel={`${c.title}. ${c.statusText}`}
@@ -1362,11 +1517,11 @@ export default function HomeScreen() {
         >
           <View style={styles.itemHistoryTextCol}>
             <Text style={styles.itemHistoryTitle}>Item History</Text>
-            {historyTotals == null ? (
+            {showHomeSkeleton ? (
               <View style={styles.itemHistorySubtitleSkeleton} />
             ) : (
               <Text style={styles.itemHistorySubtitle} numberOfLines={1}>
-                {`${historyTotals.used} Consumed · ${historyTotals.wasted} Thrown away`}
+                {`${historyTotals!.used} Consumed · ${historyTotals!.wasted} Thrown away`}
               </Text>
             )}
           </View>
@@ -1398,22 +1553,10 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
-        {loading && items.length === 0 && pinnedIds.length > 0 ? (
-          <View
-            style={[
-              styles.pinnedLoadingWrap,
-              pinnedIds.length >= 2 && styles.pinnedLoadingWrapTwoCol,
-            ]}
-          >
-            <View
-              style={[
-                styles.pinnedLoadingBar,
-                pinnedIds.length >= 2 && styles.pinnedLoadingBarHalf,
-              ]}
-            />
-            {pinnedIds.length >= 2 ? (
-              <View style={[styles.pinnedLoadingBar, styles.pinnedLoadingBarHalf]} />
-            ) : null}
+        {showHomeSkeleton ? (
+          <View style={[styles.pinnedLoadingWrap, styles.pinnedLoadingWrapTwoCol]}>
+            <View style={[styles.pinnedLoadingBar, styles.pinnedLoadingBarHalf]} />
+            <View style={[styles.pinnedLoadingBar, styles.pinnedLoadingBarHalf]} />
           </View>
         ) : pinnedItemsOrdered.length === 0 ? (
           <View style={styles.pinnedEmptyWrap}>
@@ -1567,7 +1710,7 @@ export default function HomeScreen() {
                           setExpandedPinnedId((prev) =>
                             prev === pinnedRowId ? null : prev
                           );
-                          setConsumeModalItem(it);
+                          requestConsumeModal(it);
                         }}
                         activeOpacity={0.7}
                         accessibilityRole="button"
@@ -1591,6 +1734,7 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     </View>
                   </Animated.View>
+                  <ItemCardPendingOverlay visible={homeItemActionPendingId === pinnedRowId} />
                 </View>
               );
             })}
@@ -1906,7 +2050,7 @@ export default function HomeScreen() {
                             setExpandedInventoryId((prev) =>
                               prev === rowId ? null : prev
                             );
-                            setConsumeModalItem(it);
+                            requestConsumeModal(it);
                           }}
                           activeOpacity={0.7}
                           accessibilityRole="button"
@@ -1932,6 +2076,7 @@ export default function HomeScreen() {
                       </View>
                     </View>
                   </Animated.View>
+                  <ItemCardPendingOverlay visible={homeItemActionPendingId === rowId} />
                 </View>
               );
             })
@@ -1950,10 +2095,17 @@ export default function HomeScreen() {
         onCancel={() => setConsumeModalItem(null)}
       />
 
+      <ThrowAwayModal
+        visible={throwAwayModalItem !== null}
+        item={throwAwayModalItem}
+        onConfirm={handleThrowAwayConfirm}
+        onCancel={() => setThrowAwayModalItem(null)}
+      />
+
       <Modal
         visible={removeModalItem !== null}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setRemoveModalItem(null)}
       >
         <View style={styles.removeModalBackdrop}>
@@ -1968,9 +2120,10 @@ export default function HomeScreen() {
 
             <View style={styles.removeOptionsRow}>
               <TouchableOpacity
+                delayPressIn={0}
                 style={[styles.removeOptionSideBySide, styles.removeOptionPrimary]}
-                activeOpacity={0.9}
-                onPress={handleThrowAwayItem}
+                activeOpacity={0.88}
+                onPress={openThrowAwayQuantityModal}
               >
                 <Ionicons name="trash-outline" size={16} color="#B91C1C" />
                 <View style={styles.removeOptionTextCol}>
@@ -1980,8 +2133,9 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
+                delayPressIn={0}
                 style={[styles.removeOptionSideBySide, styles.removeOptionSecondary]}
-                activeOpacity={0.9}
+                activeOpacity={0.88}
                 onPress={handleDeleteItem}
               >
                 <Ionicons name="close" size={16} color="#111827" />
@@ -2662,6 +2816,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pinnedRow: {
+    position: "relative",
     flexDirection: "column",
     alignItems: "stretch",
     alignSelf: "center",
@@ -3130,6 +3285,7 @@ const styles = StyleSheet.create({
   },
   /** Calendar-style inventory cards (matches EnhancedCalendarScreen day items) */
   inventoryCalCard: {
+    position: "relative",
     flexDirection: "column",
     backgroundColor: "#FFFFFF",
     borderRadius: 14,

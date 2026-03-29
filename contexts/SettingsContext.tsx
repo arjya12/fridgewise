@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import { syncGroceryListReminder } from "@/services/groceryListReminderService";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 // Define the settings interface
 interface SettingsContextType {
@@ -16,6 +17,9 @@ interface SettingsContextType {
   setAnalytics: (enabled: boolean) => void;
   crashReports: boolean;
   setCrashReports: (enabled: boolean) => void;
+
+  /** Re-read toggles from AsyncStorage (e.g. after Clear all data). */
+  reloadSettingsFromStorage: () => Promise<void>;
 }
 
 // Storage keys
@@ -40,6 +44,7 @@ const SettingsContext = createContext<SettingsContextType>({
   setAnalytics: () => {},
   crashReports: true,
   setCrashReports: () => {},
+  reloadSettingsFromStorage: async () => {},
 });
 
 // Provider component
@@ -50,6 +55,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [helpfulTips, setHelpfulTipsState] = useState(true);
   const [analytics, setAnalyticsState] = useState(true);
   const [crashReports, setCrashReportsState] = useState(true);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
 
   // Load settings from AsyncStorage on mount
   useEffect(() => {
@@ -98,10 +104,61 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
+      } finally {
+        setSettingsHydrated(true);
       }
     };
 
     loadSettings();
+  }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    syncGroceryListReminder(lowStockAlerts).catch(() => {});
+  }, [settingsHydrated, lowStockAlerts]);
+
+  const reloadSettingsFromStorage = useCallback(async () => {
+    setExpiryAlertsState(true);
+    setLowStockAlertsState(true);
+    setHelpfulTipsState(true);
+    setAnalyticsState(true);
+    setCrashReportsState(true);
+    try {
+      const savedExpiryAlerts = await AsyncStorage.getItem(
+        STORAGE_KEYS.EXPIRY_ALERTS
+      );
+      if (savedExpiryAlerts !== null) {
+        setExpiryAlertsState(savedExpiryAlerts === "true");
+      }
+
+      const savedLowStockAlerts = await AsyncStorage.getItem(
+        STORAGE_KEYS.LOW_STOCK_ALERTS
+      );
+      if (savedLowStockAlerts !== null) {
+        setLowStockAlertsState(savedLowStockAlerts === "true");
+      }
+
+      const savedHelpfulTips = await AsyncStorage.getItem(
+        STORAGE_KEYS.HELPFUL_TIPS
+      );
+      if (savedHelpfulTips !== null) {
+        setHelpfulTipsState(savedHelpfulTips === "true");
+      }
+
+      const savedAnalytics = await AsyncStorage.getItem(STORAGE_KEYS.ANALYTICS);
+      if (savedAnalytics !== null) {
+        setAnalyticsState(savedAnalytics === "true");
+      }
+
+      const savedCrashReports = await AsyncStorage.getItem(
+        STORAGE_KEYS.CRASH_REPORTS
+      );
+      if (savedCrashReports !== null) {
+        setCrashReportsState(savedCrashReports === "true");
+      }
+    } catch (error) {
+      console.error("Failed to reload settings:", error);
+    }
   }, []);
 
   const setExpiryAlerts = async (enabled: boolean) => {
@@ -166,6 +223,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setAnalytics,
     crashReports,
     setCrashReports,
+    reloadSettingsFromStorage,
   };
 
   return (

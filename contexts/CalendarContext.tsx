@@ -256,9 +256,11 @@ export function CalendarProvider({
       // Clear any existing caches to ensure fresh data
       invalidateCache();
 
-      if (foodItemsService && foodItemsService.getItems) {
+      if (foodItemsService?.getItems) {
         const items = await foodItemsService.getItems();
-        setItems(items);
+        setItems(Array.isArray(items) ? items : []);
+      } else {
+        setItems([]);
       }
     } catch (error) {
       setError({

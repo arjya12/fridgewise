@@ -2,16 +2,14 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
-  Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -30,108 +28,59 @@ export default function ProfileScreen() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState(userProfile?.full_name || "");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(
-    userProfile?.avatar_url || null
-  );
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Fixed light theme colors
-  const backgroundColor = "#F9FAFB";
+  const backgroundColor = "#FFFFFF";
   const cardBackgroundColor = "#FFFFFF";
   const cardBorderColor = "#F3F4F6";
   const textColor = "#000000";
   const subTextColor = "#666666";
   const inputBackgroundColor = "#F9FAFB";
   const inputBorderColor = "#E5E7EB";
-
-  // Request permission for image picker
-  useEffect(() => {
-    (async () => {
-      if (Platform.OS !== "web") {
-        const { status } =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert(
-            "Permission Required",
-            "Sorry, we need camera roll permissions to upload images!"
-          );
-        }
-      }
-    })();
-  }, []);
-
-  // Handle image picking
-  const pickImage = async () => {
-    if (!isEditing) return;
-
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedAsset = result.assets[0];
-        await uploadImage(selectedAsset.uri);
-      }
-    } catch (error) {
-      console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick image");
+  /** Same as More screen avatar — mint → emerald diagonal */
+  const profileGradientColors = ["#3DBF7A", "#2a9960"] as const;
+  const normalizeFullName = (value: string) =>
+    value.replace(/\s+/g, " ").trim();
+  const validateFullName = (value: string): string | null => {
+    if (!value) return "Name cannot be blank.";
+    if (!/^[A-Za-z]+(?:\s+[A-Za-z]+)*$/.test(value)) {
+      return "Use letters only (no numbers or symbols).";
     }
+    return null;
   };
 
-  // Upload image to Supabase Storage
-  const uploadImage = async (uri: string) => {
-    if (!user) return;
-
-    setUploadingImage(true);
-    try {
-      // Convert image to blob
-      const response = await fetch(uri);
-      const blob = await response.blob();
-
-      // Generate a unique file name
-      const fileExt = uri.split(".").pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
-
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("profiles")
-        .upload(filePath, blob);
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Get the public URL
-      const { data } = supabase.storage.from("profiles").getPublicUrl(filePath);
-
-      if (data) {
-        // Update avatar URL in state
-        setAvatarUrl(data.publicUrl);
-      }
-    } catch (error: any) {
-      console.error("Error uploading image:", error);
-      Alert.alert("Error", error.message || "Failed to upload image");
-    } finally {
-      setUploadingImage(false);
-    }
-  };
+  const displayName = (
+    (isEditing ? fullName : userProfile?.full_name) ||
+    user?.email ||
+    "Your Name"
+  ).trim();
+  const initials = (() => {
+    const parts = displayName.split(/\s+/).filter(Boolean);
+    const first = parts[0]?.[0] ?? "";
+    const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+    const value = (first + last).toUpperCase();
+    return value || "?";
+  })();
 
   // Handle save profile changes
   const handleSaveProfile = async () => {
     if (!user) return;
+    const cleanedName = normalizeFullName(fullName);
+    const validationError = validateFullName(cleanedName);
 
+    if (validationError) {
+      setNameError(validationError);
+      return;
+    }
+
+    setNameError(null);
     setIsLoading(true);
     try {
       // Update the user profile using the AuthContext method
       const updatedProfile = await updateUserProfile({
-        full_name: fullName,
-        avatar_url: avatarUrl ?? undefined,
+        full_name: cleanedName,
       });
 
       if (!updatedProfile) {
@@ -139,8 +88,8 @@ export default function ProfileScreen() {
       }
 
       // Exit edit mode
+      setFullName(cleanedName);
       setIsEditing(false);
-      Alert.alert("Success", "Profile updated successfully");
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to update profile");
     } finally {
@@ -152,142 +101,30 @@ export default function ProfileScreen() {
   const handleCancelEdit = () => {
     // Reset the form fields to the current values
     setFullName(userProfile?.full_name || "");
-    setAvatarUrl(userProfile?.avatar_url || null);
+    setNameError(null);
     setIsEditing(false);
   };
 
   return (
     <SafeAreaWrapper>
       <ThemedView style={[styles.container, { backgroundColor }]}>
-        {/* Header with back button */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.replace("/(tabs)/more")}
+            activeOpacity={1}
           >
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color={isDark ? "#FFFFFF" : "#000000"}
-            />
+            <Ionicons name="arrow-back" size={21} color="#15803D" />
           </TouchableOpacity>
           <ThemedText style={styles.headerTitle}>Profile</ThemedText>
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() =>
-              isEditing ? handleCancelEdit() : setIsEditing(true)
-            }
-            disabled={isLoading || uploadingImage}
-          >
-            <ThemedText style={styles.editButtonText}>
-              {isEditing ? "Cancel" : "Edit"}
-            </ThemedText>
-          </TouchableOpacity>
+          <View style={styles.headerSpacer} />
         </View>
 
-        {/* Profile content */}
-        <View
-          style={[
-            styles.profileCard,
-            {
-              backgroundColor: cardBackgroundColor,
-              borderColor: cardBorderColor,
-            },
-          ]}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
         >
-          {/* Profile avatar */}
-          <TouchableOpacity
-            style={styles.avatarContainer}
-            onPress={pickImage}
-            disabled={!isEditing || uploadingImage}
-          >
-            {uploadingImage ? (
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: isDark ? "#2C2C2E" : "#E5E7EB" },
-                ]}
-              >
-                <ActivityIndicator size="large" color="#22C55E" />
-              </View>
-            ) : avatarUrl ? (
-              <Image
-                source={{ uri: avatarUrl }}
-                style={styles.avatar}
-                resizeMode="cover"
-              />
-            ) : (
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: isDark ? "#2C2C2E" : "#E5E7EB" },
-                ]}
-              >
-                <Ionicons
-                  name="person"
-                  size={60}
-                  color={isDark ? "#8E8E93" : "#9CA3AF"}
-                />
-              </View>
-            )}
-
-            {isEditing && (
-              <View style={styles.editAvatarBadge}>
-                <Ionicons name="camera" size={18} color="#FFFFFF" />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* Profile information */}
-          <View style={styles.profileInfo}>
-            {isEditing ? (
-              <TextInput
-                style={[
-                  styles.nameInput,
-                  {
-                    backgroundColor: inputBackgroundColor,
-                    borderColor: inputBorderColor,
-                    color: textColor,
-                  },
-                ]}
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Enter your full name"
-                placeholderTextColor={subTextColor}
-              />
-            ) : (
-              <ThemedText style={styles.nameText}>
-                {userProfile?.full_name || "Add your name"}
-              </ThemedText>
-            )}
-
-            <ThemedText style={[styles.emailText, { color: subTextColor }]}>
-              {user?.email || ""}
-            </ThemedText>
-          </View>
-
-          {/* Save button (only visible in edit mode) */}
-          {isEditing && (
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                (isLoading || uploadingImage) && styles.saveButtonDisabled,
-              ]}
-              onPress={handleSaveProfile}
-              disabled={isLoading || uploadingImage}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <ThemedText style={styles.saveButtonText}>
-                  Save Changes
-                </ThemedText>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Account information section */}
+        {/* Account information section — avatar uses same gradient as More */}
         <View
           style={[
             styles.section,
@@ -297,22 +134,104 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          <View style={styles.sectionHeader}>
-            <Ionicons
-              name="information-circle-outline"
-              size={18}
-              color={subTextColor}
-              style={styles.sectionIcon}
-            />
-            <ThemedText style={styles.sectionTitle}>
-              Account Information
-            </ThemedText>
-          </View>
-
           <View style={styles.sectionContent}>
+            <View style={styles.profileInline}>
+              <View style={styles.avatarContainer}>
+                <View style={styles.avatar}>
+                  <LinearGradient
+                    colors={[...profileGradientColors]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.avatarGradientFill}
+                  >
+                    <ThemedText style={styles.avatarText}>{initials}</ThemedText>
+                  </LinearGradient>
+                </View>
+              </View>
+              <View style={styles.profileInfo}>
+                {isEditing ? (
+                  <TextInput
+                    style={[
+                      styles.nameInput,
+                      {
+                        backgroundColor: inputBackgroundColor,
+                        borderColor: nameError ? "#DC2626" : inputBorderColor,
+                        color: textColor,
+                      },
+                      nameError ? styles.nameInputError : null,
+                    ]}
+                    value={fullName}
+                    onChangeText={(value) => {
+                      setFullName(value);
+                      if (nameError) setNameError(null);
+                    }}
+                    onBlur={() =>
+                      setFullName((prev) => normalizeFullName(prev))
+                    }
+                    placeholder="Enter your full name"
+                    placeholderTextColor={subTextColor}
+                    autoCapitalize="words"
+                  />
+                ) : (
+                  <ThemedText style={styles.nameText}>
+                    {userProfile?.full_name || "Add your name"}
+                  </ThemedText>
+                )}
+                {isEditing && nameError ? (
+                  <ThemedText style={styles.nameErrorText}>{nameError}</ThemedText>
+                ) : null}
+              </View>
+
+              {!isEditing && (
+                <TouchableOpacity
+                  style={styles.editIconButton}
+                  onPress={() => setIsEditing(true)}
+                  disabled={isLoading}
+                >
+                  <Ionicons
+                    name="create-outline"
+                    size={18}
+                    color="#15803D"
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {isEditing && (
+              <View style={styles.editActionsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.saveButton,
+                    isLoading && styles.saveButtonDisabled,
+                  ]}
+                  onPress={handleSaveProfile}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <ThemedText style={styles.saveButtonText}>
+                      Save
+                    </ThemedText>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.cancelEditButton}
+                  onPress={handleCancelEdit}
+                  disabled={isLoading}
+                >
+                  <ThemedText style={styles.cancelEditButtonText}>
+                    Cancel
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.sectionDivider} />
+
             <View style={styles.infoRow}>
               <ThemedText style={[styles.infoLabel, { color: subTextColor }]}>
-                Email
+                Email:
               </ThemedText>
               <ThemedText style={styles.infoValue}>
                 {user?.email || ""}
@@ -321,7 +240,7 @@ export default function ProfileScreen() {
 
             <View style={styles.infoRow}>
               <ThemedText style={[styles.infoLabel, { color: subTextColor }]}>
-                Member Since
+                Member Since:
               </ThemedText>
               <ThemedText style={styles.infoValue}>
                 {user?.created_at
@@ -331,6 +250,7 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+        </ScrollView>
       </ThemedView>
     </SafeAreaWrapper>
   );
@@ -339,100 +259,177 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    backgroundColor: "#F3F4F6",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 24,
-    paddingVertical: 8,
+    justifyContent: "center",
+    marginTop: 8,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    position: "relative",
   },
   backButton: {
-    padding: 8,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    position: "absolute",
+    left: 18,
+    top: 8,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
+    fontFamily: "PlusJakartaSans_700Bold",
     fontWeight: "700",
+    color: "#15803D",
+    letterSpacing: -0.2,
+  },
+  headerSpacer: {
+    width: 36,
+    height: 36,
+    position: "absolute",
+    right: 16,
   },
   editButton: {
-    padding: 8,
+    minWidth: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
   },
   editButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
-    color: "#22C55E", // App's primary green color
+    color: "#166534",
   },
-  profileCard: {
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 24,
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 120,
     alignItems: "center",
-    borderWidth: 1,
   },
   avatarContainer: {
-    marginBottom: 16,
+    marginBottom: 0,
     position: "relative",
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
   },
-  editAvatarBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: "#22C55E",
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  avatarGradientFill: {
+    width: "100%",
+    height: "100%",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
+  },
+  avatarText: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
   },
   profileInfo: {
     alignItems: "center",
     width: "100%",
+    marginTop: 8,
+  },
+  profileInline: {
+    width: "100%",
+    flexDirection: "column",
+    alignItems: "center",
+    marginBottom: 6,
+    position: "relative",
+    paddingBottom: 2,
+  },
+  editIconButton: {
+    position: "absolute",
+    right: 0,
+    bottom: 7,
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
   },
   nameText: {
     fontSize: 24,
+    lineHeight: 30,
+    fontFamily: "PlusJakartaSans_700Bold",
     fontWeight: "700",
-    marginBottom: 8,
+    letterSpacing: -0.3,
+    marginBottom: 4,
+    color: "#111827",
   },
   nameInput: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "500",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 10,
+    borderWidth: 1.2,
+    borderColor: "#A7F3D0",
     marginBottom: 8,
     width: "100%",
     textAlign: "center",
   },
-  emailText: {
-    fontSize: 16,
-    marginBottom: 16,
+  nameInputError: {
+    borderColor: "#DC2626",
+  },
+  nameErrorText: {
+    width: "100%",
+    marginTop: -2,
+    marginBottom: 6,
+    color: "#DC2626",
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "left",
+  },
+  editActionsRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  cancelEditButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelEditButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#475569",
   },
   saveButton: {
     backgroundColor: "#22C55E",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    marginTop: 16,
-    width: "100%",
     alignItems: "center",
+    justifyContent: "center",
+    minWidth: 70,
   },
   saveButtonDisabled: {
     backgroundColor: "#86EFAC",
   },
   saveButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "600",
   },
   section: {
@@ -440,35 +437,43 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     overflow: "hidden",
     borderWidth: 1,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(150, 150, 150, 0.1)",
-  },
-  sectionIcon: {
-    marginRight: 8,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    shadowColor: "#000000",
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    width: "100%",
+    maxWidth: 420,
   },
   sectionContent: {
     padding: 16,
   },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.1)",
+    marginVertical: 12,
+  },
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 2,
   },
   infoLabel: {
-    fontSize: 14,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontWeight: "600",
+    color: "#4B5563",
+    letterSpacing: 0.2,
   },
   infoValue: {
+    flex: 1,
+    textAlign: "right",
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: "PlusJakartaSans_700Bold",
+    fontWeight: "700",
+    color: "#111827",
+    marginLeft: 10,
   },
 });

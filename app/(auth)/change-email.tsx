@@ -2,7 +2,6 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { clearRememberMePreference } from "@/lib/authPreferences";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -17,137 +16,110 @@ import {
   View,
 } from "react-native";
 
-export default function ChangePasswordScreen() {
-  const { user, signOut } = useAuth();
-
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+export default function ChangeEmailScreen() {
+  const { user } = useAuth();
+  const [currentEmail, setCurrentEmail] = useState("");
+  const [email, setEmail] = useState("");
   const [currentFocused, setCurrentFocused] = useState(false);
-  const [passwordFocused, setPasswordFocused] = useState(false);
-  const [confirmFocused, setConfirmFocused] = useState(false);
-  const [errorText, setErrorText] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
   const [successText, setSuccessText] = useState<string | null>(null);
-  const [logoutCountdown, setLogoutCountdown] = useState<number | null>(null);
-  const [logoutCancelled, setLogoutCancelled] = useState(false);
-  const logoutTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [updateCountdown, setUpdateCountdown] = useState<number | null>(null);
+  const [updateCancelled, setUpdateCancelled] = useState(false);
+  const [updateCompleted, setUpdateCompleted] = useState(false);
+  const updateTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const meetsPasswordRule = password.length >= 7 && /\d/.test(password);
 
   useEffect(() => {
     return () => {
-      if (logoutTimerRef.current) clearInterval(logoutTimerRef.current);
+      if (updateTimerRef.current) clearInterval(updateTimerRef.current);
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
     if (!successText) return;
-    if (!logoutCancelled) return;
+    if (!updateCancelled && !updateCompleted) return;
     if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     bannerTimerRef.current = setTimeout(() => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setSuccessText(null);
-      setLogoutCancelled(false);
+      setUpdateCancelled(false);
+      setUpdateCompleted(false);
     }, 3500);
     return () => {
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     };
-  }, [successText, logoutCancelled]);
+  }, [successText, updateCancelled, updateCompleted]);
 
-  const stopLogoutCountdown = () => {
-    if (logoutTimerRef.current) {
-      clearInterval(logoutTimerRef.current);
-      logoutTimerRef.current = null;
+  const stopUpdateCountdown = () => {
+    if (updateTimerRef.current) {
+      clearInterval(updateTimerRef.current);
+      updateTimerRef.current = null;
     }
-    setLogoutCountdown(null);
-  };
-
-  const performLogout = async () => {
-    try {
-      await signOut();
-    } catch {
-      try {
-        await supabase.auth.signOut();
-        await clearRememberMePreference();
-      } catch {
-        // no-op fallback
-      }
-    } finally {
-      router.replace("/(auth)/welcome");
-    }
+    setUpdateCountdown(null);
   };
 
   const validate = (): boolean => {
-    if (!currentPassword) {
-      setErrorText("Please enter your current password.");
+    const currentValue = currentEmail.trim().toLowerCase();
+    const value = email.trim();
+    const signedInEmail = (user?.email ?? "").trim().toLowerCase();
+    if (!currentValue) {
+      setErrorText("Please confirm your current email.");
       return false;
     }
-    if (!password) {
-      setErrorText("Please enter a new password.");
+    if (!signedInEmail || currentValue !== signedInEmail) {
+      setErrorText("Current email does not match your account.");
       return false;
     }
-    if (!meetsPasswordRule) {
-      setErrorText("Use at least 7 characters and include a number.");
+    if (!value) {
+      setErrorText("Please enter a new email.");
       return false;
     }
-    if (!confirmPassword) {
-      setErrorText("Please confirm your new password.");
+    if (!/^\S+@\S+\.\S+$/.test(value)) {
+      setErrorText("Please enter a valid email.");
       return false;
     }
-    if (password !== confirmPassword) {
-      setErrorText("Passwords do not match.");
+    if (value.toLowerCase() === signedInEmail) {
+      setErrorText("New email must be different from current email.");
       return false;
     }
     setErrorText(null);
     return true;
   };
 
-  const handleChangePassword = async () => {
-    if (!validate() || !user?.email) return;
+  const handleChangeEmail = async () => {
+    if (!validate()) return;
     try {
       setLoading(true);
-      const { error: verifyErr } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword,
-      });
-      if (verifyErr) {
-        setErrorText("Current password is incorrect.");
-        return;
-      }
-      if (currentPassword === password) {
-        setErrorText("New password must be different from current password.");
-        return;
-      }
-
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setSuccessText("Password will be updated.");
-      setLogoutCancelled(false);
-      setLogoutCountdown(5);
+      setSuccessText("Email update pending.");
+      setUpdateCancelled(false);
+      setUpdateCompleted(false);
+      setUpdateCountdown(5);
+      setErrorText(null);
 
-      if (logoutTimerRef.current) clearInterval(logoutTimerRef.current);
-      logoutTimerRef.current = setInterval(() => {
-        setLogoutCountdown((prev) => {
+      if (updateTimerRef.current) clearInterval(updateTimerRef.current);
+      updateTimerRef.current = setInterval(() => {
+        setUpdateCountdown((prev) => {
           if (prev == null) return null;
           if (prev <= 1) {
-            if (logoutTimerRef.current) {
-              clearInterval(logoutTimerRef.current);
-              logoutTimerRef.current = null;
+            if (updateTimerRef.current) {
+              clearInterval(updateTimerRef.current);
+              updateTimerRef.current = null;
             }
             void (async () => {
               try {
-                const { error } = await supabase.auth.updateUser({ password });
+                const { error } = await supabase.auth.updateUser({ email: email.trim() });
                 if (error) throw error;
-                await performLogout();
+                setSuccessText("Email update requested. Check your inbox to confirm.");
+                setUpdateCompleted(true);
+                setUpdateCountdown(null);
               } catch (e: any) {
                 setSuccessText(null);
-                setErrorText(e?.message || "Failed to update password.");
-                setLogoutCountdown(null);
+                setErrorText(e?.message || "Failed to update email.");
+                setUpdateCountdown(null);
               }
             })();
             return 0;
@@ -156,7 +128,7 @@ export default function ChangePasswordScreen() {
         });
       }, 1000);
     } catch (e: any) {
-      setErrorText(e?.message || "Failed to update password.");
+      setErrorText(e?.message || "Failed to update email.");
     } finally {
       setLoading(false);
     }
@@ -173,25 +145,25 @@ export default function ChangePasswordScreen() {
           >
             <Ionicons name="arrow-back" size={21} color="#15803D" />
           </Pressable>
-          <ThemedText style={styles.headerTitle}>Change Password</ThemedText>
+          <ThemedText style={styles.headerTitle}>Change Email</ThemedText>
         </View>
 
         <View style={styles.content}>
         <View style={styles.formCard}>
-          <View style={styles.passwordHelperRow}>
+          <View style={styles.helperRow}>
             <Ionicons
-              name={meetsPasswordRule ? "checkmark-circle" : "information-circle"}
+              name={/^\S+@\S+\.\S+$/.test(email.trim()) ? "checkmark-circle" : "information-circle"}
               size={14}
-              color={meetsPasswordRule ? "#15803D" : "#9CA3AF"}
-              style={styles.passwordHelperIcon}
+              color={/^\S+@\S+\.\S+$/.test(email.trim()) ? "#15803D" : "#9CA3AF"}
+              style={styles.helperIcon}
             />
             <ThemedText
               style={[
-                styles.passwordHelperText,
-                meetsPasswordRule && styles.passwordHelperTextSuccess,
+                styles.helperText,
+                /^\S+@\S+\.\S+$/.test(email.trim()) && styles.helperTextSuccess,
               ]}
             >
-              Use at least 7 characters and include a number.
+              Enter a valid email address.
             </ThemedText>
           </View>
 
@@ -199,108 +171,47 @@ export default function ChangePasswordScreen() {
             style={[
               styles.inputGroup,
               currentFocused && styles.inputGroupFocused,
-              errorText === "Please enter your current password." ||
-              errorText === "Current password is incorrect."
+              errorText === "Please confirm your current email." ||
+              errorText === "Current email does not match your account."
                 ? styles.inputGroupError
                 : null,
             ]}
           >
             <TextInput
               style={styles.input}
-              placeholder="Current Password"
+              placeholder="Current Email"
               placeholderTextColor="#737373"
-              value={currentPassword}
+              value={currentEmail}
               onChangeText={(v) => {
-                setCurrentPassword(v);
+                setCurrentEmail(v);
                 if (errorText) setErrorText(null);
               }}
-              secureTextEntry={!showCurrentPassword}
+              keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
               onFocus={() => setCurrentFocused(true)}
               onBlur={() => setCurrentFocused(false)}
             />
-            <View
-              style={styles.eyeIcon}
-              onTouchEnd={() => setShowCurrentPassword((prev) => !prev)}
-            >
-              <Ionicons
-                name={showCurrentPassword ? "eye-outline" : "eye-off-outline"}
-                size={20}
-                color="#15803D"
-              />
-            </View>
           </View>
 
-          <View
-            style={[
-              styles.inputGroup,
-              passwordFocused && styles.inputGroupFocused,
-              errorText && !password ? styles.inputGroupError : null,
-            ]}
-          >
+          <View style={[styles.inputGroup, focused && styles.inputGroupFocused]}>
             <TextInput
               style={styles.input}
-              placeholder="Password"
+              placeholder="New Email"
               placeholderTextColor="#737373"
-              value={password}
+              value={email}
               onChangeText={(v) => {
-                setPassword(v);
+                setEmail(v);
                 if (errorText) setErrorText(null);
               }}
-              secureTextEntry={!showPassword}
+              keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
-              onFocus={() => setPasswordFocused(true)}
-              onBlur={() => setPasswordFocused(false)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
             />
-            <View
-              style={styles.eyeIcon}
-              onTouchEnd={() => setShowPassword((prev) => !prev)}
-            >
-              <Ionicons
-                name={showPassword ? "eye-outline" : "eye-off-outline"}
-                size={20}
-                color="#15803D"
-              />
-            </View>
-          </View>
-
-          <View
-            style={[
-              styles.inputGroup,
-              confirmFocused && styles.inputGroupFocused,
-              errorText === "Passwords do not match." && styles.inputGroupError,
-            ]}
-          >
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor="#737373"
-              value={confirmPassword}
-              onChangeText={(v) => {
-                setConfirmPassword(v);
-                if (errorText) setErrorText(null);
-              }}
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-              onFocus={() => setConfirmFocused(true)}
-              onBlur={() => setConfirmFocused(false)}
-            />
-            <View
-              style={styles.eyeIcon}
-              onTouchEnd={() => setShowConfirmPassword((prev) => !prev)}
-            >
-              <Ionicons
-                name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
-                size={20}
-                color="#15803D"
-              />
-            </View>
           </View>
 
           {errorText ? <ThemedText style={styles.errorText}>{errorText}</ThemedText> : null}
@@ -308,57 +219,62 @@ export default function ChangePasswordScreen() {
           {!successText ? (
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleChangePassword}
+              onPress={handleChangeEmail}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <ThemedText style={styles.buttonText}>Update Password</ThemedText>
+                <ThemedText style={styles.buttonText}>Update Email</ThemedText>
               )}
             </TouchableOpacity>
           ) : null}
 
           {successText ? (
-            <View
-              style={[
-                styles.successBanner,
-                logoutCancelled ? styles.cancelBanner : null,
-              ]}
-            >
+            <View style={[styles.successBanner, updateCancelled ? styles.cancelBanner : null]}>
               <View style={styles.successRow}>
                 <Ionicons
-                  name={logoutCancelled ? "close-circle" : "checkmark-circle"}
+                  name={
+                    updateCancelled
+                      ? "close-circle"
+                      : updateCompleted
+                        ? "checkmark-circle"
+                        : "time-outline"
+                  }
                   size={16}
-                  color={logoutCancelled ? "#B91C1C" : "#15803D"}
+                  color={updateCancelled ? "#B91C1C" : "#15803D"}
                   style={styles.successIcon}
                 />
                 <View style={styles.successTextWrap}>
-                  <ThemedText
-                    style={[
-                      styles.successTextMain,
-                      logoutCancelled ? styles.cancelTextMain : null,
-                    ]}
-                  >
-                    {logoutCancelled ? "Password update cancelled." : "Password update pending."}
+                  <ThemedText style={[styles.successTextMain, updateCancelled ? styles.cancelTextMain : null]}>
+                    {updateCancelled
+                      ? "Email update cancelled."
+                      : updateCompleted
+                        ? "Email update requested."
+                        : "Email update pending."}
                   </ThemedText>
-                  {!logoutCancelled && logoutCountdown != null && logoutCountdown > 0 ? (
+                  {!updateCancelled && !updateCompleted && updateCountdown != null && updateCountdown > 0 ? (
                     <ThemedText style={styles.successTextSub}>
-                      Updating and signing out in {logoutCountdown}s.
+                      Updating in {updateCountdown}s.
+                    </ThemedText>
+                  ) : updateCompleted ? (
+                    <ThemedText style={styles.successTextSub}>
+                      Check your inbox to confirm.
                     </ThemedText>
                   ) : null}
                 </View>
               </View>
-              {!logoutCancelled && logoutCountdown != null && logoutCountdown > 0 ? (
+
+              {!updateCancelled && !updateCompleted && updateCountdown != null && updateCountdown > 0 ? (
                 <Pressable
                   style={styles.cancelCountdownBtn}
                   onPress={() => {
-                    stopLogoutCountdown();
-                    setLogoutCancelled(true);
+                    stopUpdateCountdown();
+                    setUpdateCancelled(true);
                   }}
                 >
                   <ThemedText style={styles.cancelCountdownText}>
-                    Cancel password update
+                    Cancel email update
                   </ThemedText>
                 </Pressable>
               ) : null}
@@ -477,20 +393,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  passwordHelperRow: {
+  helperRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
     marginLeft: 2,
   },
-  passwordHelperIcon: {
+  helperIcon: {
     marginRight: 4,
   },
-  passwordHelperText: {
+  helperText: {
     fontSize: 11,
     color: "#9CA3AF",
   },
-  passwordHelperTextSuccess: {
+  helperTextSuccess: {
     color: "#15803D",
   },
   inputGroup: {
@@ -516,15 +432,12 @@ const styles = StyleSheet.create({
     color: "#197C47",
     backgroundColor: "transparent",
   },
-  eyeIcon: {
-    padding: 4,
-  },
   errorText: {
     color: "#B91C1C",
     fontSize: 12,
     marginTop: -2,
     marginBottom: 8,
-    textAlign: "center",
+    marginLeft: 2,
   },
   button: {
     height: 48,

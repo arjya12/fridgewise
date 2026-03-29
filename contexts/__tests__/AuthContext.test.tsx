@@ -3,6 +3,12 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import React from "react";
 import { AuthProvider, useAuth } from "../AuthContext";
 
+jest.mock("@react-native-async-storage/async-storage", () => ({
+  getItem: jest.fn().mockResolvedValue(null),
+  setItem: jest.fn().mockResolvedValue(undefined),
+  removeItem: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock Supabase
 jest.mock("@/lib/supabase", () => ({
   supabase: {

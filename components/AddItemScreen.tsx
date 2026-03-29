@@ -1,6 +1,11 @@
 import { ThemedText } from "@/components/ThemedText";
 import ScreenLayout from "@/components/ScreenLayout";
 import { FoodItem } from "@/lib/supabase";
+import {
+  MAX_INVENTORY_QUANTITY,
+  clampIntegerQuantity,
+  sanitizeQuantityInputString,
+} from "@/utils/quantityLimits";
 import { foodItemsService } from "@/services/foodItems";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -10,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Easing,
@@ -35,6 +41,7 @@ import {
   DropIcon,
   BoneIcon,
   FishIcon,
+  ForkKnifeIcon,
   CarrotIcon,
   AppleLogoIcon,
   BreadIcon,
@@ -44,6 +51,8 @@ import {
   CoffeeIcon,
   BeerBottleIcon,
   CookingPotIcon,
+  JarIcon,
+  CylinderIcon,
   SnowflakeIcon,
   PackageIcon,
 } from "phosphor-react-native";
@@ -96,15 +105,18 @@ const CATEGORY_OPTIONS: {
   { label: "Dairy", Icon: DropIcon },
   { label: "Meat", Icon: BoneIcon },
   { label: "Seafood", Icon: FishIcon },
+  { label: "Deli", Icon: ForkKnifeIcon },
   { label: "Vegetables", Icon: CarrotIcon },
   { label: "Fruits", Icon: AppleLogoIcon },
   { label: "Bakery", Icon: BreadIcon },
   { label: "Eggs", Icon: EggIcon },
   { label: "Grains", Icon: GrainsIcon },
+  { label: "Canned", Icon: CylinderIcon },
   { label: "Snacks", Icon: CookieIcon },
   { label: "Beverages", Icon: CoffeeIcon },
   { label: "Condiments", Icon: BeerBottleIcon },
-  { label: "Prepared Meals", Icon: CookingPotIcon },
+  { label: "Sauces", Icon: JarIcon },
+  { label: "Ready-to-eat", Icon: CookingPotIcon },
   { label: "Frozen", Icon: SnowflakeIcon },
   { label: "Other", Icon: PackageIcon },
 ];
@@ -202,9 +214,51 @@ export default function AddItemScreen() {
     outputRange: [24, 0],
   });
   const insets = useSafeAreaInsets();
+  const navigateBackAfterSuccessRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Calendar context for real-time updates after save
   const { refresh, invalidateCache } = useCalendar();
+
+  const runSuccessCelebrationAndExit = useCallback(() => {
+    successAnim.setValue(0);
+    successPop.setValue(0);
+    setShowSuccess(true);
+    Keyboard.dismiss();
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.parallel([
+      Animated.spring(successAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 72,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(70),
+        Animated.spring(successPop, {
+          toValue: 1,
+          friction: 5,
+          tension: 135,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    if (navigateBackAfterSuccessRef.current) {
+      clearTimeout(navigateBackAfterSuccessRef.current);
+    }
+    navigateBackAfterSuccessRef.current = setTimeout(() => {
+      navigateBackAfterSuccessRef.current = null;
+      router.back();
+    }, 1500);
+  }, [successAnim, successPop]);
+
+  useEffect(() => {
+    return () => {
+      if (navigateBackAfterSuccessRef.current) {
+        clearTimeout(navigateBackAfterSuccessRef.current);
+      }
+    };
+  }, []);
 
   // Add icon requires
   const fridgeIcon = require("../assets/images/icons/fridge_icon.png");
@@ -331,8 +385,9 @@ export default function AddItemScreen() {
         setQuantity(String(item.quantity));
         setUnit(item.unit || "pcs");
         setLocation(item.location as "fridge" | "shelf");
-        const cat = item.category || "";
-        // Map legacy categories to chip set (Dairy, Meat, Vegetables, Fruits, Beverages, Other)
+        let cat = item.category || "";
+        if (cat === "Prepared Meals") cat = "Ready-to-eat";
+        // Map legacy / unknown categories to chip set
         setCategory(CATEGORY_LABELS.includes(cat) ? cat : cat ? "Other" : "");
         setNotes(item.notes || "");
         setExpiryDate(parseYmdToLocalDate(item.expiry_date ?? undefined));
@@ -352,8 +407,14 @@ export default function AddItemScreen() {
       return;
     }
 
-    const quantityNum = parseFloat(quantity);
-    if (isNaN(quantityNum) || quantityNum <= 0) {
+    const qStr =
+      quantity.trim() === "" ? "1" : sanitizeQuantityInputString(quantity);
+    const quantityNum = clampIntegerQuantity(
+      parseInt(qStr, 10),
+      1,
+      MAX_INVENTORY_QUANTITY
+    );
+    if (quantityNum <= 0) {
       Alert.alert("Error", "Please enter a valid quantity");
       return;
     }
@@ -380,12 +441,11 @@ export default function AddItemScreen() {
       } else {
         await foodItemsService.addItem(itemData);
       }
-      // Refresh calendar/state in background; don't block navigation.
       try {
         invalidateCache();
         void refresh();
       } catch {}
-      router.back();
+      runSuccessCelebrationAndExit();
     } catch (error: any) {
       Alert.alert("Error", error.message);
     } finally {
@@ -394,12 +454,17 @@ export default function AddItemScreen() {
   };
 
   return (
-    <ScreenLayout topInsetColor="#22C55E" backgroundColor="#FFF">
+    <ScreenLayout
+      topInsetColor={showSuccess ? "#FFFFFF" : "#22C55E"}
+      backgroundColor="#FFF"
+    >
       <StatusBar
         barStyle="dark-content"
         translucent
-        backgroundColor="transparent"
+        backgroundColor={showSuccess ? "#FFFFFF" : "transparent"}
       />
+      {!showSuccess && (
+        <>
       {/* Add Item / Edit Item Heading with green background */}
       <View
         style={{
@@ -539,6 +604,8 @@ export default function AddItemScreen() {
           </ThemedText>
         </Pressable>
       </View>
+        </>
+      )}
       {/* Main Content with horizontal padding */}
       {!showSuccess && (
         <KeyboardAvoidingView
@@ -652,7 +719,15 @@ export default function AddItemScreen() {
                         <Pressable
                           onPress={() => {
                             setQuantity((q) =>
-                              String(Math.max(1, (parseInt(q) || 1) - 1))
+                              String(
+                                Math.max(
+                                  1,
+                                  Math.min(
+                                    MAX_INVENTORY_QUANTITY,
+                                    (parseInt(q, 10) || 1) - 1
+                                  )
+                                )
+                              )
                             );
                             Haptics.selectionAsync();
                           }}
@@ -681,23 +756,43 @@ export default function AddItemScreen() {
                           </ThemedText>
                         </Pressable>
 
-                        <ThemedText
+                        <TextInput
+                          value={quantity}
+                          onChangeText={(t) =>
+                            setQuantity(sanitizeQuantityInputString(t, { allowEmpty: true }))
+                          }
+                          onBlur={() =>
+                            setQuantity((q) =>
+                              q.trim() === ""
+                                ? "1"
+                                : sanitizeQuantityInputString(q)
+                            )
+                          }
+                          keyboardType="number-pad"
+                          selectTextOnFocus
                           style={{
-                            minWidth: 18,
+                            minWidth: 28,
+                            maxWidth: 56,
                             textAlign: "center",
                             fontSize: 15,
                             color: "#111",
                             fontWeight: "800",
                             fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                            paddingVertical: 0,
+                            paddingHorizontal: 2,
                           }}
-                        >
-                          {String(Math.max(1, parseInt(quantity) || 1))}
-                        </ThemedText>
+                          accessibilityLabel="Quantity"
+                        />
 
                         <Pressable
                           onPress={() => {
                             setQuantity((q) =>
-                              String(Math.min(999, (parseInt(q) || 1) + 1))
+                              String(
+                                Math.min(
+                                  MAX_INVENTORY_QUANTITY,
+                                  (parseInt(q, 10) || 1) + 1
+                                )
+                              )
                             );
                             Haptics.selectionAsync();
                           }}
@@ -974,8 +1069,7 @@ export default function AddItemScreen() {
                   !unit.trim() ||
                   !location ||
                   !category ||
-                  !expiryDate ||
-                  loading
+                  !expiryDate
                 }
                 loading={loading}
                 singleLineText
@@ -1361,15 +1455,23 @@ function GradientAddItemButton(props: GradientAddItemButtonProps) {
           height: 52,
           borderRadius: 26,
           overflow: "hidden",
-          opacity: disabled ? 0.6 : 1,
+          opacity: loading ? 1 : disabled ? 0.6 : 1,
           shadowColor: "#22C55E",
-          shadowOpacity: disabled ? 0 : 0.18,
+          shadowOpacity: loading || !disabled ? 0.12 : 0,
           shadowRadius: 8,
-          elevation: disabled ? 0 : 4,
+          elevation: loading || !disabled ? 4 : 0,
+          borderWidth: loading ? 2 : 0,
+          borderColor: loading ? "#22C55E" : "transparent",
         }}
       >
         <LinearGradient
-          colors={disabled ? ["#A1A1AB", "#A1A1AB"] : ["#22C55E", "#16A34A"]}
+          colors={
+            loading
+              ? ["#FFFFFF", "#FFFFFF"]
+              : disabled
+                ? ["#A1A1AB", "#A1A1AB"]
+                : ["#22C55E", "#16A34A"]
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={{
@@ -1381,23 +1483,24 @@ function GradientAddItemButton(props: GradientAddItemButtonProps) {
             paddingHorizontal: 12,
           }}
         >
-          <Ionicons
-            name={loading ? "checkmark" : "add"}
-            size={24}
-            color="#FFF"
-            style={{ marginRight: 10 }}
-          />
-          <Text
-            style={{
-              color: "#FFF",
-              fontSize: 20,
-              fontWeight: "700",
-              fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-              letterSpacing: 0.5,
-            }}
-          >
-            {loading ? "Saving..." : actionLabel}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color="#22C55E" size="small" />
+          ) : (
+            <>
+              <Ionicons name="add" size={24} color="#FFF" style={{ marginRight: 10 }} />
+              <Text
+                style={{
+                  color: "#FFF",
+                  fontSize: 20,
+                  fontWeight: "700",
+                  fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                  letterSpacing: 0.5,
+                }}
+              >
+                {actionLabel}
+              </Text>
+            </>
+          )}
         </LinearGradient>
       </Pressable>
     </Animated.View>
@@ -1442,29 +1545,34 @@ function FloatingAddItemButton(props: {
           minWidth: 70,
           height: 44,
           borderRadius: 22,
-          backgroundColor: disabled ? "#A1EACB" : "#22C55E",
+          backgroundColor: loading ? "#FFFFFF" : disabled ? "#A1EACB" : "#22C55E",
           alignItems: "center",
           justifyContent: "center",
-          opacity: disabled ? 0.7 : 1,
+          opacity: loading ? 1 : disabled ? 0.7 : 1,
           paddingHorizontal: 18,
+          borderWidth: loading ? 2 : 0,
+          borderColor: loading ? "#22C55E" : "transparent",
         }}
         accessibilityRole="button"
         accessibilityLabel={actionLabel}
       >
-        {/* Ensure all text is wrapped in <Text> */}
-        <Text
-          style={{
-            color: "#FFF",
-            fontSize: 15,
-            fontWeight: "700",
-            fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-            letterSpacing: 0.5,
-            textAlign: "center",
-            lineHeight: 18,
-          }}
-        >
-          {loading ? "Saving..." : singleLineText ? actionLabel : actionLabel.replace(" ", "\n")}
-        </Text>
+        {loading ? (
+          <ActivityIndicator color="#22C55E" size="small" />
+        ) : (
+          <Text
+            style={{
+              color: "#FFF",
+              fontSize: 15,
+              fontWeight: "700",
+              fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+              letterSpacing: 0.5,
+              textAlign: "center",
+              lineHeight: 18,
+            }}
+          >
+            {singleLineText ? actionLabel : actionLabel.replace(" ", "\n")}
+          </Text>
+        )}
       </Pressable>
     </Animated.View>
   );

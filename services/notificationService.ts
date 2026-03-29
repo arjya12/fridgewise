@@ -59,8 +59,8 @@ async function setupNotificationChannels() {
     });
 
     await Notifications.setNotificationChannelAsync("low-stock-alerts", {
-      name: "Low Stock Alerts",
-      description: "Notifications for items that are running low",
+      name: "Grocery list",
+      description: "Weekday reminders for items on your Groceries list",
       importance: Notifications.AndroidImportance.DEFAULT,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#0284C7",
@@ -74,14 +74,30 @@ async function setupNotificationChannels() {
   }
 }
 
+const ACCENT_EXPIRY = "#15803D";
+const ACCENT_LOW_STOCK = "#0284C7";
+
+function iosSubtitleForData(data: Record<string, unknown>): string | undefined {
+  const t = data.type;
+  if (t === "expiry") return "FridgeWise · Expiring soon";
+  if (t === "low_stock") return "FridgeWise · Running low";
+  if (t === "grocery_list") return "FridgeWise · Grocery list";
+  return undefined;
+}
+
+function androidAccentColor(channelId: string): string {
+  if (channelId === "low-stock-alerts") return ACCENT_LOW_STOCK;
+  return ACCENT_EXPIRY;
+}
+
 /**
- * Schedule a local notification
- * @param title The title of the notification
- * @param body The body text of the notification
- * @param data Any additional data to include with the notification
- * @param channelId The Android notification channel ID
- * @param trigger When the notification should be triggered
- * @returns A promise that resolves to the notification identifier
+ * Schedule a local notification.
+ *
+ * Design notes (Expo / OS limits):
+ * - Title + body (+ iOS subtitle) are yours to phrase; Android also uses `color` for accent.
+ * - Custom layout HTML or arbitrary banner art is not supported for basic local notifications.
+ * - In Expo Go, the small icon is Expo’s; a dev/production build uses your app icon and
+ *   optional `expo.notification.icon` (Android: white-on-transparent silhouette).
  */
 export async function scheduleNotification(
   title: string,
@@ -91,18 +107,50 @@ export async function scheduleNotification(
   trigger: Notifications.NotificationTriggerInput = null
 ) {
   try {
+    const subtitle = iosSubtitleForData(data);
+
     return await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
         data,
-        ...(Platform.OS === "android" ? { channelId } : {}),
+        ...(subtitle ? { subtitle } : {}),
+        ...(Platform.OS === "ios"
+          ? {}
+          : {
+              channelId,
+              color: androidAccentColor(channelId),
+            }),
       },
       trigger,
     });
   } catch (error) {
     console.warn("Failed to schedule notification:", error);
     return null;
+  }
+}
+
+/** Cancel every scheduled local notification (expiry, grocery, tests, etc.). */
+export async function cancelAllScheduledLocalNotifications(): Promise<void> {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch (e) {
+    console.warn("Failed to cancel scheduled notifications:", e);
+  }
+}
+
+/** Cancel scheduled local notifications created for the in-app grocery list feature. */
+export async function cancelScheduledGroceryListReminders(): Promise<void> {
+  try {
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of all) {
+      const t = n.content.data?.type;
+      if (t === "grocery_list") {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to cancel grocery list reminders:", e);
   }
 }
 

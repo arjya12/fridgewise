@@ -93,12 +93,26 @@ const FOOD_ICON_MAP: Record<string, string> = {
   // Default fallbacks by category
   dairy: "🥛",
   meat: "🥩",
+  seafood: "🐟",
+  deli: "🥪",
   vegetable: "🥬",
+  vegetables: "🥬",
   fruit: "🍎",
+  fruits: "🍎",
+  bakery: "🍞",
+  eggs: "🥚",
+  grains: "🍚",
+  canned: "🥫",
+  sauces: "🫙",
+  sauce: "🫙",
+  "ready-to-eat": "🍱",
   beverage: "🥤",
+  beverages: "🥤",
   snack: "🍿",
+  snacks: "🍿",
   frozen: "🧊",
   condiment: "🥄",
+  condiments: "🧂",
 };
 
 /**

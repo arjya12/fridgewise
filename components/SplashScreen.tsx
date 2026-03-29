@@ -1,45 +1,72 @@
-import { setPendingResetPasswordUrl } from '@/lib/pendingResetUrl';
+import { useAuth } from "@/contexts/AuthContext";
+import { setPendingResetPasswordUrl } from "@/lib/pendingResetUrl";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
-import React, { useEffect } from 'react';
-import { Dimensions, Image, StyleSheet, View } from 'react-native';
+import { useRouter } from "expo-router";
+import * as Linking from "expo-linking";
+import React, { useEffect, useState } from "react";
+import {
+  Dimensions,
+  Image,
+  InteractionManager,
+  StyleSheet,
+  View,
+} from "react-native";
 
-const { width, height } = Dimensions.get('window');
-const BACKGROUND_COLOR = 'rgb(204, 245, 201)';
+const { width, height } = Dimensions.get("window");
+const BACKGROUND_COLOR = "rgb(204, 245, 201)";
+const MIN_SPLASH_MS = 2000;
 
 export default function SplashScreen() {
   const router = useRouter();
+  const { loading, session } = useAuth();
+  const [minSplashElapsed, setMinSplashElapsed] = useState(false);
 
   useEffect(() => {
+    const t = setTimeout(() => setMinSplashElapsed(true), MIN_SPLASH_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (loading || !minSplashElapsed) return;
+
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
 
     const go = (path: string) => {
-      if (!cancelled) router.replace(path as any);
+      if (!cancelled) router.replace(path as never);
     };
 
-    Linking.getInitialURL().then((url) => {
-      if (cancelled) return;
-      if (url && url.includes('reset-password') && url.includes('#')) {
-        setPendingResetPasswordUrl(url);
-        go('/(auth)/reset-password');
-        return;
-      }
-      timer = setTimeout(() => go('/(auth)/welcome'), 2000);
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Let window insets / safe-area metrics match post–manual-login before navigating.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          void Linking.getInitialURL().then((url) => {
+            if (cancelled) return;
+            if (url && url.includes("reset-password") && url.includes("#")) {
+              setPendingResetPasswordUrl(url);
+              go("/(auth)/reset-password");
+              return;
+            }
+            if (session?.user) {
+              go("/(tabs)");
+            } else {
+              go("/(auth)/welcome");
+            }
+          });
+        });
+      });
     });
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      task.cancel?.();
     };
-  }, []);
+  }, [loading, minSplashElapsed, router, session]);
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" backgroundColor={BACKGROUND_COLOR} translucent={false} />
       <Image
-        source={require('../assets/images/launchpng.png')}
+        source={require("../assets/images/launchpng.png")}
         style={styles.logo}
         resizeMode="contain"
         accessible
@@ -53,11 +80,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: BACKGROUND_COLOR,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   logo: {
     width: width * 0.7,
     height: height * 0.35,
   },
-}); 
+});

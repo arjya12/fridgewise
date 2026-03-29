@@ -1,5 +1,11 @@
 // services/foodItems.ts
 import { FoodItem, supabase, UsageLog } from "@/lib/supabase";
+import { normalizeFoodName } from "@/utils/normalizeFoodName";
+import {
+  assertNewItemQuantity,
+  assertStoredQuantity,
+  assertUsageQuantity,
+} from "@/utils/quantityLimits";
 import {
   addUrgencyToItem,
   addUrgencyToItems,
@@ -113,11 +119,14 @@ export const foodItemsService = {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) throw new Error("User not authenticated");
 
+    assertNewItemQuantity(item.quantity);
+
     const { data, error } = await supabase
       .from("food_items")
       .insert({
         ...item,
         user_id: userData.user.id,
+        normalized_name: normalizeFoodName(item.name ?? ""),
       })
       .select()
       .single();
@@ -133,9 +142,13 @@ export const foodItemsService = {
     id: string,
     updates: Partial<FoodItem>
   ): Promise<FoodItemWithUrgency> {
+    const payload: Partial<FoodItem> = { ...updates };
+    if (typeof updates.name === "string") {
+      payload.normalized_name = normalizeFoodName(updates.name);
+    }
     const { data, error } = await supabase
       .from("food_items")
-      .update(updates)
+      .update(payload)
       .eq("id", id)
       .select()
       .single();
@@ -146,8 +159,23 @@ export const foodItemsService = {
     return addUrgencyToItem(data as FoodItem);
   },
 
-  // Delete a food item
+  /**
+   * Remove an inventory row without recording waste/consumption.
+   * Also deletes usage_logs for this item so lifetime insights (e.g. More → items in total)
+   * are not driven by a stray used/wasted row after the line is gone.
+   */
   async deleteItem(id: string): Promise<void> {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) throw new Error("User not authenticated");
+
+    const { error: logsError } = await supabase
+      .from("usage_logs")
+      .delete()
+      .eq("item_id", id)
+      .eq("user_id", userData.user.id);
+
+    if (logsError) throw logsError;
+
     const { error } = await supabase.from("food_items").delete().eq("id", id);
 
     if (error) throw error;
@@ -183,6 +211,9 @@ export const foodItemsService = {
       .single();
 
     if (itemError) throw itemError;
+
+    const stock = (item as FoodItem).quantity;
+    assertUsageQuantity(quantity, stock);
 
     // Log the usage
     const { error: logError } = await supabase.from("usage_logs").insert({
@@ -262,9 +293,12 @@ export const batchOperations = {
     updates: Array<{ id: string; updates: Partial<FoodItem> }>
   ): Promise<void> {
     try {
-      const promises = updates.map(({ id, updates: itemUpdates }) =>
-        supabase.from("food_items").update(itemUpdates).eq("id", id)
-      );
+      const promises = updates.map(({ id, updates: itemUpdates }) => {
+        if (itemUpdates.quantity !== undefined) {
+          assertStoredQuantity(itemUpdates.quantity);
+        }
+        return supabase.from("food_items").update(itemUpdates).eq("id", id);
+      });
 
       const results = await Promise.allSettled(promises);
 

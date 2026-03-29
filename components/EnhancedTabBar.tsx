@@ -3,13 +3,24 @@
  * Professional 4-tab navigation with integrated FAB and Speed Dial
  */
 
+import { BottomTabBarHeightCallbackContext } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useContext, useState } from "react";
+import {
+  LayoutChangeEvent,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SpeedDial, SpeedDialAction } from "./SpeedDial";
+
+/** Extra space above the safe-area line (float look). System nav is cleared by `insets.bottom`, not this alone. */
+const PILL_FLOAT_GAP = 10;
 
 // =============================================================================
 // INTERFACES
@@ -78,8 +89,16 @@ export function EnhancedTabBar({
   descriptors,
   navigation,
 }: TabBarProps) {
-  const insets = useSafeAreaInsets();
   const [speedDialVisible, setSpeedDialVisible] = useState(false);
+  const insets = useSafeAreaInsets();
+  const onTabBarHeightChange = useContext(BottomTabBarHeightCallbackContext);
+
+  const handleTabBarLayout = (e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height;
+    if (h > 0) {
+      onTabBarHeightChange?.(h);
+    }
+  };
 
   // Fixed light theme colors
   const backgroundColor = "#FFFFFF";
@@ -175,7 +194,7 @@ export function EnhancedTabBar({
           <View style={styles.iconContainer}>
             <Ionicons
               name={iconName as any}
-              size={24}
+              size={22}
               color={isFocused ? activeColor : inactiveColor}
             />
           </View>
@@ -212,7 +231,7 @@ export function EnhancedTabBar({
         accessibilityLabel="Add new item"
         accessibilityHint="Opens the Add Item screen"
       >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
+        <Ionicons name="add" size={26} color="#FFFFFF" />
       </Pressable>
 
       {/* FAB Shadow for iOS */}
@@ -231,15 +250,14 @@ export function EnhancedTabBar({
   return (
     <>
       {/* Tab Bar Container with Absolute Positioning for Full Screen Extension */}
-      <View style={styles.tabBarContainer}>
-        {/* Floating oval background */}
+      <View style={styles.tabBarContainer} onLayout={handleTabBarLayout}>
         <View
           style={[
             styles.tabBarPill,
             {
               backgroundColor,
               borderColor,
-              marginBottom:  37,
+              marginBottom: insets.bottom + PILL_FLOAT_GAP,
             },
           ]}
         >
@@ -292,24 +310,31 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     marginHorizontal: 16,
     alignSelf: "stretch",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderWidth: 1,
-    // Soft floating shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 6,
+    // Keep float subtle; strong downward shadow + elevation bleeds over system nav on Android.
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+      default: {},
+    }),
   },
   tabBarContent: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    minHeight: 52,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    minHeight: 44,
   },
   tabSection: {
     flex: 1,
@@ -319,8 +344,8 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingVertical: 5,
+    borderRadius: 14,
     marginHorizontal: 4,
   },
   tabContent: {
@@ -328,17 +353,17 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     textAlign: "center",
-    marginTop: 2,
+    marginTop: 1,
   },
   activeIndicator: {
     position: "absolute",
@@ -349,12 +374,12 @@ const styles = StyleSheet.create({
   },
   fabContainer: {
     position: "relative",
-    marginHorizontal: 16,
+    marginHorizontal: 12,
   },
   fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
     // Flatten FAB – no icon shadow
@@ -373,7 +398,7 @@ const styles = StyleSheet.create({
     left: 2,
     right: 2,
     bottom: 2,
-    borderRadius: 28,
+    borderRadius: 25,
     // Hide halo completely
     opacity: 0,
     zIndex: -1,

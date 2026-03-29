@@ -1,536 +1,476 @@
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import { SettingsConfirmModal } from "@/components/SettingsConfirmModal";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useRef, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Modal,
+  clearAllAppData,
+  deleteUserAccount,
+} from "@/services/accountDataService";
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { router } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import {
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
-  TouchableOpacity,
   View,
 } from "react-native";
 
-// Dropdown component with proper TypeScript types and styling
-interface DropdownProps {
-  options: string[];
-  selectedValue: string;
-  onSelect: (value: string) => void;
-  isOpen: boolean;
-  onToggle: () => void;
-  placeholder?: string;
-}
+type SettingsDataModal =
+  | null
+  | { key: "signIn"; intent: "clear" | "delete" }
+  | { key: "clear" }
+  | { key: "clearOk" }
+  | { key: "clearErr"; message: string }
+  | { key: "delete1" }
+  | { key: "delete2" }
+  | { key: "deleteErr"; message: string };
 
-const Dropdown = ({
-  options,
-  selectedValue,
-  onSelect,
-  isOpen,
-  onToggle,
-  placeholder = "Select...",
-}: DropdownProps) => {
-  // Fixed light theme colors - no system detection
-  const isDark = false;
+type DataBusyOp = false | "clear" | "delete";
 
-  // Animation values
-  const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  // Run animation when dropdown is opened
-  React.useEffect(() => {
-    if (isOpen) {
-      Animated.parallel([
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      // Reset animation values when dropdown is closed
-      scaleAnim.setValue(0.95);
-      opacityAnim.setValue(0);
-    }
-  }, [isOpen, scaleAnim, opacityAnim]);
-
-  return (
-    <View style={styles.dropdownWrapper}>
-      <TouchableOpacity
-        style={[
-          styles.selector,
-          isDark && { backgroundColor: "#1C1C1E", borderColor: "#2C2C2E" },
-        ]}
-        onPress={onToggle}
-        activeOpacity={0.7}
-      >
-        <ThemedText style={styles.selectorText}>
-          {selectedValue || placeholder}
-        </ThemedText>
-        <Ionicons
-          name="chevron-down"
-          size={16}
-          color={isDark ? "#9BA1A6" : "#71717A"}
-        />
-      </TouchableOpacity>
-
-      {isOpen && (
-        <Modal
-          transparent={true}
-          animationType="none"
-          visible={isOpen}
-          onRequestClose={onToggle}
-          statusBarTranslucent={true}
-        >
-          <View style={styles.backdropOverlay}>
-            <Pressable style={styles.modalCentering} onPress={onToggle}>
-              <Animated.View
-                style={[
-                  styles.dropdownContainer,
-                  isDark && {
-                    backgroundColor: "#1C1C1E",
-                    borderColor: "#2C2C2E",
-                  },
-                  {
-                    opacity: opacityAnim,
-                    transform: [{ scale: scaleAnim }],
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.dropdownContent,
-                    isDark && { borderColor: "#2C2C2E" },
-                  ]}
-                >
-                  {options.map((item) => (
-                    <TouchableOpacity
-                      key={item}
-                      style={[
-                        styles.dropdownItem,
-                        selectedValue === item &&
-                          (isDark
-                            ? { backgroundColor: "#2C2C2E" }
-                            : styles.dropdownItemSelected),
-                      ]}
-                      onPress={() => {
-                        onSelect(item);
-                        onToggle();
-                      }}
-                    >
-                      {selectedValue === item && (
-                        <Ionicons
-                          name="checkmark"
-                          size={16}
-                          color={isDark ? "#22C55E" : "#0284C7"}
-                          style={styles.checkmarkIcon}
-                        />
-                      )}
-                      <ThemedText
-                        style={[
-                          styles.dropdownItemText,
-                          selectedValue === item &&
-                            styles.dropdownItemTextSelected,
-                        ]}
-                      >
-                        {item}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </Animated.View>
-            </Pressable>
-          </View>
-        </Modal>
-      )}
-    </View>
-  );
+type ToggleRowProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+  primaryColor: string;
+  subTextColor: string;
 };
 
-// Settings Screen component
+function ToggleRow({
+  icon,
+  title,
+  description,
+  value,
+  onValueChange,
+  primaryColor,
+  subTextColor,
+}: ToggleRowProps) {
+  return (
+    <View style={styles.settingItem}>
+      <View style={styles.settingIconContainer}>
+        <Ionicons name={icon} size={19} color="#16A34A" />
+      </View>
+      <View style={styles.settingContent}>
+        <ThemedText style={styles.settingTitle}>{title}</ThemedText>
+        <ThemedText style={[styles.settingDescription, { color: subTextColor }]}>
+          {description}
+        </ThemedText>
+      </View>
+      <View style={styles.toggleShell}>
+        <Switch
+          value={value}
+          onValueChange={onValueChange}
+          trackColor={{ false: "#D4D4D8", true: primaryColor }}
+          thumbColor="#FFFFFF"
+          ios_backgroundColor="#D4D4D8"
+        />
+      </View>
+    </View>
+  );
+}
+
+type ActionRowProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description?: string;
+  onPress: () => void;
+  subTextColor: string;
+  isDanger?: boolean;
+};
+
+function ActionRow({
+  icon,
+  title,
+  description,
+  onPress,
+  subTextColor,
+  isDanger = false,
+}: ActionRowProps) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.settingItem, pressed && styles.rowPressed]}>
+      <View style={styles.settingIconContainer}>
+        <Ionicons name={icon} size={19} color={isDanger ? "#DC2626" : "#16A34A"} />
+      </View>
+      <View style={styles.settingContent}>
+        <ThemedText style={[styles.settingTitle, isDanger ? styles.settingTitleDanger : null]}>
+          {title}
+        </ThemedText>
+        {description ? (
+          <ThemedText style={[styles.settingDescription, { color: subTextColor }]}>
+            {description}
+          </ThemedText>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#16A34A" />
+    </Pressable>
+  );
+}
+
 export default function SettingsScreen() {
-  // Fixed light theme colors - no system detection
-  const isDark = false;
   const cardBackgroundColor = "#FFFFFF";
   const cardBorderColor = "#F3F4F6";
-  const subTextColor = "#666666";
-  const primaryColor = "#22C55E"; // App's primary green color
+  const subTextColor = "#6B7280";
+  const primaryColor = "#22C55E";
+  const tabBarHeight = (useBottomTabBarHeight() as unknown as number) || 24;
 
-  // Track which dropdown is currently open
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-
-  // Use the settings context
   const {
     expiryAlerts,
     setExpiryAlerts,
     lowStockAlerts,
     setLowStockAlerts,
-    helpfulTips,
-    setHelpfulTips,
-    // removed appUpdates
-    analytics,
-    setAnalytics,
-    crashReports,
-    setCrashReports,
+    reloadSettingsFromStorage,
   } = useSettings();
+  const { user } = useAuth();
+  const [showChangeEmailSoon, setShowChangeEmailSoon] = useState(false);
+  const [showExportSoon, setShowExportSoon] = useState(false);
+  const [dataBusy, setDataBusy] = useState<DataBusyOp>(false);
+  const [dataModal, setDataModal] = useState<SettingsDataModal>(null);
 
-  const { user, userProfile } = useAuth();
+  const closeDataModal = useCallback(() => setDataModal(null), []);
+  const anyDataBusy = dataBusy !== false;
 
-  const handleToggleDropdown = (dropdownName: string) => {
-    setOpenDropdown(openDropdown === dropdownName ? null : dropdownName);
+  useEffect(() => {
+    if (!showChangeEmailSoon) return;
+    const timer = setTimeout(() => setShowChangeEmailSoon(false), 2600);
+    return () => clearTimeout(timer);
+  }, [showChangeEmailSoon]);
+
+  useEffect(() => {
+    if (!showExportSoon) return;
+    const timer = setTimeout(() => setShowExportSoon(false), 2600);
+    return () => clearTimeout(timer);
+  }, [showExportSoon]);
+
+  const runClearAllData = () => {
+    if (!user?.id) {
+      setDataModal({ key: "signIn", intent: "clear" });
+      return;
+    }
+    setDataModal({ key: "clear" });
+  };
+
+  const runDeleteAccount = () => {
+    if (!user?.id) {
+      setDataModal({ key: "signIn", intent: "delete" });
+      return;
+    }
+    setDataModal({ key: "delete1" });
+  };
+
+  const renderSettingsDataModal = () => {
+    if (!dataModal) return null;
+    switch (dataModal.key) {
+      case "signIn":
+        return (
+          <SettingsConfirmModal
+            visible
+            title="Sign in required"
+            message={
+              dataModal.intent === "clear"
+                ? "Sign in to clear your data."
+                : "Sign in to delete your account."
+            }
+            primaryLabel="OK"
+            onPrimary={closeDataModal}
+            onRequestClose={closeDataModal}
+          />
+        );
+      case "clear":
+        return (
+          <SettingsConfirmModal
+            visible
+            title="Clear all data?"
+            message="Removes inventory, history, groceries, and cache. Settings stay; you stay signed in."
+            primaryLabel="Clear"
+            primaryVariant="danger"
+            onPrimary={async () => {
+              if (!user?.id) return;
+              setDataBusy("clear");
+              try {
+                await clearAllAppData(user.id);
+                await reloadSettingsFromStorage();
+                setDataModal({ key: "clearOk" });
+              } catch (e) {
+                setDataModal({
+                  key: "clearErr",
+                  message: e instanceof Error ? e.message : "Something went wrong.",
+                });
+              } finally {
+                setDataBusy(false);
+              }
+            }}
+            onSecondary={closeDataModal}
+            busy={dataBusy === "clear"}
+            onRequestClose={dataBusy === "clear" ? () => {} : closeDataModal}
+          />
+        );
+      case "clearOk":
+        return (
+          <SettingsConfirmModal
+            visible
+            title="Data cleared"
+            message="Your Fridgewise data was removed. Settings on this device are unchanged."
+            hideFooter
+            showHeaderClose
+            headerCloseColor="#15803D"
+            autoDismissMs={5000}
+            onRequestClose={closeDataModal}
+          />
+        );
+      case "clearErr":
+        return (
+          <SettingsConfirmModal
+            visible
+            title="Could not clear data"
+            message={dataModal.message}
+            primaryLabel="OK"
+            onPrimary={closeDataModal}
+            onRequestClose={closeDataModal}
+          />
+        );
+      case "delete1":
+        return (
+          <SettingsConfirmModal
+            visible
+            title="Delete account?"
+            message="Deletes your profile and data, then signs you out. Contact support to remove your login completely."
+            primaryLabel="Continue"
+            primaryVariant="dangerOutline"
+            onPrimary={() => setDataModal({ key: "delete2" })}
+            onSecondary={closeDataModal}
+            onRequestClose={closeDataModal}
+          />
+        );
+      case "delete2":
+        return (
+          <SettingsConfirmModal
+            visible
+            accent="destructive"
+            title="Delete permanently?"
+            message="Your profile and app data will be removed. You can't undo this."
+            primaryLabel="Delete account"
+            primaryVariant="danger"
+            onPrimary={async () => {
+              if (!user?.id) return;
+              setDataBusy("delete");
+              try {
+                await deleteUserAccount(user.id);
+                setDataModal(null);
+                router.replace("/(auth)/welcome");
+              } catch (e) {
+                setDataModal({
+                  key: "deleteErr",
+                  message: e instanceof Error ? e.message : "Something went wrong.",
+                });
+              } finally {
+                setDataBusy(false);
+              }
+            }}
+            onSecondary={closeDataModal}
+            busy={dataBusy === "delete"}
+            onRequestClose={dataBusy === "delete" ? () => {} : closeDataModal}
+          />
+        );
+      case "deleteErr":
+        return (
+          <SettingsConfirmModal
+            visible
+            title="Could not delete account"
+            message={dataModal.message}
+            primaryLabel="OK"
+            onPrimary={closeDataModal}
+            onRequestClose={closeDataModal}
+          />
+        );
+      default:
+        return null;
+    }
   };
 
   return (
     <SafeAreaWrapper usePadding edges={["top"]}>
       <ThemedView style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.replace("/(tabs)/more")}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="arrow-back" size={21} color="#15803D" />
+          </Pressable>
           <ThemedText style={styles.headerTitle}>Settings</ThemedText>
-          <ThemedText style={[styles.headerSubtitle, { color: subTextColor }]}>
-            Configure app preferences
-          </ThemedText>
         </View>
 
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: tabBarHeight + 26 },
+          ]}
         >
-          {/* Account Section */}
+          <View style={styles.sectionTitleWrap}>
+            <ThemedText style={styles.sectionTitle}>Account Security</ThemedText>
+          </View>
           <View
             style={[
               styles.section,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
+              { backgroundColor: cardBackgroundColor, borderColor: cardBorderColor },
             ]}
           >
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name="person-outline"
-                size={18}
-                color={subTextColor}
-                style={styles.sectionIcon}
-              />
-              <ThemedText style={styles.sectionTitle}>Account</ThemedText>
-            </View>
-
-            {/* User Profile */}
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() => router.push("/(tabs)/profile")}
+            <Pressable
+              onPress={() => setShowChangeEmailSoon((prev) => !prev)}
+              style={({ pressed }) => [styles.settingItem, pressed && styles.rowPressed]}
             >
               <View style={styles.settingIconContainer}>
-                <Ionicons
-                  name="person-circle-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
+                <Ionicons name="mail-outline" size={19} color="#16A34A" />
               </View>
               <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  User Profile
-                </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  {userProfile?.full_name ||
-                    user?.email ||
-                    "Edit your profile information"}
-                </ThemedText>
+                <ThemedText style={styles.settingTitle}>Change Email</ThemedText>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#BBBBBB" />
-            </TouchableOpacity>
-
-            {/* Change Password */}
-            <TouchableOpacity
-              style={styles.settingItem}
+              <Ionicons
+                name={showChangeEmailSoon ? "chevron-down" : "chevron-forward"}
+                size={18}
+                color="#16A34A"
+              />
+            </Pressable>
+            {showChangeEmailSoon ? (
+              <View style={styles.changeEmailSoonWrap}>
+                <View style={styles.changeEmailSoonSeparator} />
+                <View style={styles.changeEmailSoonPill}>
+                  <ThemedText style={styles.changeEmailSoonText}>Coming soon</ThemedText>
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.settingsSeparator} />
+            <ActionRow
+              icon="key-outline"
+              title="Change Password"
               onPress={() => router.push("/(auth)/change-password")}
+              subTextColor={subTextColor}
+            />
+          </View>
+
+          <View style={styles.sectionTitleWrap}>
+            <ThemedText style={styles.sectionTitle}>Notifications</ThemedText>
+          </View>
+          <View
+            style={[
+              styles.section,
+              { backgroundColor: cardBackgroundColor, borderColor: cardBorderColor },
+            ]}
+          >
+            <ToggleRow
+              icon="timer-outline"
+              title="Expiry Alerts"
+              description="Get alerts before items expire"
+              value={expiryAlerts}
+              onValueChange={setExpiryAlerts}
+              primaryColor={primaryColor}
+              subTextColor={subTextColor}
+            />
+            <View style={styles.settingsSeparator} />
+            <ToggleRow
+              icon="basket-outline"
+              title="Grocery Reminders"
+              description="Reminders for items to buy"
+              value={lowStockAlerts}
+              onValueChange={setLowStockAlerts}
+              primaryColor={primaryColor}
+              subTextColor={subTextColor}
+            />
+          </View>
+
+          <View style={styles.sectionTitleWrap}>
+            <ThemedText style={styles.sectionTitle}>Data</ThemedText>
+          </View>
+          <View
+            style={[
+              styles.section,
+              { backgroundColor: cardBackgroundColor, borderColor: cardBorderColor },
+            ]}
+          >
+            <Pressable
+              onPress={() => setShowExportSoon((prev) => !prev)}
+              style={({ pressed }) => [styles.settingItem, pressed && styles.rowPressed]}
             >
               <View style={styles.settingIconContainer}>
-                <Ionicons name="key-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="download-outline" size={19} color="#16A34A" />
               </View>
               <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Change Password
-                </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Update your account password
+                <ThemedText style={styles.settingTitle}>Export My Data</ThemedText>
+                <ThemedText style={[styles.settingDescription, { color: subTextColor }]}>
+                  Download a copy of your data
                 </ThemedText>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#BBBBBB" />
-            </TouchableOpacity>
-          </View>
-
-          {/* App Preferences Section */}
-          <View
-            style={[
-              styles.section,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
               <Ionicons
-                name="settings-outline"
+                name={showExportSoon ? "chevron-down" : "chevron-forward"}
                 size={18}
-                color={subTextColor}
-                style={styles.sectionIcon}
+                color="#16A34A"
               />
-              <ThemedText style={styles.sectionTitle}>
-                App Preferences
-              </ThemedText>
-            </View>
-
-            {/* Helpful Tips Setting */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="bulb-outline" size={20} color="#FFFFFF" />
+            </Pressable>
+            {showExportSoon ? (
+              <View style={styles.changeEmailSoonWrap}>
+                <View style={styles.changeEmailSoonSeparator} />
+                <View style={styles.changeEmailSoonPill}>
+                  <ThemedText style={styles.changeEmailSoonText}>Coming soon</ThemedText>
+                </View>
               </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Helpful Tips
-                </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Show tips on the dashboard
-                </ThemedText>
-              </View>
-              <Switch
-                value={helpfulTips}
-                onValueChange={setHelpfulTips}
-                trackColor={{ false: "#D1D5DB", true: primaryColor }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#D1D5DB"
-              />
-            </View>
-          </View>
-
-          {/* Notifications Section */}
-          <View
-            style={[
-              styles.section,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name="notifications-outline"
-                size={18}
-                color={subTextColor}
-                style={styles.sectionIcon}
-              />
-              <ThemedText style={styles.sectionTitle}>Notifications</ThemedText>
-            </View>
-
-            {/* Expiry Alerts */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Expiry Alerts
-                </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Notify when items are about to expire
-                </ThemedText>
-              </View>
-              <Switch
-                value={expiryAlerts}
-                onValueChange={setExpiryAlerts}
-                trackColor={{ false: "#D1D5DB", true: primaryColor }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#D1D5DB"
-              />
-            </View>
-
-            {/* Low Stock Alerts */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="warning-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Low Stock Alerts
-                </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Notify when items are running low
-                </ThemedText>
-              </View>
-              <Switch
-                value={lowStockAlerts}
-                onValueChange={setLowStockAlerts}
-                trackColor={{ false: "#D1D5DB", true: primaryColor }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#D1D5DB"
-              />
-            </View>
-
-            {/* App Updates removed per requirements */}
-          </View>
-
-          {/* Data & Privacy Section */}
-          <View
-            style={[
-              styles.section,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name="shield-outline"
-                size={18}
-                color={subTextColor}
-                style={styles.sectionIcon}
-              />
-              <ThemedText style={styles.sectionTitle}>
-                Data & Privacy
-              </ThemedText>
-            </View>
-
-            {/* Analytics */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="analytics-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>Analytics</ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Help improve the app with usage data
-                </ThemedText>
-              </View>
-              <Switch
-                value={analytics}
-                onValueChange={setAnalytics}
-                trackColor={{ false: "#D1D5DB", true: primaryColor }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#D1D5DB"
-              />
-            </View>
-
-            {/* Crash Reports */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="bug-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Crash Reports
-                </ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  Send crash reports to improve stability
-                </ThemedText>
-              </View>
-              <Switch
-                value={crashReports}
-                onValueChange={setCrashReports}
-                trackColor={{ false: "#D1D5DB", true: primaryColor }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#D1D5DB"
-              />
-            </View>
-          </View>
-
-          {/* About Section */}
-          <View
-            style={[
-              styles.section,
-              {
-                backgroundColor: cardBackgroundColor,
-                borderColor: cardBorderColor,
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name="information-circle-outline"
-                size={18}
-                color={subTextColor}
-                style={styles.sectionIcon}
-              />
-              <ThemedText style={styles.sectionTitle}>About</ThemedText>
-            </View>
-
-            {/* Version */}
-            <View style={styles.settingItem}>
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="code-outline" size={20} color="#FFFFFF" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>Version</ThemedText>
-                <ThemedText
-                  style={[styles.settingDescription, { color: subTextColor }]}
-                >
-                  1.0.0
-                </ThemedText>
-              </View>
-            </View>
-
-            {/* Terms of Service removed per requirements */}
-
-            {/* Privacy Policy */}
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() =>
-                Alert.alert(
-                  "Privacy Policy",
-                  "Privacy Policy will be available in a future update."
-                )
-              }
+            ) : null}
+            <View style={styles.settingsSeparator} />
+            <Pressable
+              onPress={runClearAllData}
+              disabled={anyDataBusy}
+              style={({ pressed }) => [
+                styles.settingItem,
+                pressed && styles.rowPressed,
+                anyDataBusy && styles.rowDisabled,
+              ]}
             >
               <View style={styles.settingIconContainer}>
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
+                <Ionicons name="trash-bin-outline" size={19} color="#16A34A" />
               </View>
               <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>
-                  Privacy Policy
+                <ThemedText style={styles.settingTitle}>Clear All Data</ThemedText>
+                <ThemedText style={[styles.settingDescription, { color: subTextColor }]}>
+                  Remove all existing data
                 </ThemedText>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#BBBBBB" />
-            </TouchableOpacity>
+              <Ionicons name="chevron-forward" size={18} color="#16A34A" />
+            </Pressable>
+            <View style={styles.settingsSeparator} />
+            <Pressable
+              onPress={runDeleteAccount}
+              disabled={anyDataBusy}
+              style={({ pressed }) => [
+                styles.settingItem,
+                pressed && styles.rowPressed,
+                anyDataBusy && styles.rowDisabled,
+              ]}
+            >
+              <View style={styles.settingIconContainer}>
+                <Ionicons name="alert-circle-outline" size={19} color="#DC2626" />
+              </View>
+              <View style={styles.settingContent}>
+                <ThemedText style={[styles.settingTitle, styles.settingTitleDanger]}>
+                  Delete Account
+                </ThemedText>
+                <ThemedText style={[styles.settingDescription, { color: subTextColor }]}>
+                  Permanently delete your account and all data
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#16A34A" />
+            </Pressable>
           </View>
         </ScrollView>
       </ThemedView>
+      {renderSettingsDataModal()}
     </SafeAreaWrapper>
   );
 }
@@ -538,153 +478,133 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 16,
+    paddingTop: 6,
+    paddingBottom: 10,
+    position: "relative",
+  },
+  backButton: {
+    position: "absolute",
+    left: 18,
+    top: 8,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    elevation: 2,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
+    fontFamily: "PlusJakartaSans_700Bold",
     fontWeight: "700",
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    fontWeight: "400",
+    color: "#15803D",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 32,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 16,
+    paddingBottom: 34,
+    paddingTop: 6,
   },
   section: {
-    borderRadius: 16,
+    borderRadius: 14,
     marginBottom: 16,
     overflow: "hidden",
     borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(150, 150, 150, 0.1)",
-  },
-  sectionIcon: {
-    marginRight: 8,
+  sectionTitleWrap: {
+    paddingLeft: 4,
+    marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#15803D",
+    letterSpacing: 0.1,
   },
   settingItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  themeSettingItem: {
-    position: "relative",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
   settingIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20, // Make it circular
-    backgroundColor: "#22C55E", // Use app's primary green color
+    width: 24,
+    height: 24,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
   settingContent: {
     flex: 1,
+    paddingRight: 10,
   },
   settingTitle: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 2,
   },
+  settingTitleDanger: {
+    color: "#B91C1C",
+  },
   settingDescription: {
-    fontSize: 13,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_500Medium",
+    fontWeight: "500",
   },
   settingsSeparator: {
     height: 1,
     marginHorizontal: 16,
-    backgroundColor: "rgba(150, 150, 150, 0.1)",
+    backgroundColor: "#E5E7EB",
   },
-  themeDropdownPosition: {
-    minWidth: 100,
+  toggleShell: {
+    paddingLeft: 6,
   },
-  dropdownWrapper: {
-    position: "relative",
-    zIndex: 10,
+  rowPressed: {
+    opacity: 0.78,
   },
-  selector: {
-    flexDirection: "row",
+  rowDisabled: {
+    opacity: 0.55,
+  },
+  changeEmailSoonWrap: {
+    width: "100%",
     alignItems: "center",
-    justifyContent: "space-between",
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  changeEmailSoonSeparator: {
+    width: "92%",
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginBottom: 8,
+  },
+  changeEmailSoonPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 4,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "#E4E4E7",
-    borderRadius: 8,
-    backgroundColor: "#FFFFFF",
   },
-  selectorText: {
-    fontSize: 14,
-    marginRight: 8,
-  },
-  backdropOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalCentering: {
-    flex: 1,
-    width: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  dropdownContainer: {
-    width: 180,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E4E4E7",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  dropdownContent: {
-    width: "100%",
-  },
-  dropdownItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  dropdownItemSelected: {
-    backgroundColor: "rgba(2, 132, 199, 0.1)",
-  },
-  dropdownItemText: {
-    fontSize: 14,
-  },
-  dropdownItemTextSelected: {
-    fontWeight: "500",
-  },
-  checkmarkIcon: {
-    marginRight: 8,
+  changeEmailSoonText: {
+    fontSize: 11,
+    color: "#4B5563",
+    fontWeight: "600",
   },
 });

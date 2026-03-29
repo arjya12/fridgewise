@@ -17,6 +17,10 @@ export default function TabLayout() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["right", "left"]}>
       <Tabs
+        // Custom tab bar uses its own bottom offset; forcing bottom inset to 0
+        // avoids stale initialWindowMetrics on cold start (splash → tabs) stacking
+        // with that offset and lifting the bar vs welcome → (tabs) after manual sign-in.
+        safeAreaInsets={{ bottom: 0 }}
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: true,
@@ -24,6 +28,12 @@ export default function TabLayout() {
           freezeOnBlur: true,
           detachInactiveScreens: false,
           animation: "none",
+          tabBarStyle: {
+            position: "absolute",
+            backgroundColor: "transparent",
+            borderTopWidth: 0,
+            elevation: 0,
+          },
         }}
         tabBar={(props) => <EnhancedTabBar {...props} />}
       >
@@ -129,6 +139,18 @@ export default function TabLayout() {
             href: null, // Hide from tab bar - accessible via More
             tabBarIcon: ({ color }) => (
               <Ionicons name="person-outline" color={color} size={24} />
+            ),
+          }}
+        />
+
+        {/* About - Accessible via More menu */}
+        <Tabs.Screen
+          name="about"
+          options={{
+            title: "About",
+            href: null, // Hide from tab bar - accessible via More
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="information-circle-outline" color={color} size={24} />
             ),
           }}
         />

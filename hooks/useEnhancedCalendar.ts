@@ -4,7 +4,7 @@
  * Based on Phase 1 validated architecture
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCalendar } from "../contexts/CalendarContext";
 import { useColorScheme } from "../hooks/useColorScheme";
 import { FoodItem } from "../lib/supabase";
@@ -177,7 +177,7 @@ export function useEnhancedCalendar(
     setViewMode,
     markItemUsed,
     extendExpiry,
-    refresh,
+    refresh: contextRefresh,
     setFilters,
     clearFilters,
     setSort,
@@ -199,6 +199,7 @@ export function useEnhancedCalendar(
   } = state;
 
   const colorScheme = useColorScheme();
+  const skipNextMonthRefreshRef = useRef(true);
 
   // Memoized enhanced marked dates (precomputed for UI)
   const enhancedMarkedDates = useMemo(() => {
@@ -209,12 +210,15 @@ export function useEnhancedCalendar(
     );
   }, [data.itemsByDate]);
 
-  // Fetch new data when currentMonth changes
+  // Fetch when the visible month changes (skip first run: Calendar tab focus already refreshes)
   useEffect(() => {
-    if (context && context.refresh) {
-      context.refresh();
+    if (!contextRefresh) return;
+    if (skipNextMonthRefreshRef.current) {
+      skipNextMonthRefreshRef.current = false;
+      return;
     }
-  }, [currentMonth]);
+    void contextRefresh();
+  }, [contextRefresh, currentMonth.year, currentMonth.month]);
 
   // Note: keep marked-dates computation pure (no console logging)
 
@@ -485,7 +489,7 @@ export function useEnhancedCalendar(
     setViewMode,
     markItemUsed,
     extendExpiry,
-    refresh,
+    refresh: contextRefresh,
 
     // Filters
     filters,

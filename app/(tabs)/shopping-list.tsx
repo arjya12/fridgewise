@@ -8,6 +8,9 @@ import SkeletonBlock from "@/components/SkeletonBlock";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSettings } from "@/contexts/SettingsContext";
+import { SHOPPING_LIST_STORAGE_KEY } from "@/services/groceryListStorage";
+import { syncGroceryListReminder } from "@/services/groceryListReminderService";
 import {
   AppleLogoIcon,
   BeerBottleIcon,
@@ -16,14 +19,17 @@ import {
   CarrotIcon,
   CoffeeIcon,
   CookieIcon,
+  CookingPotIcon,
+  CylinderIcon,
   DropIcon,
   EggIcon,
   FishIcon,
+  ForkKnifeIcon,
   GrainsIcon,
   HandbagIcon,
+  JarIcon,
   PackageIcon,
   SnowflakeIcon,
-  CookingPotIcon,
 } from "phosphor-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -76,6 +82,8 @@ type GrocerySection = {
 const CATEGORY_OPTIONS = [
   { label: "Vegetables", Icon: CarrotIcon },
   { label: "Meat", Icon: BoneIcon },
+  { label: "Seafood", Icon: FishIcon },
+  { label: "Deli", Icon: ForkKnifeIcon },
   { label: "Eggs", Icon: EggIcon },
   { label: "Fruits", Icon: AppleLogoIcon },
   { label: "Dairy", Icon: DropIcon },
@@ -83,8 +91,10 @@ const CATEGORY_OPTIONS = [
   { label: "Beverages", Icon: CoffeeIcon },
   { label: "Snacks", Icon: CookieIcon },
   { label: "Grains", Icon: GrainsIcon },
+  { label: "Canned", Icon: CylinderIcon },
   { label: "Condiments", Icon: BeerBottleIcon },
-  { label: "Prepared Meals", Icon: CookingPotIcon },
+  { label: "Sauces", Icon: JarIcon },
+  { label: "Ready-to-eat", Icon: CookingPotIcon },
   { label: "Frozen", Icon: SnowflakeIcon },
   { label: "Household", Icon: PackageIcon },
   { label: "Other", Icon: HandbagIcon },
@@ -116,7 +126,7 @@ const UNIT_OPTIONS = [
 
 export default function ShoppingListScreen() {
   useAuth();
-  const STORAGE_KEY = "fridgewise_shopping_list_v1";
+  const { lowStockAlerts } = useSettings();
   const insets = useSafeAreaInsets();
   const [shoppingList, setShoppingList] = useState<GroceryItem[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -156,7 +166,7 @@ export default function ShoppingListScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        const raw = await AsyncStorage.getItem(SHOPPING_LIST_STORAGE_KEY);
         if (!raw) return;
         const parsed: any[] = JSON.parse(raw);
         const restored: GroceryItem[] = parsed.map((it) => {
@@ -185,12 +195,23 @@ export default function ShoppingListScreen() {
           ...it,
           addedDate: it.addedDate.toISOString(),
         }));
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+        await AsyncStorage.setItem(
+          SHOPPING_LIST_STORAGE_KEY,
+          JSON.stringify(toStore)
+        );
       } catch (e) {
         console.warn("Failed to save shopping list", e);
       }
     })();
   }, [shoppingList]);
+
+  useEffect(() => {
+    if (initialLoading) return;
+    const t = setTimeout(() => {
+      syncGroceryListReminder(lowStockAlerts).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [shoppingList, lowStockAlerts, initialLoading]);
 
   // =============================================================================
   // ACTIONS

@@ -49,6 +49,8 @@ export interface FoodItem {
   id: string;
   user_id: string;
   name: string;
+  /** Lowercase trimmed single-spaced name for matching; set on create/update. */
+  normalized_name?: string;
   quantity: number;
   unit?: string;
   location: "fridge" | "shelf";

@@ -1,6 +1,6 @@
 /**
- * Modal to choose how much of an item was consumed.
- * Logs to usage history and reduces/removes from inventory on confirm.
+ * Modal to choose how much of an item to throw away (waste).
+ * Logs to usage history and reduces/removes from inventory on confirm — mirrors ConsumeModal layout.
  */
 
 import { FoodItem } from "@/lib/supabase";
@@ -20,19 +20,19 @@ import {
   parseDigitsToClampedQuantity,
 } from "@/utils/quantityLimits";
 
-export interface ConsumeModalProps {
+export interface ThrowAwayModalProps {
   visible: boolean;
   item: FoodItem | null;
   onConfirm: (quantity: number) => void;
   onCancel: () => void;
 }
 
-export function ConsumeModal({
+export function ThrowAwayModal({
   visible,
   item,
   onConfirm,
   onCancel,
-}: ConsumeModalProps) {
+}: ThrowAwayModalProps) {
   const stockQty = item ? (typeof item.quantity === "number" ? item.quantity : 1) : 1;
   const maxQty = Math.min(stockQty, MAX_INVENTORY_QUANTITY);
   const isMultiQty = maxQty > 1;
@@ -64,7 +64,7 @@ export function ConsumeModal({
   if (!visible || !item) return null;
 
   const locationLabel = item.location === "fridge" ? "Fridge" : "Shelf";
-  const isConsumeAllSelected =
+  const isThrowAllSelected =
     isMultiQty && quantity >= maxQty && maxQty === stockQty;
   const showMinAction = isMultiQty && quantity > halfQty;
 
@@ -85,10 +85,13 @@ export function ConsumeModal({
       <Pressable style={styles.overlay} onPress={onCancel}>
         <View style={styles.centered}>
           <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.question}>How much did you use?</Text>
+            <Text style={styles.question}>How much are you throwing away?</Text>
             <Text style={styles.availability}>
-              Available: {formatQuantityWithUnit(maxQty, item.unit, { fallbackUnit: "pcs" })} in{" "}
+              Available: {formatQuantityWithUnit(stockQty, item.unit, { fallbackUnit: "pcs" })} in{" "}
               {locationLabel}
+              {stockQty > MAX_INVENTORY_QUANTITY
+                ? ` (max ${MAX_INVENTORY_QUANTITY} per log)`
+                : ""}
             </Text>
 
             <View style={styles.quantitySection}>
@@ -107,7 +110,7 @@ export function ConsumeModal({
                   onChangeText={onQuantityTextChange}
                   keyboardType="number-pad"
                   selectTextOnFocus
-                  accessibilityLabel="Quantity to consume"
+                  accessibilityLabel="Quantity to throw away"
                 />
                 <TouchableOpacity
                   style={[styles.qtyBtnOutlined, quantity >= maxQty && styles.qtyBtnDisabled]}
@@ -146,9 +149,9 @@ export function ConsumeModal({
               <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.8}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm} activeOpacity={0.88}>
                 <Text style={styles.confirmBtnText}>
-                  {isConsumeAllSelected ? "Consume all" : "Consume"}
+                  {isThrowAllSelected ? "Throw away all" : "Throw away"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -178,7 +181,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#FECACA",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -191,6 +194,13 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     textAlign: "center",
     marginBottom: 4,
+  },
+  wasteHint: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748B",
+    textAlign: "center",
+    marginBottom: 8,
   },
   availability: {
     fontSize: 12,
@@ -213,7 +223,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1.5,
-    borderColor: "#CBD5E1",
+    borderColor: "#FCA5A5",
     backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
@@ -254,10 +264,7 @@ const styles = StyleSheet.create({
   maxLinkText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#15803D",
-  },
-  maxLinkTextDisabled: {
-    color: "#94A3B8",
+    color: "#B91C1C",
   },
   actions: {
     flexDirection: "row",
@@ -286,13 +293,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: "#22C55E",
+    backgroundColor: "#B91C1C",
     justifyContent: "center",
     alignItems: "center",
   },
   confirmBtnText: {
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
     color: "#FFFFFF",
     textAlign: "center",
   },

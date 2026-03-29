@@ -1,16 +1,18 @@
 // app/(auth)/_layout.tsx
+// Use the root SafeAreaProvider only (see app/_layout.tsx). Nesting another
+// provider here caused inconsistent bottom insets: cold start → (tabs) looked
+// different from welcome → (tabs) (tab bar “floating” too high on Android).
 import { Stack } from "expo-router";
 import React from "react";
-import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export default function AuthLayout() {
   return (
-    <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="welcome" />
-        <Stack.Screen name="signup" />
-        <Stack.Screen name="reset-password" />
-      </Stack>
-    </SafeAreaProvider>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="welcome" />
+      <Stack.Screen name="signup" />
+      <Stack.Screen name="reset-password" />
+      <Stack.Screen name="change-password" />
+      <Stack.Screen name="change-email" />
+    </Stack>
   );
 }

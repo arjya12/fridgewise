@@ -1,19 +1,41 @@
 import { ConsumeModal } from "@/components/ConsumeModal";
 import { EnhancedCalendarScreen } from "@/components/EnhancedCalendarScreen";
+import { ThrowAwayModal } from "@/components/ThrowAwayModal";
 import ScreenLayout from "@/components/ScreenLayout";
 import SkeletonBlock from "@/components/SkeletonBlock";
+import { useAuth } from "@/contexts/AuthContext";
 import { useCalendar } from "@/contexts/CalendarContext";
 import { FoodItem } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
 import { router, useFocusEffect, useGlobalSearchParams } from "expo-router";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 
 export default function CalendarScreen() {
+  const { user } = useAuth();
   const { refresh, markItemUsed, state } = useCalendar();
   const hasRefreshedOnceRef = useRef(false);
   const lastRefreshAtRef = useRef(0);
+  /** After first completed fetch, keep calendar mounted so empty + refresh does not unmount/remount loop */
+  const calendarHydratedRef = useRef(false);
+  const prevUserIdRef = useRef<string | undefined>(user?.id);
+
+  useEffect(() => {
+    if (prevUserIdRef.current !== user?.id) {
+      prevUserIdRef.current = user?.id;
+      calendarHydratedRef.current = false;
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!state.loading) {
+      calendarHydratedRef.current = true;
+    }
+  }, [state.loading]);
   const [consumeItem, setConsumeItem] = useState<FoodItem | null>(null);
+  const [throwAwayItem, setThrowAwayItem] = useState<FoodItem | null>(null);
+  const [itemActionPendingId, setItemActionPendingId] = useState<string | null>(null);
+
   const params = useGlobalSearchParams<{
     view?: string;
     date?: string;
@@ -31,8 +53,13 @@ export default function CalendarScreen() {
 
   React.useEffect(() => {
     if (typeof params.nonce !== "string") return;
+    const hasDayFocus =
+      typeof params.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(params.date);
+    // Deep-link to a specific day always opens calendar (avoids stale ?view=timeline from last visit).
+    const view: "calendar" | "timeline" =
+      hasDayFocus ? "calendar" : params.view === "timeline" ? "timeline" : "calendar";
     setOpenIntent({
-      view: params.view === "timeline" ? "timeline" : "calendar",
+      view,
       date: typeof params.date === "string" ? params.date : undefined,
       itemId: typeof params.itemId === "string" ? params.itemId : undefined,
       nonce: params.nonce,
@@ -80,58 +107,105 @@ export default function CalendarScreen() {
   }, []);
 
   const handleDeleteItem = useCallback(
-    async (itemId: string) => {
-      try {
-        await foodItemsService.deleteItem(itemId);
-        refresh();
-      } catch (error) {
-        console.error("Failed to delete item:", error);
-        Alert.alert("Error", "Failed to delete item. Please try again.");
-      }
-    },
-    [refresh]
-  );
-
-  const handleThrowAwayItem = useCallback(
     async (item: FoodItem) => {
+      const id = String(item.id);
+      setItemActionPendingId(id);
       try {
-        const qty =
-          typeof item.quantity === "number" && item.quantity > 0
-            ? item.quantity
-            : 1;
-        await foodItemsService.logUsage(item.id, "wasted", qty);
-        refresh();
-      } catch (error) {
-        console.error("Failed to log throw away:", error);
-        Alert.alert("Error", "Failed to throw away item. Please try again.");
+        await foodItemsService.deleteItem(item.id);
+        await refresh();
+      } catch (error: any) {
+        console.error("Failed to delete item:", error);
+        Alert.alert("Error", error?.message ?? "Failed to delete item. Please try again.");
+      } finally {
+        setItemActionPendingId(null);
       }
     },
     [refresh]
   );
 
-  const handleConsumeClick = useCallback((item: FoodItem) => {
-    setConsumeItem(item);
-  }, []);
+  const performConsume = useCallback(
+    async (item: FoodItem, quantity: number) => {
+      const id = String(item.id);
+      setItemActionPendingId(id);
+      try {
+        await markItemUsed(id, quantity);
+        await refresh();
+      } catch (error: any) {
+        console.error("Failed to log consumption:", error);
+        Alert.alert("Error", error?.message ?? "Failed to log consumption. Please try again.");
+      } finally {
+        setItemActionPendingId(null);
+      }
+    },
+    [markItemUsed, refresh]
+  );
+
+  const handleConsumeClick = useCallback(
+    (item: FoodItem) => {
+      const maxQty =
+        typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
+      if (maxQty <= 1) {
+        void performConsume(item, 1);
+        return;
+      }
+      setConsumeItem(item);
+    },
+    [performConsume]
+  );
 
   const handleConsumeConfirm = useCallback(
     async (quantity: number) => {
       if (!consumeItem) return;
-      const id = consumeItem.id;
+      const item = consumeItem;
       setConsumeItem(null);
-      try {
-        await markItemUsed(id, quantity);
-        refresh();
-      } catch (error) {
-        console.error("Failed to log consumption:", error);
-        Alert.alert("Error", "Failed to log consumption. Please try again.");
-      }
+      await performConsume(item, quantity);
     },
-    [consumeItem, markItemUsed, refresh]
+    [consumeItem, performConsume]
   );
 
   const handleConsumeCancel = useCallback(() => {
     setConsumeItem(null);
   }, []);
+
+  const performThrowAway = useCallback(
+    async (item: FoodItem, quantity: number) => {
+      const id = String(item.id);
+      setItemActionPendingId(id);
+      try {
+        await foodItemsService.logUsage(item.id, "wasted", quantity);
+        await refresh();
+      } catch (error: any) {
+        console.error("Failed to log throw away:", error);
+        Alert.alert("Error", error?.message ?? "Failed to throw away item. Please try again.");
+      } finally {
+        setItemActionPendingId(null);
+      }
+    },
+    [refresh]
+  );
+
+  const handleThrowAwayConfirm = useCallback(
+    async (quantity: number) => {
+      if (!throwAwayItem) return;
+      const item = throwAwayItem;
+      setThrowAwayItem(null);
+      await performThrowAway(item, quantity);
+    },
+    [throwAwayItem, performThrowAway]
+  );
+
+  const requestThrowAwayModal = useCallback(
+    (item: FoodItem) => {
+      const maxQty =
+        typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
+      if (maxQty <= 1) {
+        void performThrowAway(item, 1);
+        return;
+      }
+      setThrowAwayItem(item);
+    },
+    [performThrowAway]
+  );
 
   const styles = StyleSheet.create({
     container: {
@@ -146,9 +220,12 @@ export default function CalendarScreen() {
     },
   });
 
+  const showInitialSkeleton =
+    state.loading && state.items.length === 0 && !calendarHydratedRef.current;
+
   return (
     <ScreenLayout topInsetColor="#22C55E" backgroundColor="#FFFFFF">
-      {state.loading && state.items.length === 0 ? (
+      {showInitialSkeleton ? (
         <View style={styles.initialSkeletonWrap}>
           <SkeletonBlock width="90%" height={44} borderRadius={20} />
           <SkeletonBlock width="70%" height={28} borderRadius={14} style={{ marginTop: 14 }} />
@@ -159,8 +236,9 @@ export default function CalendarScreen() {
           foodItemsService={foodItemsService}
           onItemPress={handleItemPress}
           onItemEdit={handleItemEdit}
-          onItemDelete={(item) => handleDeleteItem(item.id)}
-          onItemThrowAway={handleThrowAwayItem}
+          onItemDelete={handleDeleteItem}
+          onRequestThrowAwayQuantity={requestThrowAwayModal}
+          pendingItemId={itemActionPendingId}
           onConsume={handleConsumeClick}
           onAddItem={() => router.push("/(tabs)/add")}
           initialViewMode={openIntent.view}
@@ -177,6 +255,12 @@ export default function CalendarScreen() {
         item={consumeItem}
         onConfirm={handleConsumeConfirm}
         onCancel={handleConsumeCancel}
+      />
+      <ThrowAwayModal
+        visible={throwAwayItem != null}
+        item={throwAwayItem}
+        onConfirm={handleThrowAwayConfirm}
+        onCancel={() => setThrowAwayItem(null)}
       />
     </ScreenLayout>
   );

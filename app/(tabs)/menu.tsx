@@ -1,4 +1,5 @@
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import { SettingsConfirmModal } from "@/components/SettingsConfirmModal";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +18,8 @@ import {
 export default function MenuScreen() {
   const { signOut, user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [signOutModalVisible, setSignOutModalVisible] = useState(false);
+  const [signOutBusy, setSignOutBusy] = useState(false);
   // Fixed light theme colors - no system detection
   const isDark = false;
   const cardBackgroundColor = "#FFFFFF";
@@ -24,23 +27,20 @@ export default function MenuScreen() {
   const subTextColor = "#666666";
   const primaryColor = "#22C55E"; // App's primary green color
 
-  // Handle sign out
-  const handleSignOut = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await signOut();
-            router.replace("/(auth)/welcome");
-          } catch (error: any) {
-            console.error("Sign out error:", error);
-          }
-        },
-      },
-    ]);
+  const handleSignOut = () => setSignOutModalVisible(true);
+
+  const confirmSignOut = async () => {
+    setSignOutBusy(true);
+    try {
+      await signOut();
+      setSignOutModalVisible(false);
+      router.replace("/(auth)/welcome");
+    } catch (error: any) {
+      console.error("Sign out error:", error);
+      Alert.alert("Error", "Failed to sign out. Please try again.");
+    } finally {
+      setSignOutBusy(false);
+    }
   };
 
   // Navigate to enhanced reports
@@ -269,6 +269,18 @@ export default function MenuScreen() {
           </View>
         </ScrollView>
       </ThemedView>
+      <SettingsConfirmModal
+        visible={signOutModalVisible}
+        title="Sign out?"
+        message="Your data stays on your account."
+        primaryLabel="Sign out"
+        primaryVariant="danger"
+        onPrimary={confirmSignOut}
+        secondaryLabel="Cancel"
+        onSecondary={() => setSignOutModalVisible(false)}
+        busy={signOutBusy}
+        onRequestClose={signOutBusy ? () => {} : () => setSignOutModalVisible(false)}
+      />
     </SafeAreaWrapper>
   );
 }
