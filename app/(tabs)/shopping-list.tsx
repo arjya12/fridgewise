@@ -11,26 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { SHOPPING_LIST_STORAGE_KEY } from "@/services/groceryListStorage";
 import { syncGroceryListReminder } from "@/services/groceryListReminderService";
-import {
-  AppleLogoIcon,
-  BeerBottleIcon,
-  BoneIcon,
-  BreadIcon,
-  CarrotIcon,
-  CoffeeIcon,
-  CookieIcon,
-  CookingPotIcon,
-  CylinderIcon,
-  DropIcon,
-  EggIcon,
-  FishIcon,
-  ForkKnifeIcon,
-  GrainsIcon,
-  HandbagIcon,
-  JarIcon,
-  PackageIcon,
-  SnowflakeIcon,
-} from "phosphor-react-native";
+import { GROCERY_CATEGORY_OPTIONS, GROCERY_CATEGORY_ORDER } from "@/lib/foodCategories";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -78,29 +59,8 @@ type GrocerySection = {
   data: GroceryItem[];
 };
 
-// Reordered to balance long + short labels per row
-const CATEGORY_OPTIONS = [
-  { label: "Vegetables", Icon: CarrotIcon },
-  { label: "Meat", Icon: BoneIcon },
-  { label: "Seafood", Icon: FishIcon },
-  { label: "Deli", Icon: ForkKnifeIcon },
-  { label: "Eggs", Icon: EggIcon },
-  { label: "Fruits", Icon: AppleLogoIcon },
-  { label: "Dairy", Icon: DropIcon },
-  { label: "Bakery", Icon: BreadIcon },
-  { label: "Beverages", Icon: CoffeeIcon },
-  { label: "Snacks", Icon: CookieIcon },
-  { label: "Grains", Icon: GrainsIcon },
-  { label: "Canned", Icon: CylinderIcon },
-  { label: "Condiments", Icon: BeerBottleIcon },
-  { label: "Sauces", Icon: JarIcon },
-  { label: "Ready-to-eat", Icon: CookingPotIcon },
-  { label: "Frozen", Icon: SnowflakeIcon },
-  { label: "Household", Icon: PackageIcon },
-  { label: "Other", Icon: HandbagIcon },
-] as const;
-
-const CATEGORY_ORDER = CATEGORY_OPTIONS.map((c) => c.label);
+const CATEGORY_OPTIONS = GROCERY_CATEGORY_OPTIONS;
+const CATEGORY_ORDER = GROCERY_CATEGORY_ORDER;
 
 const UNIT_OPTIONS = [
   "pcs",

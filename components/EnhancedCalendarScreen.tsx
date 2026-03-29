@@ -22,25 +22,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  DropIcon,
-  BoneIcon,
-  FishIcon,
-  CarrotIcon,
-  AppleLogoIcon,
-  BreadIcon,
-  EggIcon,
-  GrainsIcon,
-  CookieIcon,
-  CoffeeIcon,
-  BeerBottleIcon,
-  CookingPotIcon,
-  CylinderIcon,
-  ForkKnifeIcon,
-  JarIcon,
-  SnowflakeIcon,
-  PackageIcon,
-} from "phosphor-react-native";
+import { getFoodCategoryIcon } from "@/lib/foodCategories";
 import { Calendar } from "react-native-calendars";
 import {
   Gesture,
@@ -94,33 +76,7 @@ function getCategoryAsset(category?: string, name?: string) {
   return require("../assets/images/food-icons/fruit.svg");
 }
 
-function getCategoryIconComponent(category?: string) {
-  const label = (category || "").toLowerCase();
-  if (label === "dairy") return DropIcon;
-  if (label === "meat") return BoneIcon;
-  if (label === "seafood") return FishIcon;
-  if (label === "deli") return ForkKnifeIcon;
-  if (label === "vegetables" || label === "vegetable") return CarrotIcon;
-  if (label === "fruits" || label === "fruit") return AppleLogoIcon;
-  if (label === "bakery" || label === "bread") return BreadIcon;
-  if (label === "eggs" || label === "egg") return EggIcon;
-  if (label === "grains" || label === "grain") return GrainsIcon;
-  if (label === "canned") return CylinderIcon;
-  if (label === "snacks") return CookieIcon;
-  if (label === "beverages") return CoffeeIcon;
-  if (label === "condiments") return BeerBottleIcon;
-  if (label === "sauces" || label === "sauce") return JarIcon;
-  if (
-    label === "ready-to-eat" ||
-    label === "ready to eat" ||
-    label === "prepared meals" ||
-    label === "prepared meal"
-  )
-    return CookingPotIcon;
-  if (label === "frozen") return SnowflakeIcon;
-  if (label === "other") return PackageIcon;
-  return PackageIcon;
-}
+const getCategoryIconComponent = getFoodCategoryIcon;
 
 function getCategoryEmoji(category?: string, name?: string) {
   const label = (category || name || "").toLowerCase();

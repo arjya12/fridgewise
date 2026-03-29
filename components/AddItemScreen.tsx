@@ -38,24 +38,10 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import {
-  DropIcon,
-  BoneIcon,
-  FishIcon,
-  ForkKnifeIcon,
-  CarrotIcon,
-  AppleLogoIcon,
-  BreadIcon,
-  EggIcon,
-  GrainsIcon,
-  CookieIcon,
-  CoffeeIcon,
-  BeerBottleIcon,
-  CookingPotIcon,
-  JarIcon,
-  CylinderIcon,
-  SnowflakeIcon,
-  PackageIcon,
-} from "phosphor-react-native";
+  FOOD_CATEGORY_LABELS,
+  FOOD_CATEGORY_OPTIONS,
+  normalizeLegacyInventoryCategory,
+} from "@/lib/foodCategories";
 import { SimpleCalendar } from "./SimpleCalendar";
 
 const commonUnits = [
@@ -98,29 +84,8 @@ const commonUnits = [
   "stick"
 ];
 
-const CATEGORY_OPTIONS: {
-  label: string;
-  Icon: React.ComponentType<{ size?: number; color?: string; weight?: "regular" | "fill" | "bold" }>;
-}[] = [
-  { label: "Dairy", Icon: DropIcon },
-  { label: "Meat", Icon: BoneIcon },
-  { label: "Seafood", Icon: FishIcon },
-  { label: "Deli", Icon: ForkKnifeIcon },
-  { label: "Vegetables", Icon: CarrotIcon },
-  { label: "Fruits", Icon: AppleLogoIcon },
-  { label: "Bakery", Icon: BreadIcon },
-  { label: "Eggs", Icon: EggIcon },
-  { label: "Grains", Icon: GrainsIcon },
-  { label: "Canned", Icon: CylinderIcon },
-  { label: "Snacks", Icon: CookieIcon },
-  { label: "Beverages", Icon: CoffeeIcon },
-  { label: "Condiments", Icon: BeerBottleIcon },
-  { label: "Sauces", Icon: JarIcon },
-  { label: "Ready-to-eat", Icon: CookingPotIcon },
-  { label: "Frozen", Icon: SnowflakeIcon },
-  { label: "Other", Icon: PackageIcon },
-];
-const CATEGORY_LABELS = CATEGORY_OPTIONS.map((o) => o.label);
+const CATEGORY_OPTIONS = FOOD_CATEGORY_OPTIONS;
+const CATEGORY_LABELS = FOOD_CATEGORY_LABELS;
 
 const parseYmdToLocalDate = (value?: string): Date | null => {
   if (!value) return null;
@@ -143,7 +108,7 @@ const formatLocalDateToYmd = (date?: Date | null): string | undefined => {
   return `${y}-${m}-${d}`;
 };
 
-const CHIPS_PER_ROW = 7;
+const CHIPS_PER_ROW = 9;
 const CATEGORY_ROW_1 = CATEGORY_OPTIONS.slice(0, CHIPS_PER_ROW);
 const CATEGORY_ROW_2 = CATEGORY_OPTIONS.slice(CHIPS_PER_ROW);
 
@@ -385,8 +350,7 @@ export default function AddItemScreen() {
         setQuantity(String(item.quantity));
         setUnit(item.unit || "pcs");
         setLocation(item.location as "fridge" | "shelf");
-        let cat = item.category || "";
-        if (cat === "Prepared Meals") cat = "Ready-to-eat";
+        let cat = normalizeLegacyInventoryCategory(item.category || "");
         // Map legacy / unknown categories to chip set
         setCategory(CATEGORY_LABELS.includes(cat) ? cat : cat ? "Other" : "");
         setNotes(item.notes || "");

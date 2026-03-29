@@ -2,6 +2,7 @@
  * All-time aggregates for Waste & Consumption report screens (usage_logs + food_items).
  */
 
+import { categoryLabelForInsights } from "@/lib/foodCategories";
 import { supabase } from "@/lib/supabase";
 import { normalizeFoodNameForGrouping } from "@/utils/normalizeFoodName";
 
@@ -75,49 +76,8 @@ function displayItemName(f: FoodJoin | null | undefined, key: string): string {
   return "Item";
 }
 
-/**
- * Canonical labels aligned with `CATEGORY_OPTIONS` in AddItemScreen (no merged
- * "Meat & Fish" / "Dairy & Eggs" — each log counts as 1 item, not summed qty).
- */
-const CATEGORY_DISPLAY: Record<string, string> = {
-  dairy: "Dairy",
-  "dairy & eggs": "Dairy",
-  eggs: "Eggs",
-  egg: "Eggs",
-  vegetables: "Vegetables",
-  vegetable: "Vegetables",
-  veg: "Vegetables",
-  meat: "Meat",
-  "meat & fish": "Meat",
-  protein: "Meat",
-  seafood: "Seafood",
-  fish: "Seafood",
-  deli: "Deli",
-  sauces: "Sauces",
-  sauce: "Sauces",
-  canned: "Canned",
-  "ready-to-eat": "Ready-to-eat",
-  "ready to eat": "Ready-to-eat",
-  fruits: "Fruits",
-  fruit: "Fruits",
-  bakery: "Bakery",
-  bread: "Bakery",
-  snacks: "Snacks",
-  beverages: "Beverages",
-  grains: "Grains",
-  frozen: "Frozen",
-  condiments: "Condiments",
-  "prepared meals": "Ready-to-eat",
-  "prepared meal": "Ready-to-eat",
-  other: "Other",
-};
-
 function categoryLabel(raw: string): string {
-  const t = raw.trim();
-  if (!t) return "Other";
-  const k = t.toLowerCase();
-  if (CATEGORY_DISPLAY[k]) return CATEGORY_DISPLAY[k]!;
-  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+  return categoryLabelForInsights(raw);
 }
 
 /**

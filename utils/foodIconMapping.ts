@@ -2,6 +2,8 @@
 // FOOD ICON MAPPING UTILITY
 // =============================================================================
 
+import { CATEGORY_EMOJI_BY_SLUG } from "@/lib/foodCategories";
+
 /**
  * Maps food item names/categories to appropriate emoji icons
  */
@@ -89,30 +91,6 @@ const FOOD_ICON_MAP: Record<string, string> = {
   sauce: "🥄",
   oil: "🫒",
   vinegar: "🫒",
-
-  // Default fallbacks by category
-  dairy: "🥛",
-  meat: "🥩",
-  seafood: "🐟",
-  deli: "🥪",
-  vegetable: "🥬",
-  vegetables: "🥬",
-  fruit: "🍎",
-  fruits: "🍎",
-  bakery: "🍞",
-  eggs: "🥚",
-  grains: "🍚",
-  canned: "🥫",
-  sauces: "🫙",
-  sauce: "🫙",
-  "ready-to-eat": "🍱",
-  beverage: "🥤",
-  beverages: "🥤",
-  snack: "🍿",
-  snacks: "🍿",
-  frozen: "🧊",
-  condiment: "🥄",
-  condiments: "🧂",
 };
 
 /**
@@ -136,6 +114,9 @@ export function getFoodIcon(name: string, category?: string): string {
   // Try category match if provided
   if (category) {
     const lowercaseCategory = category.toLowerCase();
+    if (CATEGORY_EMOJI_BY_SLUG[lowercaseCategory]) {
+      return CATEGORY_EMOJI_BY_SLUG[lowercaseCategory];
+    }
     if (FOOD_ICON_MAP[lowercaseCategory]) {
       return FOOD_ICON_MAP[lowercaseCategory];
     }
