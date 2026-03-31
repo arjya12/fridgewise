@@ -69,9 +69,9 @@ export default function MoreScreen() {
   const borderColor = "rgba(0,0,0,0.07)";
   const danger = "#C0483A";
 
-  const displayName = userProfile?.full_name || user?.email || "Your Name";
-  const initials = (() => {
-    const parts = (displayName || "").trim().split(/\s+/).filter(Boolean);
+  const liveDisplayName = userProfile?.full_name || user?.email || "Your Name";
+  const liveInitials = (() => {
+    const parts = (liveDisplayName || "").trim().split(/\s+/).filter(Boolean);
     const first = parts[0]?.[0] ?? "";
     const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
     return (first + last).toUpperCase();
@@ -86,13 +86,48 @@ export default function MoreScreen() {
 
   const [signOutModalVisible, setSignOutModalVisible] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
+  const frozenDisplayNameRef = useRef(liveDisplayName);
+  const frozenInitialsRef = useRef(liveInitials);
+  const frozenStatsRef = useRef({
+    totalItemsAdded: null as number | null,
+    topCategory: null as string | null,
+    statsLoading: true,
+  });
+
+  const displayName = signOutBusy ? frozenDisplayNameRef.current : liveDisplayName;
+  const initials = signOutBusy ? frozenInitialsRef.current : liveInitials;
+  const visibleTotalItemsAdded = signOutBusy
+    ? frozenStatsRef.current.totalItemsAdded
+    : totalItemsAdded;
+  const visibleTopCategory = signOutBusy
+    ? frozenStatsRef.current.topCategory
+    : topCategory;
+  const visibleStatsLoading = signOutBusy
+    ? frozenStatsRef.current.statsLoading
+    : statsLoading;
 
   useEffect(() => {
+    if (signOutBusy) return;
+    frozenDisplayNameRef.current = liveDisplayName;
+    frozenInitialsRef.current = liveInitials;
+  }, [liveDisplayName, liveInitials, signOutBusy]);
+
+  useEffect(() => {
+    if (signOutBusy) return;
+    frozenStatsRef.current = {
+      totalItemsAdded,
+      topCategory,
+      statsLoading,
+    };
+  }, [totalItemsAdded, topCategory, statsLoading, signOutBusy]);
+
+  useEffect(() => {
+    if (signOutBusy) return;
     insightsStatsReadyRef.current = false;
     setTotalItemsAdded(null);
     setTopCategory(null);
     setStatsLoading(!!user);
-  }, [user?.id]);
+  }, [user?.id, signOutBusy]);
 
 
   // =============================================================================
@@ -142,7 +177,7 @@ export default function MoreScreen() {
 
   const loadInsightsStats = useCallback(async () => {
     if (!user) {
-      setStatsLoading(false);
+      if (!signOutBusy) setStatsLoading(false);
       return;
     }
     const showLoading = !insightsStatsReadyRef.current;
@@ -226,7 +261,7 @@ export default function MoreScreen() {
     } finally {
       setStatsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, signOutBusy]);
 
   useEffect(() => {
     void loadInsightsStats();
@@ -347,11 +382,11 @@ export default function MoreScreen() {
 
   const renderStatsCards = () => {
     const itemsAddedValue =
-      totalItemsAdded == null
-        ? statsLoading
+      visibleTotalItemsAdded == null
+        ? visibleStatsLoading
           ? "Loading…"
           : "—"
-        : String(totalItemsAdded);
+        : String(visibleTotalItemsAdded);
 
     return (
       <View style={styles.statsGrid}>
@@ -379,11 +414,11 @@ export default function MoreScreen() {
               Top Category
             </Text>
           </View>
-          {statsLoading ? (
+          {visibleStatsLoading ? (
             <Text style={[styles.statValue, styles.statValueCategory]}>Loading…</Text>
-          ) : topCategory ? (
+          ) : visibleTopCategory ? (
             <Text style={[styles.statValue, styles.statValueCategory]} numberOfLines={2}>
-              {topCategory}
+              {visibleTopCategory}
             </Text>
           ) : null}
         </View>
@@ -471,7 +506,9 @@ export default function MoreScreen() {
           {menuSections.map(renderSection)}
 
           {/* Sign Out Button + version */}
-          <View style={styles.signOutSection}>{renderSignOutCard()}</View>
+          {!signOutModalVisible && (
+            <View style={styles.signOutSection}>{renderSignOutCard()}</View>
+          )}
           <Text style={styles.versionText}>v1.0.0 · FridgeWise</Text>
         </View>
       </ThemedView>

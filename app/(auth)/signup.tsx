@@ -54,144 +54,100 @@ function normalizeSignUpErrorMessage(message: string): string {
   return t;
 }
 
-const ELLIPSIS_INACTIVE_OPACITY = 0.35;
-const ELLIPSIS_ACTIVE_SCALE = 1;
-const ELLIPSIS_INACTIVE_SCALE = 0.85;
-
-function AnimatedThreeDots({ dotTextStyle }: { dotTextStyle: any }) {
-  const opacity0 = useRef(new Animated.Value(ELLIPSIS_INACTIVE_OPACITY)).current;
-  const opacity1 = useRef(new Animated.Value(ELLIPSIS_INACTIVE_OPACITY)).current;
-  const opacity2 = useRef(new Animated.Value(ELLIPSIS_INACTIVE_OPACITY)).current;
-
-  const scale0 = opacity0.interpolate({
-    inputRange: [ELLIPSIS_INACTIVE_OPACITY, 1],
-    outputRange: [ELLIPSIS_INACTIVE_SCALE, ELLIPSIS_ACTIVE_SCALE],
-    extrapolate: "clamp",
-  });
-  const scale1 = opacity1.interpolate({
-    inputRange: [ELLIPSIS_INACTIVE_OPACITY, 1],
-    outputRange: [ELLIPSIS_INACTIVE_SCALE, ELLIPSIS_ACTIVE_SCALE],
-    extrapolate: "clamp",
-  });
-  const scale2 = opacity2.interpolate({
-    inputRange: [ELLIPSIS_INACTIVE_OPACITY, 1],
-    outputRange: [ELLIPSIS_INACTIVE_SCALE, ELLIPSIS_ACTIVE_SCALE],
-    extrapolate: "clamp",
-  });
+function SigningInDots() {
+  const dot1 = React.useRef(new Animated.Value(0)).current;
+  const dot2 = React.useRef(new Animated.Value(0)).current;
+  const dot3 = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const stepDurationMs = 180;
-    const pauseMs = 70;
-
-    const cycle = Animated.sequence([
-      Animated.parallel([
-        Animated.timing(opacity0, {
+    const animate = () => {
+      Animated.sequence([
+        Animated.timing(dot1, {
           toValue: 1,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
+          duration: 250,
+          useNativeDriver: true,
         }),
-        Animated.timing(opacity1, {
-          toValue: ELLIPSIS_INACTIVE_OPACITY,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }),
-        Animated.timing(opacity2, {
-          toValue: ELLIPSIS_INACTIVE_OPACITY,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }),
-      ]),
-      Animated.delay(pauseMs),
-      Animated.parallel([
-        Animated.timing(opacity0, {
-          toValue: ELLIPSIS_INACTIVE_OPACITY,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }),
-        Animated.timing(opacity1, {
+        Animated.timing(dot2, {
           toValue: 1,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
+          duration: 250,
+          useNativeDriver: true,
         }),
-        Animated.timing(opacity2, {
-          toValue: ELLIPSIS_INACTIVE_OPACITY,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }),
-      ]),
-      Animated.delay(pauseMs),
-      Animated.parallel([
-        Animated.timing(opacity0, {
-          toValue: ELLIPSIS_INACTIVE_OPACITY,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }),
-        Animated.timing(opacity1, {
-          toValue: ELLIPSIS_INACTIVE_OPACITY,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
-        }),
-        Animated.timing(opacity2, {
+        Animated.timing(dot3, {
           toValue: 1,
-          duration: stepDurationMs,
-          easing: Easing.linear,
-          useNativeDriver: false,
+          duration: 250,
+          useNativeDriver: true,
         }),
-      ]),
-      Animated.delay(pauseMs),
-    ]);
-
-    const loop = Animated.loop(cycle);
-    loop.start();
-    return () => loop.stop();
-  }, [opacity0, opacity1, opacity2]);
+      ]).start(() => {
+        dot1.setValue(0);
+        dot2.setValue(0);
+        dot3.setValue(0);
+        animate();
+      });
+    };
+    animate();
+    return () => {
+      dot1.stopAnimation();
+      dot2.stopAnimation();
+      dot3.stopAnimation();
+    };
+  }, [dot1, dot2, dot3]);
 
   return (
-    <View style={styles.loadingDotsContainer} accessibilityLabel="Loading">
-      <Animated.Text
-        style={[
-          dotTextStyle,
-          {
-            marginHorizontal: 1,
-            opacity: opacity0,
-            transform: [{ scale: scale0 }],
-          },
-        ]}
-      >
-        .
-      </Animated.Text>
-      <Animated.Text
-        style={[
-          dotTextStyle,
-          {
-            marginHorizontal: 1,
-            opacity: opacity1,
-            transform: [{ scale: scale1 }],
-          },
-        ]}
-      >
-        .
-      </Animated.Text>
-      <Animated.Text
-        style={[
-          dotTextStyle,
-          {
-            marginHorizontal: 1,
-            opacity: opacity2,
-            transform: [{ scale: scale2 }],
-          },
-        ]}
-      >
-        .
-      </Animated.Text>
+    <View style={styles.loadingDotsContainer}>
+      <Animated.View
+        style={{
+          opacity: dot1,
+          transform: [
+            {
+              scale: dot1.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.7, 1.2],
+              }),
+            },
+          ],
+          marginHorizontal: 1.5,
+          width: 7,
+          height: 7,
+          borderRadius: 4,
+          backgroundColor: "#fff",
+        }}
+      />
+      <Animated.View
+        style={{
+          opacity: dot2,
+          transform: [
+            {
+              scale: dot2.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.7, 1.2],
+              }),
+            },
+          ],
+          marginHorizontal: 1.5,
+          width: 7,
+          height: 7,
+          borderRadius: 4,
+          backgroundColor: "#fff",
+        }}
+      />
+      <Animated.View
+        style={{
+          opacity: dot3,
+          transform: [
+            {
+              scale: dot3.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.7, 1.2],
+              }),
+            },
+          ],
+          marginHorizontal: 1.5,
+          width: 7,
+          height: 7,
+          borderRadius: 4,
+          backgroundColor: "#fff",
+        }}
+      />
     </View>
   );
 }
@@ -796,7 +752,7 @@ export default function SignUpScreen() {
                           <Text style={styles.buttonText}>
                             Creating Account
                           </Text>
-                          <AnimatedThreeDots dotTextStyle={styles.buttonText} />
+                          <SigningInDots />
                         </View>
                       ) : (
                         <Text style={styles.buttonText}>Create Account</Text>
