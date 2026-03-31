@@ -2,6 +2,11 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
+import { MAX_FULL_NAME_LENGTH } from "@/utils/authFieldLimits";
+import {
+  isValidPersonName,
+  sanitizePersonNameInput,
+} from "@/utils/personNameInput";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -42,12 +47,10 @@ export default function ProfileScreen() {
   /** Same as More screen avatar — mint → emerald diagonal */
   const profileGradientColors = ["#3DBF7A", "#2a9960"] as const;
   const normalizeFullName = (value: string) =>
-    value.replace(/\s+/g, " ").trim();
+    sanitizePersonNameInput(value).trim();
   const validateFullName = (value: string): string | null => {
     if (!value) return "Name cannot be blank.";
-    if (!/^[A-Za-z]+(?:\s+[A-Za-z]+)*$/.test(value)) {
-      return "Use letters only (no numbers or symbols).";
-    }
+    if (!isValidPersonName(value)) return "Use only letters.";
     return null;
   };
 
@@ -162,12 +165,18 @@ export default function ProfileScreen() {
                     ]}
                     value={fullName}
                     onChangeText={(value) => {
-                      setFullName(value);
+                      setFullName(
+                        sanitizePersonNameInput(value).slice(
+                          0,
+                          MAX_FULL_NAME_LENGTH
+                        )
+                      );
                       if (nameError) setNameError(null);
                     }}
                     onBlur={() =>
                       setFullName((prev) => normalizeFullName(prev))
                     }
+                    maxLength={MAX_FULL_NAME_LENGTH}
                     placeholder="Enter your full name"
                     placeholderTextColor={subTextColor}
                     autoCapitalize="words"
@@ -411,7 +420,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cancelEditButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: "#475569",
   },

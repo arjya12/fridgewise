@@ -16,7 +16,6 @@ import {
   LayoutAnimation,
   Platform,
   StyleSheet,
-  UIManager,
   View,
   ViewStyle,
 } from "react-native";
@@ -31,6 +30,7 @@ import {
   calculateExpiryStatistics,
   createEnhancedMarkedDates,
 } from "../../utils/calendarEnhancedDataUtils";
+import { enableAndroidLayoutAnimationExperimental } from "../../utils/enableAndroidLayoutAnimation";
 import { useCalendarColorScheme } from "./ColorSchemeProvider";
 import OptimizedInformationPanel from "./OptimizedInformationPanel";
 // Fallback lightweight legend if integrated component is not present
@@ -51,13 +51,7 @@ try {
   EnhancedCalendarCore = FallbackCore;
 }
 
-// Enable LayoutAnimation on Android
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+enableAndroidLayoutAnimationExperimental();
 
 // =============================================================================
 // PERFORMANCE MONITORING

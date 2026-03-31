@@ -110,9 +110,16 @@ describe("AuthContext", () => {
       expect(result.current.loading).toBe(false);
     });
 
+    let signUpResult: { needsEmailVerification: boolean } | undefined;
     await act(async () => {
-      await result.current.signUp("new@example.com", "password123", "John Doe");
+      signUpResult = await result.current.signUp(
+        "new@example.com",
+        "password123",
+        "John Doe"
+      );
     });
+
+    expect(signUpResult).toEqual({ needsEmailVerification: true });
 
     expect(supabase.auth.signUp).toHaveBeenCalledWith({
       email: "new@example.com",

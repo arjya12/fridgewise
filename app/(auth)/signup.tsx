@@ -1,23 +1,34 @@
 // app/(auth)/signup.tsx
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import { SimpleInfoModal } from "@/components/SimpleInfoModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Dimensions,
-    Easing,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  MAX_EMAIL_LENGTH,
+  MAX_NAME_LENGTH,
+  MAX_PASSWORD_LENGTH,
+} from "@/utils/authFieldLimits";
+import {
+  isValidPersonName,
+  sanitizePersonNameInput,
+} from "@/utils/personNameInput";
+import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
+import { router } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Easing,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -27,6 +38,163 @@ const THEME_GREEN = "#197C47";
 const THEME_LIGHT = "#fff";
 const THEME_BORDER = "#E0E0E0";
 const THEME_INPUT_BG = "rgba(255,255,255,0.92)";
+
+function normalizeSignUpErrorMessage(message: string): string {
+  const t = message.trim();
+  const lower = t.toLowerCase();
+  if (
+    lower.includes("email rate limit") ||
+    (lower.includes("rate limit") && lower.includes("email"))
+  ) {
+    return "Email rate limit exceeded. Try again later.";
+  }
+  if (lower.includes("rate limit")) {
+    return "Too many attempts. Try again later.";
+  }
+  return t;
+}
+
+const ELLIPSIS_INACTIVE_OPACITY = 0.35;
+const ELLIPSIS_ACTIVE_SCALE = 1;
+const ELLIPSIS_INACTIVE_SCALE = 0.85;
+
+function AnimatedThreeDots({ dotTextStyle }: { dotTextStyle: any }) {
+  const opacity0 = useRef(new Animated.Value(ELLIPSIS_INACTIVE_OPACITY)).current;
+  const opacity1 = useRef(new Animated.Value(ELLIPSIS_INACTIVE_OPACITY)).current;
+  const opacity2 = useRef(new Animated.Value(ELLIPSIS_INACTIVE_OPACITY)).current;
+
+  const scale0 = opacity0.interpolate({
+    inputRange: [ELLIPSIS_INACTIVE_OPACITY, 1],
+    outputRange: [ELLIPSIS_INACTIVE_SCALE, ELLIPSIS_ACTIVE_SCALE],
+    extrapolate: "clamp",
+  });
+  const scale1 = opacity1.interpolate({
+    inputRange: [ELLIPSIS_INACTIVE_OPACITY, 1],
+    outputRange: [ELLIPSIS_INACTIVE_SCALE, ELLIPSIS_ACTIVE_SCALE],
+    extrapolate: "clamp",
+  });
+  const scale2 = opacity2.interpolate({
+    inputRange: [ELLIPSIS_INACTIVE_OPACITY, 1],
+    outputRange: [ELLIPSIS_INACTIVE_SCALE, ELLIPSIS_ACTIVE_SCALE],
+    extrapolate: "clamp",
+  });
+
+  useEffect(() => {
+    const stepDurationMs = 180;
+    const pauseMs = 70;
+
+    const cycle = Animated.sequence([
+      Animated.parallel([
+        Animated.timing(opacity0, {
+          toValue: 1,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+        Animated.timing(opacity1, {
+          toValue: ELLIPSIS_INACTIVE_OPACITY,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+        Animated.timing(opacity2, {
+          toValue: ELLIPSIS_INACTIVE_OPACITY,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+      ]),
+      Animated.delay(pauseMs),
+      Animated.parallel([
+        Animated.timing(opacity0, {
+          toValue: ELLIPSIS_INACTIVE_OPACITY,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+        Animated.timing(opacity1, {
+          toValue: 1,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+        Animated.timing(opacity2, {
+          toValue: ELLIPSIS_INACTIVE_OPACITY,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+      ]),
+      Animated.delay(pauseMs),
+      Animated.parallel([
+        Animated.timing(opacity0, {
+          toValue: ELLIPSIS_INACTIVE_OPACITY,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+        Animated.timing(opacity1, {
+          toValue: ELLIPSIS_INACTIVE_OPACITY,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+        Animated.timing(opacity2, {
+          toValue: 1,
+          duration: stepDurationMs,
+          easing: Easing.linear,
+          useNativeDriver: false,
+        }),
+      ]),
+      Animated.delay(pauseMs),
+    ]);
+
+    const loop = Animated.loop(cycle);
+    loop.start();
+    return () => loop.stop();
+  }, [opacity0, opacity1, opacity2]);
+
+  return (
+    <View style={styles.loadingDotsContainer} accessibilityLabel="Loading">
+      <Animated.Text
+        style={[
+          dotTextStyle,
+          {
+            marginHorizontal: 1,
+            opacity: opacity0,
+            transform: [{ scale: scale0 }],
+          },
+        ]}
+      >
+        .
+      </Animated.Text>
+      <Animated.Text
+        style={[
+          dotTextStyle,
+          {
+            marginHorizontal: 1,
+            opacity: opacity1,
+            transform: [{ scale: scale1 }],
+          },
+        ]}
+      >
+        .
+      </Animated.Text>
+      <Animated.Text
+        style={[
+          dotTextStyle,
+          {
+            marginHorizontal: 1,
+            opacity: opacity2,
+            transform: [{ scale: scale2 }],
+          },
+        ]}
+      >
+        .
+      </Animated.Text>
+    </View>
+  );
+}
 
 export default function SignUpScreen() {
   const [firstName, setFirstName] = useState("");
@@ -49,8 +217,11 @@ export default function SignUpScreen() {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [formAnim] = useState(new Animated.Value(0));
   const scrollRef = useRef<ScrollView>(null);
-  const [keyboardOffset] = useState(new Animated.Value(0));
+  const scrollYRef = useRef(0);
+  const createAccountSectionRef = useRef<View>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
+  const [verifyEmailModalVisible, setVerifyEmailModalVisible] = useState(false);
   const formErrorAnim = useRef(new Animated.Value(0)).current;
 
   const clearError = (key: string) => {
@@ -101,35 +272,55 @@ export default function SignUpScreen() {
   }, []);
 
   useEffect(() => {
-    const keyboardWillShow = (e: any) => {
-      Animated.timing(keyboardOffset, {
-        toValue: -120,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const onShow = (e: { endCoordinates: { height: number } }) => {
+      setKeyboardInset(e.endCoordinates.height);
     };
-    const keyboardWillHide = () => {
-      Animated.timing(keyboardOffset, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    };
-    const showSub = Keyboard.addListener("keyboardWillShow", keyboardWillShow);
-    const hideSub = Keyboard.addListener("keyboardWillHide", keyboardWillHide);
+    const onHide = () => setKeyboardInset(0);
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, [keyboardOffset]);
+  }, []);
+
+  const scrollLowerFieldsIntoView = useCallback(() => {
+    const run = () => {
+      const anchor = createAccountSectionRef.current;
+      if (!anchor) return;
+      const keyboardTop = screenHeight - keyboardInset;
+      anchor.measureInWindow((_ax, ay, _aw, ah) => {
+        const bottom = ay + ah;
+        const clearance = keyboardTop - 20;
+        const need = bottom - clearance;
+        if (need > 0) {
+          const nextY = scrollYRef.current + need;
+          scrollRef.current?.scrollTo({
+            y: Math.max(0, nextY),
+            animated: true,
+          });
+        }
+      });
+    };
+    requestAnimationFrame(() => {
+      setTimeout(run, 60);
+      setTimeout(run, 280);
+    });
+  }, [keyboardInset]);
 
   function validate(): { ok: boolean; summary: string } {
     const newErrors: { [key: string]: string } = {};
     if (!firstName.trim()) newErrors.firstName = "Please enter your first name.";
-    if (/\d/.test(firstName)) newErrors.firstName = "Numbers aren’t allowed.";
+    else if (!isValidPersonName(firstName))
+      newErrors.firstName = "Use only letters.";
 
     if (!lastName.trim()) newErrors.lastName = "Please enter your last name.";
-    if (/\d/.test(lastName)) newErrors.lastName = "Numbers aren’t allowed.";
+    else if (!isValidPersonName(lastName))
+      newErrors.lastName = "Use only letters.";
 
     if (!email.trim()) newErrors.email = "Please enter your email.";
     else if (!email.match(/^\S+@\S+\.\S+$/))
@@ -153,11 +344,11 @@ export default function SignUpScreen() {
     if (newErrors.confirmPassword === "Passwords do not match.") {
       summary = "Passwords do not match.";
     } else if (
-      (newErrors.firstName === "Numbers aren’t allowed." ||
-        newErrors.lastName === "Numbers aren’t allowed.") &&
+      (newErrors.firstName === "Use only letters." ||
+        newErrors.lastName === "Use only letters.") &&
       errorKeys.length === 1
     ) {
-      summary = "Names cannot contain numbers.";
+      summary = "Names can only contain letters.";
     } else if (newErrors.email?.includes("valid email") && errorKeys.length === 1) {
       summary = "Enter a valid email address.";
     } else if (newErrors.password && errorKeys.length === 1) {
@@ -179,10 +370,19 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      await signUp(email, password, `${firstName} ${lastName}`);
-      setTimeout(() => {
-        router.push("/(auth)/welcome?login=1");
-      }, 900);
+      const { needsEmailVerification } = await signUp(
+        email,
+        password,
+        `${firstName.trim()} ${lastName.trim()}`
+      );
+
+      const goToLogin = () => router.push("/(auth)/welcome?login=1");
+
+      if (needsEmailVerification) {
+        setVerifyEmailModalVisible(true);
+      } else {
+        goToLogin();
+      }
     } catch (error: any) {
       const message = (error?.message ?? "").toString();
       const lower = message.toLowerCase();
@@ -197,7 +397,7 @@ export default function SignUpScreen() {
           "An account with this email already exists. Try signing in instead."
         );
       } else if (message) {
-        setFormError(message);
+        setFormError(normalizeSignUpErrorMessage(message));
       } else {
         setFormError("Sign-up failed. Please try again.");
       }
@@ -213,7 +413,9 @@ export default function SignUpScreen() {
         <KeyboardAvoidingView
           style={{ flex: 1, width: "100%" }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+          keyboardVerticalOffset={
+            Platform.OS === "ios" ? insets.top + 48 : 0
+          }
         >
           <ScrollView
             contentContainerStyle={{
@@ -221,9 +423,15 @@ export default function SignUpScreen() {
               justifyContent: "flex-start",
               alignItems: "center",
               marginTop: 10,
+              paddingBottom: keyboardInset > 0 ? keyboardInset + 28 : 28,
             }}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             ref={scrollRef}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              scrollYRef.current = e.nativeEvent.contentOffset.y;
+            }}
           >
             <View style={{ width: "100%", alignItems: "center" }}>
               <View
@@ -278,16 +486,24 @@ export default function SignUpScreen() {
                       placeholderTextColor="#737373"
                       value={firstName}
                         onChangeText={(t) => {
-                          setFirstName(t);
+                          const s = sanitizePersonNameInput(t).slice(
+                            0,
+                            MAX_NAME_LENGTH
+                          );
+                          setFirstName(s);
                           clearError("firstName");
                         }}
                       autoCapitalize="words"
                         autoCorrect={false}
                         autoComplete="off"
                       editable={!loading}
+                      maxLength={MAX_NAME_LENGTH}
                       accessibilityLabel="First name input"
                       onFocus={() => setFirstNameFocused(true)}
-                        onBlur={() => setFirstNameFocused(false)}
+                        onBlur={() => {
+                          setFirstNameFocused(false);
+                          setFirstName((s) => sanitizePersonNameInput(s).trim());
+                        }}
                     />
                   </View>
 
@@ -305,16 +521,24 @@ export default function SignUpScreen() {
                       placeholderTextColor="#737373"
                       value={lastName}
                       onChangeText={(t) => {
-                        setLastName(t);
+                        const s = sanitizePersonNameInput(t).slice(
+                          0,
+                          MAX_NAME_LENGTH
+                        );
+                        setLastName(s);
                         clearError("lastName");
                       }}
                       autoCapitalize="words"
                       autoCorrect={false}
                       autoComplete="off"
                       editable={!loading}
+                      maxLength={MAX_NAME_LENGTH}
                       accessibilityLabel="Last name input"
                       onFocus={() => setLastNameFocused(true)}
-                      onBlur={() => setLastNameFocused(false)}
+                      onBlur={() => {
+                        setLastNameFocused(false);
+                        setLastName((s) => sanitizePersonNameInput(s).trim());
+                      }}
                     />
                   </View>
 
@@ -340,6 +564,7 @@ export default function SignUpScreen() {
                       autoCorrect={false}
                       autoComplete="off"
                       editable={!loading}
+                      maxLength={MAX_EMAIL_LENGTH}
                       accessibilityLabel="Email input"
                       onFocus={() => setEmailFocused(true)}
                       onBlur={() => setEmailFocused(false)}
@@ -392,12 +617,15 @@ export default function SignUpScreen() {
                         }}
                         secureTextEntry={!showPassword}
                         editable={!loading}
-                        maxLength={24}
+                        maxLength={MAX_PASSWORD_LENGTH}
                         autoCapitalize="none"
                         autoCorrect={false}
                         autoComplete="off"
                         accessibilityLabel="Password input"
-                        onFocus={() => setPasswordFocused(true)}
+                        onFocus={() => {
+                          setPasswordFocused(true);
+                          scrollLowerFieldsIntoView();
+                        }}
                         onBlur={() => setPasswordFocused(false)}
                       />
                       <View
@@ -436,11 +664,15 @@ export default function SignUpScreen() {
                         }}
                         secureTextEntry={!showConfirmPassword}
                         editable={!loading}
+                        maxLength={MAX_PASSWORD_LENGTH}
                         autoCapitalize="none"
                         autoCorrect={false}
                         autoComplete="off"
                         accessibilityLabel="Confirm password input"
-                        onFocus={() => setConfirmPasswordFocused(true)}
+                        onFocus={() => {
+                          setConfirmPasswordFocused(true);
+                          scrollLowerFieldsIntoView();
+                        }}
                         onBlur={() => setConfirmPasswordFocused(false)}
                       />
                       <View
@@ -550,19 +782,40 @@ export default function SignUpScreen() {
                   )}
 
                   {/* Sign Up Button */}
+                  <View ref={createAccountSectionRef} collapsable={false}>
+                    <TouchableOpacity
+                      style={[styles.button, loading && styles.buttonDisabled]}
+                      onPress={loading ? undefined : handleSignUp}
+                      testID="signup-button"
+                      accessibilityRole="button"
+                      accessibilityLabel="Sign up"
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <View style={styles.loadingRow}>
+                          <Text style={styles.buttonText}>
+                            Creating Account
+                          </Text>
+                          <AnimatedThreeDots dotTextStyle={styles.buttonText} />
+                        </View>
+                      ) : (
+                        <Text style={styles.buttonText}>Create Account</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+
                   <TouchableOpacity
-                    style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={loading ? undefined : handleSignUp}
-                    testID="signup-button"
-                    accessibilityRole="button"
-                    accessibilityLabel="Sign up"
-                    disabled={loading}
+                    style={styles.contactSupportPill}
+                    accessibilityRole="link"
+                    accessibilityLabel="Contact support by email"
+                    activeOpacity={0.75}
+                    onPress={() =>
+                      void Linking.openURL("mailto:fridgewise.app@gmail.com")
+                    }
                   >
-                    {loading ? (
-                      <Text style={styles.buttonText}>Creating Account...</Text>
-                    ) : (
-                      <Text style={styles.buttonText}>Create Account</Text>
-                    )}
+                    <Text style={styles.contactSupportText}>
+                      Contact support
+                    </Text>
                   </TouchableOpacity>
 
                   {/* Toggle to Login */}
@@ -583,6 +836,15 @@ export default function SignUpScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+      <SimpleInfoModal
+        visible={verifyEmailModalVisible}
+        title="Verify your email"
+        message="We sent a confirmation link to your inbox. Please verify your email before signing in."
+        onDismiss={() => {
+          setVerifyEmailModalVisible(false);
+          router.push("/(auth)/welcome?login=1");
+        }}
+      />
     </SafeAreaWrapper>
   );
 }
@@ -675,6 +937,33 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingDotsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 6,
+  },
+  contactSupportPill: {
+    alignSelf: "center",
+    marginTop: 4,
+    marginBottom: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: "rgba(25, 124, 71, 0.45)",
+    backgroundColor: "rgba(25, 124, 71, 0.06)",
+  },
+  contactSupportText: {
+    color: THEME_GREEN,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   termsContainer: {
     flexDirection: "row",

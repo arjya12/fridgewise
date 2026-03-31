@@ -4,8 +4,9 @@ import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { clearRememberMePreference } from "@/lib/authPreferences";
 import { supabase } from "@/lib/supabase";
+import { MAX_PASSWORD_LENGTH } from "@/utils/authFieldLimits";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,6 +20,12 @@ import {
 
 export default function ChangePasswordScreen() {
   const { user, signOut } = useAuth();
+  const params = useLocalSearchParams();
+  const resetParam = params.reset;
+  const isResetMode =
+    resetParam === "1" ||
+    resetParam === "true" ||
+    (Array.isArray(resetParam) && (resetParam[0] === "1" || resetParam[0] === "true"));
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
@@ -84,7 +91,7 @@ export default function ChangePasswordScreen() {
   };
 
   const validate = (): boolean => {
-    if (!currentPassword) {
+    if (!isResetMode && !currentPassword) {
       setErrorText("Please enter your current password.");
       return false;
     }
@@ -104,57 +111,70 @@ export default function ChangePasswordScreen() {
       setErrorText("Passwords do not match.");
       return false;
     }
+    if (!isResetMode && currentPassword === password) {
+      setErrorText("New password must be different from current password.");
+      return false;
+    }
     setErrorText(null);
     return true;
   };
 
   const handleChangePassword = async () => {
-    if (!validate() || !user?.email) return;
+    if (!validate() || !user) return;
     try {
       setLoading(true);
-      const { error: verifyErr } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword,
-      });
-      if (verifyErr) {
-        setErrorText("Current password is incorrect.");
-        return;
-      }
-      if (currentPassword === password) {
-        setErrorText("New password must be different from current password.");
-        return;
-      }
+      if (isResetMode) {
+        // Reset flow: user is already authenticated via the recovery link token.
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
 
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setSuccessText("Password will be updated.");
-      setLogoutCancelled(false);
-      setLogoutCountdown(5);
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSuccessText("Password updated.");
+        setLogoutCancelled(false);
+        setLogoutCountdown(null);
 
-      if (logoutTimerRef.current) clearInterval(logoutTimerRef.current);
-      logoutTimerRef.current = setInterval(() => {
-        setLogoutCountdown((prev) => {
-          if (prev == null) return null;
-          if (prev <= 1) {
-            if (logoutTimerRef.current) {
-              clearInterval(logoutTimerRef.current);
-              logoutTimerRef.current = null;
-            }
-            void (async () => {
-              try {
-                const { error } = await supabase.auth.updateUser({ password });
-                if (error) throw error;
-                await performLogout();
-              } catch (e: any) {
-                setSuccessText(null);
-                setErrorText(e?.message || "Failed to update password.");
-                setLogoutCountdown(null);
-              }
-            })();
-            return 0;
-          }
-          return prev - 1;
+        setTimeout(() => router.replace("/(auth)/welcome"), 1200);
+      } else {
+        const { error: verifyErr } = await supabase.auth.signInWithPassword({
+          email: user.email!,
+          password: currentPassword,
         });
-      }, 1000);
+        if (verifyErr) {
+          setErrorText("Current password is incorrect.");
+          return;
+        }
+
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSuccessText("Password will be updated.");
+        setLogoutCancelled(false);
+        setLogoutCountdown(5);
+
+        if (logoutTimerRef.current) clearInterval(logoutTimerRef.current);
+        logoutTimerRef.current = setInterval(() => {
+          setLogoutCountdown((prev) => {
+            if (prev == null) return null;
+            if (prev <= 1) {
+              if (logoutTimerRef.current) {
+                clearInterval(logoutTimerRef.current);
+                logoutTimerRef.current = null;
+              }
+              void (async () => {
+                try {
+                  const { error } = await supabase.auth.updateUser({ password });
+                  if (error) throw error;
+                  await performLogout();
+                } catch (e: any) {
+                  setSuccessText(null);
+                  setErrorText(e?.message || "Failed to update password.");
+                  setLogoutCountdown(null);
+                }
+              })();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
     } catch (e: any) {
       setErrorText(e?.message || "Failed to update password.");
     } finally {
@@ -168,7 +188,9 @@ export default function ChangePasswordScreen() {
         <View style={styles.header}>
           <Pressable
             style={styles.backButton}
-            onPress={() => router.replace("/(tabs)/settings")}
+            onPress={() =>
+              router.replace(isResetMode ? "/(auth)/welcome" : "/(tabs)/settings")
+            }
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="arrow-back" size={21} color="#15803D" />
@@ -195,43 +217,46 @@ export default function ChangePasswordScreen() {
             </ThemedText>
           </View>
 
-          <View
-            style={[
-              styles.inputGroup,
-              currentFocused && styles.inputGroupFocused,
-              errorText === "Please enter your current password." ||
-              errorText === "Current password is incorrect."
-                ? styles.inputGroupError
-                : null,
-            ]}
-          >
-            <TextInput
-              style={styles.input}
-              placeholder="Current Password"
-              placeholderTextColor="#737373"
-              value={currentPassword}
-              onChangeText={(v) => {
-                setCurrentPassword(v);
-                if (errorText) setErrorText(null);
-              }}
-              secureTextEntry={!showCurrentPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!loading}
-              onFocus={() => setCurrentFocused(true)}
-              onBlur={() => setCurrentFocused(false)}
-            />
+          {!isResetMode ? (
             <View
-              style={styles.eyeIcon}
-              onTouchEnd={() => setShowCurrentPassword((prev) => !prev)}
+              style={[
+                styles.inputGroup,
+                currentFocused && styles.inputGroupFocused,
+                errorText === "Please enter your current password." ||
+                errorText === "Current password is incorrect."
+                  ? styles.inputGroupError
+                  : null,
+              ]}
             >
-              <Ionicons
-                name={showCurrentPassword ? "eye-outline" : "eye-off-outline"}
-                size={20}
-                color="#15803D"
+              <TextInput
+                style={styles.input}
+                placeholder="Current Password"
+                placeholderTextColor="#737373"
+                value={currentPassword}
+                onChangeText={(v) => {
+                  setCurrentPassword(v);
+                  if (errorText) setErrorText(null);
+                }}
+                secureTextEntry={!showCurrentPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+                maxLength={MAX_PASSWORD_LENGTH}
+                onFocus={() => setCurrentFocused(true)}
+                onBlur={() => setCurrentFocused(false)}
               />
+              <View
+                style={styles.eyeIcon}
+                onTouchEnd={() => setShowCurrentPassword((prev) => !prev)}
+              >
+                <Ionicons
+                  name={showCurrentPassword ? "eye-outline" : "eye-off-outline"}
+                  size={20}
+                  color="#15803D"
+                />
+              </View>
             </View>
-          </View>
+          ) : null}
 
           <View
             style={[
@@ -253,6 +278,7 @@ export default function ChangePasswordScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              maxLength={MAX_PASSWORD_LENGTH}
               onFocus={() => setPasswordFocused(true)}
               onBlur={() => setPasswordFocused(false)}
             />
@@ -288,6 +314,7 @@ export default function ChangePasswordScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              maxLength={MAX_PASSWORD_LENGTH}
               onFocus={() => setConfirmFocused(true)}
               onBlur={() => setConfirmFocused(false)}
             />
@@ -340,16 +367,26 @@ export default function ChangePasswordScreen() {
                       logoutCancelled ? styles.cancelTextMain : null,
                     ]}
                   >
-                    {logoutCancelled ? "Password update cancelled." : "Password update pending."}
+                    {isResetMode
+                      ? successText ?? "Password updated."
+                      : logoutCancelled
+                        ? "Password update cancelled."
+                        : "Password update pending."}
                   </ThemedText>
-                  {!logoutCancelled && logoutCountdown != null && logoutCountdown > 0 ? (
+                  {!isResetMode &&
+                  !logoutCancelled &&
+                  logoutCountdown != null &&
+                  logoutCountdown > 0 ? (
                     <ThemedText style={styles.successTextSub}>
                       Updating and signing out in {logoutCountdown}s.
                     </ThemedText>
                   ) : null}
                 </View>
               </View>
-              {!logoutCancelled && logoutCountdown != null && logoutCountdown > 0 ? (
+              {!isResetMode &&
+              !logoutCancelled &&
+              logoutCountdown != null &&
+              logoutCountdown > 0 ? (
                 <Pressable
                   style={styles.cancelCountdownBtn}
                   onPress={() => {

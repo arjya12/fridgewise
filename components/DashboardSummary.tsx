@@ -1,16 +1,8 @@
 import { FoodItem } from "@/lib/supabase";
+import { firstNameForGreeting } from "@/utils/personNameInput";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-
-function formatName(username: string): string {
-  if (!username) return "";
-  const match = username.match(/[A-Za-z]+/);
-  const alphabetic = match ? match[0] : "";
-  if (!alphabetic) return "";
-  const lower = alphabetic.toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
-}
 
 interface DashboardSummaryProps {
   expiringItems: FoodItem[];
@@ -100,7 +92,7 @@ const DashboardSummary: React.FC<DashboardSummaryProps> = ({
       {/* Personalized greeting */}
       {userName && (
         <Text style={styles.greeting}>
-          {getGreeting()}, {formatName(userName)}
+          {getGreeting()}, {firstNameForGreeting(userName) ?? userName}
         </Text>
       )}
 

@@ -1,6 +1,8 @@
 import ScreenLayout from "@/components/ScreenLayout";
+import { SimpleInfoModal } from "@/components/SimpleInfoModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH } from "@/utils/authFieldLimits";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -46,6 +48,7 @@ export default function WelcomeScreen() {
   const loginErrorAnim = useRef(new Animated.Value(0)).current;
   const [isResetMode, setIsResetMode] = useState(false);
   const [resetCooldownSeconds, setResetCooldownSeconds] = useState(0);
+  const [resetEmailModalVisible, setResetEmailModalVisible] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
   // 60-second cooldown timer after requesting password reset
@@ -209,14 +212,25 @@ export default function WelcomeScreen() {
       return;
     }
     try {
-      const resetRedirectUrl = Linking.createURL("reset-password");
+      // Supabase recovery links put tokens in the URL fragment (#...).
+      // Android custom-scheme deep links often drop fragments, so we relay via
+      // a web page that reads the fragment and then re-opens the app with tokens in query params.
+      const resetWebRedirectUrl =
+        process.env.EXPO_PUBLIC_RESET_WEB_REDIRECT_URL ||
+        "http://10.0.2.2:8081/reset-password-relay";
+
+      const resetRedirectUrl =
+        __DEV__ ? resetWebRedirectUrl : "fridgewise://reset-password";
+
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
         redirectTo: resetRedirectUrl,
       });
       if (error) throw error;
-      setLoginError({
-        kind: "auth",
-        message: "Check your email for a reset link.",
+      setLoginError(null);
+      setResetCooldownSeconds(60);
+      // Open after interactions so the loading state clears and the RN Modal stacks above the sheet.
+      requestAnimationFrame(() => {
+        setResetEmailModalVisible(true);
       });
     } catch (err: any) {
       const msg = err?.message || "";
@@ -228,7 +242,13 @@ export default function WelcomeScreen() {
           kind: "auth",
           message: "We couldn’t find an account with that email.",
         });
-      } else if (!isRateLimit) {
+      } else if (isRateLimit) {
+        setLoginError({
+          kind: "info",
+          message: "Too many reset emails. Please wait a minute before trying again.",
+        });
+        setResetCooldownSeconds(60);
+      } else {
         setLoginError({
           kind: "auth",
           message:
@@ -236,8 +256,6 @@ export default function WelcomeScreen() {
             "We couldn’t send a reset email right now. Please try again.",
         });
       }
-    } finally {
-      setResetCooldownSeconds(60);
     }
   }
 
@@ -428,6 +446,7 @@ export default function WelcomeScreen() {
     (!password || password.trim().length === 0);
 
   return (
+    <>
     <ScreenLayout
       topInsetColor="#C8FACC"
       topInsetContent={
@@ -642,6 +661,7 @@ export default function WelcomeScreen() {
                     autoComplete="off"
                     importantForAutofill="no"
                     textContentType="none"
+                    maxLength={MAX_EMAIL_LENGTH}
                   />
                 </View>
                 {!isResetMode && (
@@ -676,6 +696,7 @@ export default function WelcomeScreen() {
                     autoComplete="off"
                     importantForAutofill="no"
                     textContentType="none"
+                    maxLength={MAX_PASSWORD_LENGTH}
                     />
                     <TouchableOpacity
                       onPress={() => setShowPassword(!showPassword)}
@@ -737,7 +758,7 @@ export default function WelcomeScreen() {
                       }}
                     >
                       <Text style={styles.buttonText}>
-                        {isResetMode ? "Sending..." : "Signing in"}
+                        {isResetMode ? "Sending Email" : "Signing in"}
                       </Text>
                       <SigningInDots />
                     </View>
@@ -781,6 +802,19 @@ export default function WelcomeScreen() {
                     </Text>
                   )}
                 </TouchableOpacity>
+                {isResetMode && (
+                  <TouchableOpacity
+                    style={styles.resetSupportPill}
+                    accessibilityRole="link"
+                    accessibilityLabel="Contact support by email"
+                    activeOpacity={0.75}
+                    onPress={() =>
+                      void Linking.openURL("mailto:fridgewise.app@gmail.com")
+                    }
+                  >
+                    <Text style={styles.resetSupportText}>Contact support</Text>
+                  </TouchableOpacity>
+                )}
                 {!isResetMode && (
                   <TouchableOpacity
                     style={styles.forgotPassword}
@@ -801,6 +835,18 @@ export default function WelcomeScreen() {
         )}
       </View>
     </ScreenLayout>
+    <SimpleInfoModal
+      visible={resetEmailModalVisible}
+      title="Check your email"
+      message="We sent you a link to reset your password. Open it on this device to choose a new password."
+      okLabel="OK"
+      accentColor="#197C47"
+      onDismiss={() => {
+        setResetEmailModalVisible(false);
+        setIsResetMode(false);
+      }}
+    />
+    </>
   );
 }
 
@@ -1063,6 +1109,23 @@ const styles = StyleSheet.create({
     color: "#197C47",
     fontSize: 14,
     fontWeight: "600",
+  },
+  resetSupportPill: {
+    alignSelf: "center",
+    marginTop: 16,
+    marginBottom: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: "rgba(25, 124, 71, 0.45)",
+    backgroundColor: "rgba(25, 124, 71, 0.06)",
+  },
+  resetSupportText: {
+    color: "#197C47",
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   resetCooldownRow: {
     flexDirection: "row",

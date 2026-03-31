@@ -3,22 +3,16 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   LayoutAnimation,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
-  UIManager,
   View,
 } from "react-native";
+import { enableAndroidLayoutAnimationExperimental } from "../utils/enableAndroidLayoutAnimation";
 import { getFoodIcon } from "../utils/foodIconMapping";
 import ItemEntryCard from "./ItemEntryCard";
 
-// Enable LayoutAnimation for Android
-if (Platform.OS === "android") {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-}
+enableAndroidLayoutAnimationExperimental();
 
 type ItemEntry = {
   id: string;

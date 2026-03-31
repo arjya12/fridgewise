@@ -10,7 +10,6 @@ import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { SHOPPING_LIST_STORAGE_KEY } from "@/services/groceryListStorage";
-import { syncGroceryListReminder } from "@/services/groceryListReminderService";
 import { GROCERY_CATEGORY_OPTIONS, GROCERY_CATEGORY_ORDER } from "@/lib/foodCategories";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -20,6 +19,7 @@ import {
   LayoutAnimation,
   Modal,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   SectionList,
@@ -35,6 +35,10 @@ import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
+import {
+  MAX_INVENTORY_QUANTITY,
+  sanitizeQuantityInputString,
+} from "@/utils/quantityLimits";
 
 // =============================================================================
 // INTERFACES
@@ -80,6 +84,13 @@ const UNIT_OPTIONS = [
   "portion",
 ] as const;
 
+function grocerySheetQuantityValid(raw: string): boolean {
+  const s = sanitizeQuantityInputString(raw, { allowEmpty: true });
+  if (s === "") return false;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) && n >= 1;
+}
+
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
@@ -99,7 +110,8 @@ export default function ShoppingListScreen() {
   >({});
   const [draftName, setDraftName] = useState("");
   const [draftCategory, setDraftCategory] = useState<string>("");
-  const [draftQty, setDraftQty] = useState(1);
+  /** String quantity in add/edit sheet — matches Add Item digit field + sanitize. */
+  const [draftQtyStr, setDraftQtyStr] = useState("1");
   const [draftUnit, setDraftUnit] = useState<(typeof UNIT_OPTIONS)[number]>("pcs");
   const [unitOpen, setUnitOpen] = useState(false);
 
@@ -168,7 +180,9 @@ export default function ShoppingListScreen() {
   useEffect(() => {
     if (initialLoading) return;
     const t = setTimeout(() => {
-      syncGroceryListReminder(lowStockAlerts).catch(() => {});
+      void import("@/services/groceryListReminderService").then((m) =>
+        m.syncGroceryListReminder(lowStockAlerts).catch(() => {})
+      );
     }, 400);
     return () => clearTimeout(t);
   }, [shoppingList, lowStockAlerts, initialLoading]);
@@ -185,7 +199,7 @@ export default function ShoppingListScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setDraftName("");
     setDraftCategory("");
-    setDraftQty(1);
+    setDraftQtyStr("1");
     setDraftUnit("pcs");
     setUnitOpen(false);
     setEditingId(null);
@@ -197,7 +211,7 @@ export default function ShoppingListScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setDraftName(item.name);
       setDraftCategory(item.category || "");
-      setDraftQty(item.quantity);
+      setDraftQtyStr(String(item.quantity));
       setDraftUnit((item.unit as (typeof UNIT_OPTIONS)[number]) || "pcs");
       setUnitOpen(false);
       setEditingId(item.id);
@@ -212,6 +226,13 @@ export default function ShoppingListScreen() {
       Alert.alert("Add item", "Enter an item name.");
       return;
     }
+    const safeQty = Math.min(
+      MAX_INVENTORY_QUANTITY,
+      Math.max(
+        1,
+        parseInt(sanitizeQuantityInputString(draftQtyStr || "1"), 10) || 1
+      )
+    );
     animateListChange();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -223,7 +244,7 @@ export default function ShoppingListScreen() {
                 ...it,
                 name,
                 category: draftCategory,
-                quantity: draftQty,
+                quantity: safeQty,
                 unit: draftUnit,
               }
             : it
@@ -234,7 +255,7 @@ export default function ShoppingListScreen() {
         id: `manual-${Date.now()}`,
         name,
         category: draftCategory,
-        quantity: draftQty,
+        quantity: safeQty,
         unit: draftUnit,
         status: "list",
         priority: "medium",
@@ -246,7 +267,7 @@ export default function ShoppingListScreen() {
 
     setAddOpen(false);
     setEditingId(null);
-  }, [draftCategory, draftName, draftQty, draftUnit, editingId]);
+  }, [draftCategory, draftName, draftQtyStr, draftUnit, editingId]);
 
   const setItemStatus = useCallback(
     (itemId: string, status: GroceryItem["status"]) => {
@@ -741,40 +762,86 @@ export default function ShoppingListScreen() {
 
                 <View style={styles.qtyColumn}>
                   <Text style={styles.fieldLabelRight}>Quantity</Text>
-                  <View style={styles.qtyControlModern}>
-                    <TouchableOpacity
-                      onPress={() => setDraftQty((q) => Math.max(1, q - 1))}
-                      style={styles.qtyBtnModern}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.qtyBtnText}>−</Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.qtyMid}>
-                      <Text style={styles.qtyTextModern}>{draftQty}</Text>
-                      <TouchableOpacity
-                        onPress={() => setUnitOpen((v) => !v)}
-                        activeOpacity={0.9}
-                        style={styles.unitPill}
+                  <View style={styles.qtyControlStacked}>
+                    <View style={styles.qtyStepRow}>
+                      <Pressable
+                        onPress={() => {
+                          setDraftQtyStr((q) =>
+                            String(
+                              Math.max(
+                                1,
+                                Math.min(
+                                  MAX_INVENTORY_QUANTITY,
+                                  (parseInt(
+                                    sanitizeQuantityInputString(q),
+                                    10
+                                  ) || 1) - 1
+                                )
+                              )
+                            )
+                          );
+                          Haptics.selectionAsync();
+                        }}
+                        style={styles.qtyStepBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Decrease quantity"
                       >
-                        <Text
-                          style={styles.unitText}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
+                        <Text style={styles.qtyStepBtnGlyph}>−</Text>
+                      </Pressable>
+                      <TextInput
+                        value={draftQtyStr}
+                        onChangeText={(t) =>
+                          setDraftQtyStr(
+                            sanitizeQuantityInputString(t, { allowEmpty: true })
+                          )
+                        }
+                        onBlur={() =>
+                          setDraftQtyStr((q) =>
+                            q.trim() === ""
+                              ? "1"
+                              : sanitizeQuantityInputString(q)
+                          )
+                        }
+                        keyboardType="number-pad"
+                        selectTextOnFocus
+                        style={styles.qtyDigitInput}
+                        accessibilityLabel="Quantity"
+                      />
+                      <Pressable
+                        onPress={() => {
+                          setDraftQtyStr((q) =>
+                            String(
+                              Math.min(
+                                MAX_INVENTORY_QUANTITY,
+                                (parseInt(
+                                  sanitizeQuantityInputString(q),
+                                  10
+                                ) || 1) + 1
+                              )
+                            )
+                          );
+                          Haptics.selectionAsync();
+                        }}
+                        style={styles.qtyStepBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Increase quantity"
+                      >
+                        <Text style={styles.qtyStepBtnGlyph}>+</Text>
+                      </Pressable>
+                    </View>
+                    <View style={styles.qtyUnitRow}>
+                      <Pressable
+                        onPress={() => setUnitOpen((v) => !v)}
+                        style={styles.unitPillStacked}
+                        accessibilityRole="button"
+                        accessibilityLabel="Select unit"
+                      >
+                        <Text style={styles.unitTextStacked} numberOfLines={1}>
                           {draftUnit}
                         </Text>
-                        <Text style={styles.unitChevron}>▾</Text>
-                      </TouchableOpacity>
+                        <Text style={styles.unitChevronStacked}>▾</Text>
+                      </Pressable>
                     </View>
-
-                    <TouchableOpacity
-                      onPress={() => setDraftQty((q) => Math.min(99, q + 1))}
-                      style={styles.qtyBtnModern}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.qtyBtnText}>+</Text>
-                    </TouchableOpacity>
                   </View>
 
                   {unitOpen && (
@@ -876,14 +943,14 @@ export default function ShoppingListScreen() {
                   onPress={addItem}
                   disabled={
                     !draftName.trim() ||
-                    draftQty <= 0 ||
+                    !grocerySheetQuantityValid(draftQtyStr) ||
                     !draftCategory ||
                     !draftUnit
                   }
                   style={[
                     styles.sheetAdd,
                     (!draftName.trim() ||
-                      draftQty <= 0 ||
+                      !grocerySheetQuantityValid(draftQtyStr) ||
                       !draftCategory ||
                       !draftUnit) &&
                       styles.sheetAddDisabled,
@@ -1388,10 +1455,9 @@ const styles = StyleSheet.create({
   },
   fieldLabelRight: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#4B5563",
     marginBottom: 6,
-    marginLeft: 0,
     textAlign: "center",
     alignSelf: "center",
   },
@@ -1463,7 +1529,7 @@ const styles = StyleSheet.create({
   },
   sheetTopRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 8,
@@ -1472,44 +1538,84 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   qtyColumn: {
-    width: 120,
+    width: 116,
   },
-  qtyMid: {
+  qtyControlStacked: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    justifyContent: "space-between",
+  },
+  qtyStepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  qtyStepBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-  unitPill: {
+  qtyStepBtnGlyph: {
+    fontSize: 14,
+    lineHeight: 14,
+    color: "#111827",
+    fontWeight: "800",
+  },
+  qtyDigitInput: {
+    minWidth: 28,
+    maxWidth: 56,
+    textAlign: "center",
+    fontSize: 15,
+    color: "#111",
+    fontWeight: "800",
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+    paddingVertical: 0,
+    paddingHorizontal: 2,
+  },
+  qtyUnitRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  unitPillStacked: {
     minWidth: 44,
-    maxWidth: 70,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    gap: 4,
-    overflow: "hidden",
+    gap: 2,
   },
-  unitText: {
-    fontSize: 10,
+  unitTextStacked: {
+    color: "#222",
     fontWeight: "700",
-    color: "#111827",
-    flexShrink: 1,
-    maxWidth: 40,
+    fontSize: 11,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+    textAlign: "center",
+    maxWidth: 52,
   },
-  unitChevron: {
+  unitChevronStacked: {
     fontSize: 9,
+    color: "#A1A1AB",
     fontWeight: "700",
-    color: "#9CA3AF",
-    flexShrink: 0,
   },
   unitDropdown: {
     position: "absolute",
-    top: 62,
+    top: 96,
     left: "50%",
     width: 96,
     transform: [{ translateX: -48 }],
@@ -1554,68 +1660,9 @@ const styles = StyleSheet.create({
     borderTopColor: "#E5E7EB",
   },
   unitCancelText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#166534",
-  },
-  qtyControl: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-  },
-  qtyControlModern: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    height: 44,
-    borderRadius: 16,
-    borderWidth: 1.2,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#F5F5F5",
-    paddingHorizontal: 6,
-  },
-  qtyBtnModern: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qtyBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-  },
-  qtyBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-  },
-  qtyText: {
-    minWidth: 30,
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#111827",
-    paddingHorizontal: 8,
-  },
-  qtyTextModern: {
-    minWidth: 20,
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#111827",
   },
   sheetActions: {
     flexDirection: "row",

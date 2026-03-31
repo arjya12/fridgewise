@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  UIManager,
   View,
   ViewStyle,
 } from "react-native";
@@ -21,17 +20,12 @@ import {
   PanelLayoutMode,
 } from "../../types/calendar-enhanced";
 import { calculateExpiryStatistics } from "../../utils/calendarEnhancedDataUtils";
+import { enableAndroidLayoutAnimationExperimental } from "../../utils/enableAndroidLayoutAnimation";
 import RealisticFoodImage from "../RealisticFoodImage";
 import { useCalendarColorScheme } from "./ColorSchemeProvider";
 import ItemCountIndicator from "./ItemCountIndicator";
 
-// Enable LayoutAnimation on Android
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+enableAndroidLayoutAnimationExperimental();
 
 // =============================================================================
 // MAIN COMPONENT

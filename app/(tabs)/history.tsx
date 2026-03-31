@@ -21,8 +21,10 @@ import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Clock, MagnifyingGlass, Trash } from "phosphor-react-native";
 
+import { modalStackedCancelContainer, modalStackedCancelLabel } from "@/theme/modalActionStyles";
 import { getFoodCategoryIcon } from "@/lib/foodCategories";
 import { useAuth } from "@/contexts/AuthContext";
+import { ItemCardPendingOverlay } from "@/components/ItemCardPendingOverlay";
 import SkeletonBlock from "@/components/SkeletonBlock";
 import { supabase, UsageLog } from "@/lib/supabase";
 import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
@@ -386,6 +388,7 @@ export default function HistoryScreen() {
           : isHi
             ? styles.rowHighlightConsume
             : null;
+      const rowBusy = deletingId === r.id;
       return (
         <View
           key={r.id}
@@ -426,16 +429,20 @@ export default function HistoryScreen() {
           <Pressable
             style={styles.rowDelete}
             onPress={() => setDeleteTarget(r)}
-            disabled={deletingId === r.id}
+            disabled={rowBusy}
             accessibilityRole="button"
             accessibilityLabel={`Delete ${r.name} from history`}
           >
             <Trash
               size={18}
-              color={deletingId === r.id ? UI.muted : "#DC2626"}
+              color={rowBusy ? UI.muted : "#DC2626"}
               weight="regular"
             />
           </Pressable>
+          <ItemCardPendingOverlay
+            visible={rowBusy}
+            tone={panel === "used" ? "green" : "red"}
+          />
         </View>
       );
     },
@@ -446,11 +453,11 @@ export default function HistoryScreen() {
     if (!deleteTarget) return;
     const id = deleteTarget.id;
     setDeletingId(id);
+    setDeleteTarget(null);
     try {
       const { error } = await supabase.from("usage_logs").delete().eq("id", id);
       if (error) throw error;
       setLogs((prev) => prev.filter((l) => l.id !== id));
-      setDeleteTarget(null);
     } catch {
       Alert.alert("Couldn't delete", "Please try again.");
     } finally {
@@ -855,6 +862,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   row: {
+    position: "relative",
+    overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -1006,18 +1015,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   delModalCancel: {
-    marginTop: 10,
-    borderRadius: 999,
-    backgroundColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 9,
-    alignSelf: "center",
-    paddingHorizontal: 32,
+    ...modalStackedCancelContainer,
   },
   delModalCancelText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#111827",
+    ...modalStackedCancelLabel,
   },
 });

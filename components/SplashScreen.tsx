@@ -1,5 +1,8 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { setPendingResetPasswordUrl } from "@/lib/pendingResetUrl";
+import {
+  peekPendingResetPasswordUrl,
+  setPendingResetPasswordUrl,
+} from "@/lib/pendingResetUrl";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
@@ -41,7 +44,17 @@ export default function SplashScreen() {
         requestAnimationFrame(() => {
           void Linking.getInitialURL().then((url) => {
             if (cancelled) return;
-            if (url && url.includes("reset-password") && url.includes("#")) {
+
+            // If the deep link was already captured elsewhere (ex: _layout listener),
+            // prefer the pending reset URL over routing to welcome.
+            const pending = peekPendingResetPasswordUrl();
+            if (pending && pending.includes("reset-password")) {
+              setPendingResetPasswordUrl(pending);
+              go("/(auth)/reset-password");
+              return;
+            }
+
+            if (url && url.includes("reset-password")) {
               setPendingResetPasswordUrl(url);
               go("/(auth)/reset-password");
               return;

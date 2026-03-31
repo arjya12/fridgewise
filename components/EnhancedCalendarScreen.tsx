@@ -22,6 +22,12 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  modalRowPrimaryContainer,
+  modalRowSecondaryLabel,
+  modalStackedCancelContainer,
+  modalStackedCancelLabel,
+} from "@/theme/modalActionStyles";
 import { getFoodCategoryIcon } from "@/lib/foodCategories";
 import { Calendar } from "react-native-calendars";
 import {
@@ -35,7 +41,10 @@ import {
   useEnhancedCalendar,
 } from "../hooks/useEnhancedCalendar";
 import { useThemeColor } from "../hooks/useThemeColor";
-import { ItemCardPendingOverlay } from "./ItemCardPendingOverlay";
+import {
+  ItemCardPendingOverlay,
+  type ItemCardPendingTone,
+} from "./ItemCardPendingOverlay";
 import { FoodItem } from "../lib/supabase";
 import { formatQuantityWithUnit } from "../utils/formatQuantityUnit";
 
@@ -105,7 +114,7 @@ export interface EnhancedCalendarScreenProps {
   /** Opens quantity picker for waste (parent shows ThrowAwayModal) */
   onRequestThrowAwayQuantity?: (item: FoodItem) => void;
   /** Show saving spinner on the matching item row/card */
-  pendingItemId?: string | null;
+  pendingItemAction?: { id: string; tone: ItemCardPendingTone } | null;
   onConsume?:     (item: FoodItem) => void;
   onAddItem?:     () => void;
   initialViewMode?: "calendar" | "timeline";
@@ -175,7 +184,7 @@ function EnhancedCalendarScreenCore({
   onItemDelete,
   onItemThrowAway,
   onRequestThrowAwayQuantity,
-  pendingItemId = null,
+  pendingItemAction = null,
   onConsume,
   initialViewMode = "calendar",
   initialDate,
@@ -860,7 +869,9 @@ function EnhancedCalendarScreenCore({
       const diff = diffDaysFromToday(item.expiry_date as any, todayStr);
       const iconColor = diff < 0 ? "#B91C1C" : "#16A34A";
 
-      const rowPending = pendingItemId != null && String(item.id) === String(pendingItemId);
+      const rowPending =
+        pendingItemAction != null &&
+        String(item.id) === String(pendingItemAction.id);
 
       return (
         <View key={item.id} style={S.timelineItemCard}>
@@ -937,23 +948,48 @@ function EnhancedCalendarScreenCore({
               </TouchableOpacity>
             </View>
           </Animated.View>
-          <ItemCardPendingOverlay visible={rowPending} />
+          <ItemCardPendingOverlay
+            visible={rowPending}
+            tone={pendingItemAction?.tone ?? "green"}
+          />
         </View>
       );
     },
-    [onItemEdit, onConsume, onItemPress, onItemDelete, todayStr, pendingItemId]
+    [onItemEdit, onConsume, onItemPress, onItemDelete, todayStr, pendingItemAction]
   );
 
   const formatTimelineDate = useCallback((dateStr: string) => {
-    const d = new Date(dateStr + "T00:00:00");
+    const parseYmd = (s: string) => {
+      const p = s.split("-");
+      const y = Number(p[0]);
+      const m = Number(p[1]) - 1;
+      const dayNum = Number(p[2]);
+      return new Date(y, m, dayNum);
+    };
+    const d = parseYmd(dateStr);
+    const today = parseYmd(todayStr);
     const day = d.getDate();
     const month = d.toLocaleDateString(undefined, { month: "long" });
+    const year = d.getFullYear();
+
     if (dateStr === todayStr) return `Today, ${day} ${month}`;
-    const tomorrow = new Date(todayStr + "T00:00:00");
+
+    const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    if (dateStr === tomorrow.toISOString().split("T")[0]) return `Tomorrow, ${day} ${month}`;
-    const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
-    return `${weekday}, ${day} ${month}`;
+    const ty = tomorrow.getFullYear();
+    const tm = String(tomorrow.getMonth() + 1).padStart(2, "0");
+    const td = String(tomorrow.getDate()).padStart(2, "0");
+    if (dateStr === `${ty}-${tm}-${td}`) return `Tomorrow, ${day} ${month}`;
+
+    const dayDiff = Math.round(
+      (d.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)
+    );
+    if (Math.abs(dayDiff) <= 14) {
+      const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
+      return `${weekday}, ${day} ${month}`;
+    }
+
+    return `${day} ${month} ${year}`;
   }, [todayStr]);
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1404,9 +1440,10 @@ function EnhancedCalendarScreenCore({
                               </Animated.View>
                               <ItemCardPendingOverlay
                                 visible={
-                                  pendingItemId != null &&
-                                  String(item.id) === String(pendingItemId)
+                                  pendingItemAction != null &&
+                                  String(item.id) === String(pendingItemAction.id)
                                 }
+                                tone={pendingItemAction?.tone ?? "green"}
                               />
                             </View>
                           );
@@ -2464,23 +2501,22 @@ const S = StyleSheet.create({
     gap: 16,
   },
   monthModalCancel: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
     borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
   },
   monthModalCancelText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#6B7280",
+    ...modalRowSecondaryLabel,
   },
   monthModalApply: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
+    ...modalRowPrimaryContainer,
     backgroundColor: "#22C55E",
   },
   monthModalApplyText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -2739,19 +2775,10 @@ const S = StyleSheet.create({
     textAlign: "left",
   },
   removeModalCancel: {
-    marginTop: 6,
-    borderRadius: 999,
-    backgroundColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 9,
-    alignSelf: "center",
-    paddingHorizontal: 32,
+    ...modalStackedCancelContainer,
   },
   removeModalCancelText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#111827",
+    ...modalStackedCancelLabel,
   },
   expiredDateHeaderRow: {
     flexDirection: "row",

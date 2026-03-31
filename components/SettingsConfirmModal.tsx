@@ -1,3 +1,9 @@
+import {
+  modalRowPrimaryContainer,
+  modalRowPrimaryLabel,
+  modalRowSecondaryContainer,
+  modalRowSecondaryLabel,
+} from "@/theme/modalActionStyles";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import {
@@ -238,27 +244,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cancelBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center",
-    justifyContent: "center",
+    ...modalRowSecondaryContainer,
   },
   cancelBtnText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#64748B",
-    textAlign: "center",
+    ...modalRowSecondaryLabel,
   },
   primaryBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+    ...modalRowPrimaryContainer,
   },
   primaryGreen: {
     backgroundColor: "#22C55E",
@@ -272,10 +264,8 @@ const styles = StyleSheet.create({
     borderColor: "#FCA5A5",
   },
   primaryBtnText: {
-    fontSize: 13,
+    ...modalRowPrimaryLabel,
     fontWeight: "600",
-    color: "#FFFFFF",
-    textAlign: "center",
   },
   primaryBtnTextDangerOutline: {
     color: "#B91C1C",

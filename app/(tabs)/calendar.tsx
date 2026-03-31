@@ -1,4 +1,5 @@
 import { ConsumeModal } from "@/components/ConsumeModal";
+import type { ItemCardPendingTone } from "@/components/ItemCardPendingOverlay";
 import { EnhancedCalendarScreen } from "@/components/EnhancedCalendarScreen";
 import { ThrowAwayModal } from "@/components/ThrowAwayModal";
 import ScreenLayout from "@/components/ScreenLayout";
@@ -34,7 +35,10 @@ export default function CalendarScreen() {
   }, [state.loading]);
   const [consumeItem, setConsumeItem] = useState<FoodItem | null>(null);
   const [throwAwayItem, setThrowAwayItem] = useState<FoodItem | null>(null);
-  const [itemActionPendingId, setItemActionPendingId] = useState<string | null>(null);
+  const [itemActionPending, setItemActionPending] = useState<{
+    id: string;
+    tone: ItemCardPendingTone;
+  } | null>(null);
 
   const params = useGlobalSearchParams<{
     view?: string;
@@ -109,7 +113,7 @@ export default function CalendarScreen() {
   const handleDeleteItem = useCallback(
     async (item: FoodItem) => {
       const id = String(item.id);
-      setItemActionPendingId(id);
+      setItemActionPending({ id, tone: "red" });
       try {
         await foodItemsService.deleteItem(item.id);
         await refresh();
@@ -117,7 +121,7 @@ export default function CalendarScreen() {
         console.error("Failed to delete item:", error);
         Alert.alert("Error", error?.message ?? "Failed to delete item. Please try again.");
       } finally {
-        setItemActionPendingId(null);
+        setItemActionPending(null);
       }
     },
     [refresh]
@@ -126,7 +130,7 @@ export default function CalendarScreen() {
   const performConsume = useCallback(
     async (item: FoodItem, quantity: number) => {
       const id = String(item.id);
-      setItemActionPendingId(id);
+      setItemActionPending({ id, tone: "green" });
       try {
         await markItemUsed(id, quantity);
         await refresh();
@@ -134,7 +138,7 @@ export default function CalendarScreen() {
         console.error("Failed to log consumption:", error);
         Alert.alert("Error", error?.message ?? "Failed to log consumption. Please try again.");
       } finally {
-        setItemActionPendingId(null);
+        setItemActionPending(null);
       }
     },
     [markItemUsed, refresh]
@@ -170,7 +174,7 @@ export default function CalendarScreen() {
   const performThrowAway = useCallback(
     async (item: FoodItem, quantity: number) => {
       const id = String(item.id);
-      setItemActionPendingId(id);
+      setItemActionPending({ id, tone: "red" });
       try {
         await foodItemsService.logUsage(item.id, "wasted", quantity);
         await refresh();
@@ -178,7 +182,7 @@ export default function CalendarScreen() {
         console.error("Failed to log throw away:", error);
         Alert.alert("Error", error?.message ?? "Failed to throw away item. Please try again.");
       } finally {
-        setItemActionPendingId(null);
+        setItemActionPending(null);
       }
     },
     [refresh]
@@ -238,7 +242,7 @@ export default function CalendarScreen() {
           onItemEdit={handleItemEdit}
           onItemDelete={handleDeleteItem}
           onRequestThrowAwayQuantity={requestThrowAwayModal}
-          pendingItemId={itemActionPendingId}
+          pendingItemAction={itemActionPending}
           onConsume={handleConsumeClick}
           onAddItem={() => router.push("/(tabs)/add")}
           initialViewMode={openIntent.view}

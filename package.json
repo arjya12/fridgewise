@@ -86,6 +86,7 @@
     "jest-expo": "~54.0.17",
     "patch-package": "^8.0.0",
     "postinstall-postinstall": "^2.1.0",
+    "sharp": "^0.34.5",
     "typescript": "~5.9.2"
   },
   "private": true,

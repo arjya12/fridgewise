@@ -24,7 +24,11 @@ interface AuthContextType {
     password: string,
     options?: { rememberMe?: boolean }
   ) => Promise<void>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName?: string
+  ) => Promise<{ needsEmailVerification: boolean }>;
   signOut: () => Promise<void>;
   getUserProfile: (userIdOverride?: string) => Promise<UserProfile | null>;
   updateUserProfile: (
@@ -169,7 +173,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName?: string
+  ): Promise<{ needsEmailVerification: boolean }> => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -198,6 +206,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .update({ full_name: fullName })
           .eq("id", data.user.id);
       }
+
+      // No session until the user confirms email (when confirmation is enabled in Supabase).
+      return { needsEmailVerification: !data?.session };
     } catch (error: any) {
       throw error;
     }

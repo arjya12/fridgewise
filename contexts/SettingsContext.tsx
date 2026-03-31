@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { syncGroceryListReminder } from "@/services/groceryListReminderService";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 // Define the settings interface
@@ -114,7 +113,22 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!settingsHydrated) return;
-    syncGroceryListReminder(lowStockAlerts).catch(() => {});
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { syncGroceryListReminder } = await import(
+          "@/services/groceryListReminderService"
+        );
+        if (!cancelled) {
+          await syncGroceryListReminder(lowStockAlerts).catch(() => {});
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [settingsHydrated, lowStockAlerts]);
 
   const reloadSettingsFromStorage = useCallback(async () => {

@@ -3,6 +3,12 @@
  * so the whole screen (including bottom nav) is dimmed by the system.
  */
 
+import {
+  modalRowPrimaryContainer,
+  modalRowPrimaryLabel,
+  modalRowSecondaryContainer,
+  modalRowSecondaryLabel,
+} from "@/theme/modalActionStyles";
 import React from "react";
 import {
   Modal,
@@ -130,28 +136,19 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cancelBtn: {
-    paddingVertical: 9,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    backgroundColor: "#F1F5F9",
+    ...modalRowSecondaryContainer,
   },
   cancelBtnText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#64748B",
+    ...modalRowSecondaryLabel,
   },
   confirmBtn: {
-    paddingVertical: 9,
-    paddingHorizontal: 18,
-    borderRadius: 999,
+    ...modalRowPrimaryContainer,
     backgroundColor: "#22C55E",
   },
   confirmBtnDestructive: {
     backgroundColor: "#EF4444",
   },
   confirmBtnText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#FFFFFF",
+    ...modalRowPrimaryLabel,
   },
 });

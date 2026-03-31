@@ -13,3 +13,12 @@ export function getAndClearPendingResetPasswordUrl(): string | null {
   pendingResetPasswordUrl = null;
   return url;
 }
+
+// Used by the splash screen to decide navigation without clearing the pending URL.
+export function peekPendingResetPasswordUrl(): string | null {
+  return pendingResetPasswordUrl;
+}
+
+export function clearPendingResetPasswordUrl(): void {
+  pendingResetPasswordUrl = null;
+}

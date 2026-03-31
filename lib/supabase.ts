@@ -7,9 +7,6 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Missing Supabase environment variables - check your .env file");
-} else if (__DEV__) {
-  const domain = supabaseUrl.replace(/^https?:\/\//, "").split("/")[0];
-  console.log("[Supabase] Configured for:", domain);
 }
 
 // Custom fetch with retry for Android "Network request failed" (common on RN + Supabase)

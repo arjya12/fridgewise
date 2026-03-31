@@ -3,6 +3,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { MAX_EMAIL_LENGTH } from "@/utils/authFieldLimits";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -190,6 +191,7 @@ export default function ChangeEmailScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              maxLength={MAX_EMAIL_LENGTH}
               onFocus={() => setCurrentFocused(true)}
               onBlur={() => setCurrentFocused(false)}
             />
@@ -209,6 +211,7 @@ export default function ChangeEmailScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              maxLength={MAX_EMAIL_LENGTH}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
             />

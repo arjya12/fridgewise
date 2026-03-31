@@ -1,8 +1,6 @@
 import { clearRememberMePreference } from "@/lib/authPreferences";
 import { supabase } from "@/lib/supabase";
 import { SHOPPING_LIST_STORAGE_KEY } from "@/services/groceryListStorage";
-import { syncGroceryListReminder } from "@/services/groceryListReminderService";
-import { cancelAllScheduledLocalNotifications } from "@/services/notificationService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 async function clearFridgewiseAsyncStorage(): Promise<void> {
@@ -73,6 +71,11 @@ export async function purgeUserRemoteData(userId: string): Promise<void> {
  */
 export async function clearAllAppData(userId: string): Promise<void> {
   await purgeUserRemoteData(userId);
+  const [{ syncGroceryListReminder }, { cancelAllScheduledLocalNotifications }] =
+    await Promise.all([
+      import("@/services/groceryListReminderService"),
+      import("@/services/notificationService"),
+    ]);
   await syncGroceryListReminder(false);
   await cancelAllScheduledLocalNotifications();
   await clearFridgewiseAsyncStorage();
@@ -91,6 +94,11 @@ export async function deleteUserAccount(userId: string): Promise<void> {
   if (profileErr) {
     throw new Error(profileErr.message || "Failed to delete profile");
   }
+  const [{ syncGroceryListReminder }, { cancelAllScheduledLocalNotifications }] =
+    await Promise.all([
+      import("@/services/groceryListReminderService"),
+      import("@/services/notificationService"),
+    ]);
   await syncGroceryListReminder(false);
   await cancelAllScheduledLocalNotifications();
   await clearFridgewiseAsyncStorage();

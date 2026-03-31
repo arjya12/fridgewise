@@ -3,9 +3,12 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
+import { InteractionManager } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as Linking from "expo-linking";
+import { useRouter } from "expo-router";
 
 import {
   Fraunces_400Regular_Italic,
@@ -25,11 +28,7 @@ import { CalendarProvider } from "@/contexts/CalendarContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { TipsProvider } from "@/contexts/TipsContext";
 import { foodItemsService } from "@/services/foodItems";
-import {
-  registerBackgroundTasks,
-  requestNotificationPermissions,
-  scheduleBackgroundTasks,
-} from "@/services/notificationService";
+import { setPendingResetPasswordUrl } from "@/lib/pendingResetUrl";
 
 // Custom light theme configuration to override system settings
 const CustomLightTheme = {
@@ -55,6 +54,7 @@ const ensureTextSafety = (text: string | number | undefined): string => {
 };
 
 export default function RootLayout() {
+  const router = useRouter();
   // Remove colorScheme detection - always use light theme
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
@@ -66,24 +66,45 @@ export default function RootLayout() {
     DMMono_500Medium,
   });
 
-  // Initialize notifications when the app starts
+  // Defer expo-notifications (large native module) until after fonts + first interactions.
   useEffect(() => {
-    const initializeNotifications = async () => {
-      try {
-        // Request notification permissions
-        const status = await requestNotificationPermissions();
-        console.log("Notification permission status:", status);
+    if (!loaded) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      void (async () => {
+        try {
+          const {
+            requestNotificationPermissions,
+            registerBackgroundTasks,
+            scheduleBackgroundTasks,
+          } = await import("@/services/notificationService");
+          const status = await requestNotificationPermissions();
+          console.log("Notification permission status:", status);
+          await registerBackgroundTasks();
+          await scheduleBackgroundTasks();
+        } catch (error) {
+          console.error("Error initializing notifications:", error);
+        }
+      })();
+    });
+    return () => task.cancel();
+  }, [loaded]);
 
-        // Register and schedule background tasks
-        await registerBackgroundTasks();
-        await scheduleBackgroundTasks();
-      } catch (error) {
-        console.error("Error initializing notifications:", error);
+  // Handle reset-password deep links even if the app is already running.
+  // Note: this hook must be registered on every render (cannot be after `if (!loaded) return null`).
+  useEffect(() => {
+    const handleUrl = (url: string | null) => {
+      if (!url) return;
+      if (!loaded) return;
+      if (url.includes("reset-password")) {
+        setPendingResetPasswordUrl(url);
+        router.replace("/(auth)/reset-password");
       }
     };
 
-    initializeNotifications();
-  }, []);
+    void Linking.getInitialURL().then(handleUrl);
+    const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
+    return () => sub.remove();
+  }, [router, loaded]);
 
   if (!loaded) {
     return null;

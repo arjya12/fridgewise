@@ -17,7 +17,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  UIManager,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,7 +36,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Dimensions } from "react-native";
 
 import { ConsumeModal } from "@/components/ConsumeModal";
-import { ItemCardPendingOverlay } from "@/components/ItemCardPendingOverlay";
+import {
+  ItemCardPendingOverlay,
+  type ItemCardPendingTone,
+} from "@/components/ItemCardPendingOverlay";
 import { ThrowAwayModal } from "@/components/ThrowAwayModal";
 import ScreenLayout from "@/components/ScreenLayout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -49,8 +51,11 @@ import {
 import { FoodItem, supabase, UsageLog } from "@/lib/supabase";
 import { getFoodCategoryIcon } from "@/lib/foodCategories";
 import { foodItemsService } from "@/services/foodItems";
+import { modalStackedCancelContainer, modalStackedCancelLabel } from "@/theme/modalActionStyles";
+import { enableAndroidLayoutAnimationExperimental } from "@/utils/enableAndroidLayoutAnimation";
 import { formatExpiry } from "@/utils/formatExpiry";
 import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
+import { firstNameForGreeting } from "@/utils/personNameInput";
 
 type LocationFilter = "all" | "fridge" | "shelf";
 
@@ -219,17 +224,6 @@ const getGreeting = () => {
   return "Good Night";
 };
 
-const firstNameFromProfile = (fullName?: string, email?: string) => {
-  const candidate =
-    (fullName && fullName.trim().split(" ")[0]) ||
-    (email && email.split("@")[0]) ||
-    "";
-  const match = candidate.match(/[A-Za-z]+/);
-  const cleaned = match ? match[0] : candidate;
-  if (!cleaned) return undefined;
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
-};
-
 function Divider() {
   return (
     <View
@@ -373,12 +367,13 @@ export default function HomeScreen() {
   const [consumeModalItem, setConsumeModalItem] = useState<FoodItem | null>(null);
   const [throwAwayModalItem, setThrowAwayModalItem] = useState<FoodItem | null>(null);
   const [removeModalItem, setRemoveModalItem] = useState<FoodItem | null>(null);
-  /** Spinner overlay on the row/card while consume / throw / delete / use-all hits the server */
-  const [homeItemActionPendingId, setHomeItemActionPendingId] = useState<string | null>(
-    null
-  );
+  /** Spinner on row: green = consume / use-all, red = throw away / delete */
+  const [homeItemActionPending, setHomeItemActionPending] = useState<{
+    id: string;
+    tone: ItemCardPendingTone;
+  } | null>(null);
 
-  const name = firstNameFromProfile(userProfile?.full_name, user?.email);
+  const name = firstNameForGreeting(userProfile?.full_name, user?.email);
   const { width } = Dimensions.get("window");
   const pinnedStripInnerW = width - 36;
   const pinnedCardHalfW = Math.floor((pinnedStripInnerW - 8) / 2);
@@ -805,7 +800,7 @@ export default function HomeScreen() {
     try {
       const item = items.find((i) => i.id === itemId);
       if (!item) return;
-      setHomeItemActionPendingId(id);
+      setHomeItemActionPending({ id, tone: "green" });
       await foodItemsService.logUsage(itemId, "used", item.quantity);
       runSmoothLayout();
       setItems((prev) => prev.filter((i) => i.id !== itemId));
@@ -817,7 +812,7 @@ export default function HomeScreen() {
       await loadItems({ showLoader: false });
       Alert.alert("Error", error?.message ?? "Failed to mark used");
     } finally {
-      setHomeItemActionPendingId(null);
+      setHomeItemActionPending(null);
     }
   };
 
@@ -859,7 +854,7 @@ export default function HomeScreen() {
         : pinnedIdsSnapshot;
 
       setExpandedInventoryId((prev) => (prev === id ? null : prev));
-      setHomeItemActionPendingId(id);
+      setHomeItemActionPending({ id, tone: "red" });
 
       void (async () => {
         try {
@@ -889,7 +884,7 @@ export default function HomeScreen() {
             error?.message ?? "Failed to throw away item. Please try again."
           );
         } finally {
-          setHomeItemActionPendingId(null);
+          setHomeItemActionPending(null);
         }
       })();
     },
@@ -929,7 +924,7 @@ export default function HomeScreen() {
     setRemoveModalItem(null);
     setExpandedInventoryId((prev) => (prev === id ? null : prev));
     setExpandedPinnedId((prev) => (prev === id ? null : prev));
-    setHomeItemActionPendingId(id);
+    setHomeItemActionPending({ id, tone: "red" });
 
     void (async () => {
       try {
@@ -949,7 +944,7 @@ export default function HomeScreen() {
           error?.message ?? "Failed to delete item. Please try again."
         );
       } finally {
-        setHomeItemActionPendingId(null);
+        setHomeItemActionPending(null);
       }
     })();
   }, [removeModalItem, pinnedIds, user?.id, loadHomeMeta, loadItems]);
@@ -964,7 +959,7 @@ export default function HomeScreen() {
         : pinnedIdsSnapshot;
 
       setExpandedInventoryId((prev) => (prev === id ? null : prev));
-      setHomeItemActionPendingId(id);
+      setHomeItemActionPending({ id, tone: "green" });
 
       void (async () => {
         try {
@@ -994,7 +989,7 @@ export default function HomeScreen() {
             error?.message ?? "Failed to log consumption. Please try again."
           );
         } finally {
-          setHomeItemActionPendingId(null);
+          setHomeItemActionPending(null);
         }
       })();
     },
@@ -1066,14 +1061,7 @@ export default function HomeScreen() {
   }, [expandedInventoryId, filteredItems]);
 
   useEffect(() => {
-    const isFabric = Boolean((globalThis as any)?.nativeFabricUIManager);
-    if (
-      Platform.OS === "android" &&
-      !isFabric &&
-      UIManager.setLayoutAnimationEnabledExperimental
-    ) {
-      UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
+    enableAndroidLayoutAnimationExperimental();
   }, []);
 
   const upcomingCards = useMemo<ThisWeekCard[]>(() => {
@@ -1671,7 +1659,12 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     </View>
                   </Animated.View>
-                  <ItemCardPendingOverlay visible={homeItemActionPendingId === pinnedRowId} />
+                  <ItemCardPendingOverlay
+                    visible={
+                      homeItemActionPending?.id === pinnedRowId
+                    }
+                    tone={homeItemActionPending?.tone ?? "green"}
+                  />
                 </View>
               );
             })}
@@ -2013,7 +2006,10 @@ export default function HomeScreen() {
                       </View>
                     </View>
                   </Animated.View>
-                  <ItemCardPendingOverlay visible={homeItemActionPendingId === rowId} />
+                  <ItemCardPendingOverlay
+                    visible={homeItemActionPending?.id === rowId}
+                    tone={homeItemActionPending?.tone ?? "green"}
+                  />
                 </View>
               );
             })
@@ -3442,19 +3438,10 @@ const styles = StyleSheet.create({
     textAlign: "left",
   },
   removeModalCancel: {
-    marginTop: 6,
-    borderRadius: 999,
-    backgroundColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 9,
-    alignSelf: "center",
-    paddingHorizontal: 32,
+    ...modalStackedCancelContainer,
   },
   removeModalCancelText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#111827",
+    ...modalStackedCancelLabel,
   },
   skeleton: {
     height: 58,

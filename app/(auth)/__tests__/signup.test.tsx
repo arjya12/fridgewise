@@ -68,7 +68,7 @@ describe("SignUpScreen", () => {
 
   beforeEach(() => {
     (useAuth as jest.Mock).mockReturnValue({
-      signUp: signUpMock.mockResolvedValue({ error: null }),
+      signUp: signUpMock.mockResolvedValue({ needsEmailVerification: true }),
     });
     jest.clearAllMocks();
   });
@@ -197,8 +197,6 @@ describe("SignUpScreen", () => {
       </NavigationContainer>
     );
 
-    jest.useFakeTimers();
-
     const firstNameInput = getByPlaceholderText("First Name");
     const lastNameInput = getByPlaceholderText("Last Name");
     const emailInput = getByPlaceholderText("Email");
@@ -224,14 +222,12 @@ describe("SignUpScreen", () => {
       "Test User"
     );
 
-    act(() => {
-      jest.advanceTimersByTime(900);
+    await act(async () => {
+      fireEvent.press(getByTestId("simple-info-modal-ok"));
     });
 
     const { router } = require("expo-router");
     expect(router.push).toHaveBeenCalledWith("/(auth)/welcome?login=1");
-
-    jest.useRealTimers();
   });
 
   it("should handle signup error", async () => {

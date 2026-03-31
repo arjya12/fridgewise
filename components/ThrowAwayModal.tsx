@@ -3,6 +3,12 @@
  * Logs to usage history and reduces/removes from inventory on confirm — mirrors ConsumeModal layout.
  */
 
+import {
+  modalRowPrimaryContainer,
+  modalRowPrimaryLabel,
+  modalRowSecondaryContainer,
+  modalRowSecondaryLabel,
+} from "@/theme/modalActionStyles";
 import { FoodItem } from "@/lib/supabase";
 import React, { useEffect, useState } from "react";
 import {
@@ -273,34 +279,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cancelBtn: {
-    width: 100,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "#F1F5F9",
-    borderWidth: 0,
-    justifyContent: "center",
-    alignItems: "center",
+    ...modalRowSecondaryContainer,
   },
   cancelBtnText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#64748B",
-    textAlign: "center",
+    ...modalRowSecondaryLabel,
   },
   confirmBtn: {
-    width: 100,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    ...modalRowPrimaryContainer,
     backgroundColor: "#B91C1C",
-    justifyContent: "center",
-    alignItems: "center",
   },
   confirmBtnText: {
-    fontSize: 12,
+    ...modalRowPrimaryLabel,
     fontWeight: "600",
-    color: "#FFFFFF",
-    textAlign: "center",
   },
 });

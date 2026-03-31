@@ -1134,7 +1134,7 @@ export default function AddItemScreen() {
                 style={{
                   color: "#166534",
                   fontWeight: "500",
-                  fontSize: 13,
+                  fontSize: 14,
                   letterSpacing: 0.2,
                   fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                 }}
