@@ -30,11 +30,14 @@ export default function ResetPasswordRelayScreen() {
     const hash = window.location.hash.startsWith("#")
       ? window.location.hash.slice(1)
       : "";
-
-    const params = parseKeyValueParams(hash);
-    const accessToken = params.access_token;
-    const refreshToken = params.refresh_token;
-    const type = params.type ?? "recovery";
+    const hashParams = new URLSearchParams(hash);
+    const fallbackParams = parseKeyValueParams(hash);
+    const accessToken =
+      (hashParams.get("access_token") ?? fallbackParams.access_token ?? "").trim();
+    const refreshToken =
+      (hashParams.get("refresh_token") ?? fallbackParams.refresh_token ?? "").trim();
+    const type =
+      (hashParams.get("type") ?? fallbackParams.type ?? "recovery").trim() || "recovery";
 
     if (!accessToken || !refreshToken) return null;
 
@@ -43,7 +46,7 @@ export default function ResetPasswordRelayScreen() {
       accessToken
     )}&refresh_token=${encodeURIComponent(
       refreshToken
-    )}&type=${encodeURIComponent(type)}`;
+    )}&type=${encodeURIComponent("recovery")}`;
 
     return `fridgewise://reset-password?${query}`;
   }, []);

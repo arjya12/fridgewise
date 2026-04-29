@@ -25,6 +25,12 @@ import Svg, { Circle, Path } from "react-native-svg";
 
 const { width, height: screenHeight } = Dimensions.get("window");
 
+function maskEmailForLog(value: string) {
+  const [name, domain] = value.split("@");
+  if (!name || !domain) return "[invalid-email]";
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
 export default function WelcomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -221,10 +227,28 @@ export default function WelcomeScreen() {
         process.env.EXPO_PUBLIC_RESET_REDIRECT_URL ||
         "fridgewise://reset-password";
 
+      if (__DEV__) {
+        console.log("[ResetRequest] Sending reset email", {
+          email: maskEmailForLog(trimmedEmail),
+          resetRelayUrl: resetRelayUrl || null,
+          resetRedirectUrl,
+          hasWebRedirectEnv: Boolean(process.env.EXPO_PUBLIC_RESET_WEB_REDIRECT_URL),
+          hasAppRedirectEnv: Boolean(process.env.EXPO_PUBLIC_RESET_REDIRECT_URL),
+        });
+      }
+
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
         redirectTo: resetRedirectUrl,
       });
       if (error) throw error;
+
+      if (__DEV__) {
+        console.log("[ResetRequest] Reset email request accepted by Supabase", {
+          email: maskEmailForLog(trimmedEmail),
+          redirectTo: resetRedirectUrl,
+        });
+      }
+
       setLoginError(null);
       setResetCooldownSeconds(60);
       // Open after interactions so the loading state clears and the RN Modal stacks above the sheet.

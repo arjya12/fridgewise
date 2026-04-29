@@ -9,18 +9,102 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Missing Supabase environment variables - check your .env file");
 }
 
+function summarizeSupabaseAuthRequest(input: Parameters<typeof fetch>[0]) {
+  const rawUrl =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input.url;
+
+  try {
+    const parsed = new URL(rawUrl);
+    const isSupabaseAuth = parsed.href.startsWith(`${supabaseUrl}/auth/v1`);
+    const isResetRelevant =
+      parsed.pathname.includes("/recover") ||
+      parsed.pathname.includes("/verify") ||
+      parsed.pathname.includes("/token") ||
+      parsed.pathname.includes("/user");
+
+    if (!isSupabaseAuth || !isResetRelevant) return null;
+
+    const redirectTo = parsed.searchParams.get("redirect_to");
+    const grantType = parsed.searchParams.get("grant_type");
+
+    return {
+      path: parsed.pathname,
+      hasRedirectTo: Boolean(redirectTo),
+      redirectTo,
+      grantType,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Custom fetch with retry for Android "Network request failed" (common on RN + Supabase)
 const fetchWithRetry: typeof fetch = async (input, init) => {
   const maxRetries = 3;
   let lastError: unknown;
+  const authRequestSummary = __DEV__
+    ? summarizeSupabaseAuthRequest(input)
+    : null;
+
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await fetch(input, init);
+      if (authRequestSummary) {
+        console.log("[SupabaseAuthFetch] request", {
+          ...authRequestSummary,
+          method: init?.method ?? "GET",
+          attempt: i + 1,
+        });
+      }
+
+      // Some environments can hang indefinitely on fetch. Add a hard timeout
+      // so auth flows (reset/verification) don't get stuck forever.
+      const controller = new AbortController();
+      const TIMEOUT_MS = 8000;
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      try {
+        const response = await fetch(input, {
+          ...(init ?? {}),
+          signal: controller.signal,
+        });
+        if (authRequestSummary) {
+          console.log("[SupabaseAuthFetch] response", {
+            path: authRequestSummary.path,
+            status: response.status,
+            ok: response.ok,
+            attempt: i + 1,
+          });
+        }
+        return response;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     } catch (e) {
       lastError = e;
+      if (authRequestSummary) {
+        console.log("[SupabaseAuthFetch] error", {
+          path: authRequestSummary.path,
+          attempt: i + 1,
+          name: e instanceof Error ? e.name : undefined,
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+
+      const isAbortError =
+        typeof e === "object" &&
+        e !== null &&
+        "name" in e &&
+        e.name === "AbortError";
+
       const isNetworkError =
-        e instanceof TypeError &&
-        (e.message === "Network request failed" || e.message?.includes("Network request failed"));
+        (e instanceof TypeError &&
+          (e.message === "Network request failed" ||
+            e.message?.includes("Network request failed"))) ||
+        isAbortError;
       if (isNetworkError && i < maxRetries - 1) {
         await new Promise((r) => setTimeout(r, 500 * (i + 1)));
         continue;

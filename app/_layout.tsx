@@ -1,15 +1,13 @@
 import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { InteractionManager } from "react-native";
-import { LogBox } from "react-native";
+import { InteractionManager, LogBox } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
 
 import {
   Fraunces_400Regular_Italic,
@@ -30,7 +28,10 @@ import { SettingsProvider } from "@/contexts/SettingsContext";
 import { TipsProvider } from "@/contexts/TipsContext";
 import { foodItemsService } from "@/services/foodItems";
 import { setPendingResetPasswordUrl } from "@/lib/pendingResetUrl";
-import { isSupabaseRecoveryLink } from "@/lib/supabaseRecoveryLink";
+import {
+  isSupabaseRecoveryLink,
+  summarizeRecoveryLinkForLog,
+} from "@/lib/supabaseRecoveryLink";
 
 // Custom light theme configuration to override system settings
 const CustomLightTheme = {
@@ -47,13 +48,14 @@ const CustomLightTheme = {
   },
 };
 
-// Utility function to ensure text props are properly handled
-const ensureTextSafety = (text: string | number | undefined): string => {
-  if (text === undefined || text === null) {
-    return "";
+function resetLinkDebugLog(message: string, details?: unknown) {
+  if (!__DEV__) return;
+  if (details === undefined) {
+    console.log(`[ResetLink] ${message}`);
+    return;
   }
-  return String(text);
-};
+  console.log(`[ResetLink] ${message}`, details);
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -103,19 +105,64 @@ export default function RootLayout() {
   // Note: this hook must be registered on every render (cannot be after `if (!loaded) return null`).
   useEffect(() => {
     const handleUrl = (url: string | null) => {
-      if (!url) return;
-      if (!loaded) return;
+      if (!url) {
+        resetLinkDebugLog("No URL received");
+        return;
+      }
+
+      resetLinkDebugLog("Root listener received URL", {
+        loaded,
+        summary: summarizeRecoveryLinkForLog(url),
+      });
+
+      if (!loaded) {
+        resetLinkDebugLog("Fonts/app shell not loaded yet; ignoring for now");
+        return;
+      }
+
+      const isResetPasswordPath = url.includes("reset-password");
+      const isRecoveryLink = isSupabaseRecoveryLink(url);
+
+      resetLinkDebugLog("Root listener classification", {
+        isResetPasswordPath,
+        isRecoveryLink,
+      });
+
       // Supabase may deliver recovery tokens on routes other than `/reset-password`
       // (often in the URL fragment: `#access_token=...&refresh_token=...&type=recovery`).
-      if (url.includes("reset-password") || isSupabaseRecoveryLink(url)) {
+      if (isResetPasswordPath || isRecoveryLink) {
+        resetLinkDebugLog("Storing pending URL and routing to reset screen");
         setPendingResetPasswordUrl(url);
         router.replace("/(auth)/reset-password");
+        return;
       }
+
+      resetLinkDebugLog("URL did not look like a reset link; no route change");
     };
 
-    void Linking.getInitialURL().then(handleUrl);
-    const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
-    return () => sub.remove();
+    resetLinkDebugLog("Registering root deep-link handlers", { loaded });
+    void Linking.getInitialURL()
+      .then((initialUrl) => {
+        resetLinkDebugLog("getInitialURL resolved", {
+          summary: summarizeRecoveryLinkForLog(initialUrl),
+        });
+        handleUrl(initialUrl);
+      })
+      .catch((error) => {
+        resetLinkDebugLog("getInitialURL failed", error);
+      });
+
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      resetLinkDebugLog("Runtime Linking event fired", {
+        summary: summarizeRecoveryLinkForLog(url),
+      });
+      handleUrl(url);
+    });
+
+    return () => {
+      resetLinkDebugLog("Removing root deep-link handler", { loaded });
+      sub.remove();
+    };
   }, [router, loaded]);
 
   if (!loaded) {

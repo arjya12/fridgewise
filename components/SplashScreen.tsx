@@ -3,7 +3,10 @@ import {
   peekPendingResetPasswordUrl,
   setPendingResetPasswordUrl,
 } from "@/lib/pendingResetUrl";
-import { isSupabaseRecoveryLink } from "@/lib/supabaseRecoveryLink";
+import {
+  isSupabaseRecoveryLink,
+  summarizeRecoveryLinkForLog,
+} from "@/lib/supabaseRecoveryLink";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
@@ -20,6 +23,15 @@ const { width, height } = Dimensions.get("window");
 const BACKGROUND_COLOR = "rgb(204, 245, 201)";
 const MIN_SPLASH_MS = 2000;
 
+function splashResetLog(message: string, details?: unknown) {
+  if (!__DEV__) return;
+  if (details === undefined) {
+    console.log(`[SplashReset] ${message}`);
+    return;
+  }
+  console.log(`[SplashReset] ${message}`, details);
+}
+
 export default function SplashScreen() {
   const router = useRouter();
   const { loading, session } = useAuth();
@@ -31,11 +43,18 @@ export default function SplashScreen() {
   }, []);
 
   useEffect(() => {
+    splashResetLog("navigation effect tick", {
+      authLoading: loading,
+      minSplashElapsed,
+      hasSessionUser: Boolean(session?.user),
+    });
+
     if (loading || !minSplashElapsed) return;
 
     let cancelled = false;
 
     const go = (path: string) => {
+      splashResetLog("routing", { path, cancelled });
       if (!cancelled) router.replace(path as never);
     };
 
@@ -49,13 +68,27 @@ export default function SplashScreen() {
             // If the deep link was already captured elsewhere (ex: _layout listener),
             // prefer the pending reset URL over routing to welcome.
             const pending = peekPendingResetPasswordUrl();
-            if (pending && (pending.includes("reset-password") || isSupabaseRecoveryLink(pending))) {
+            const pendingIsReset =
+              Boolean(pending?.includes("reset-password")) ||
+              isSupabaseRecoveryLink(pending);
+            const initialIsReset =
+              Boolean(url?.includes("reset-password")) ||
+              isSupabaseRecoveryLink(url);
+
+            splashResetLog("initial URL decision", {
+              pending: summarizeRecoveryLinkForLog(pending),
+              initial: summarizeRecoveryLinkForLog(url),
+              pendingIsReset,
+              initialIsReset,
+            });
+
+            if (pending && pendingIsReset) {
               setPendingResetPasswordUrl(pending);
               go("/(auth)/reset-password");
               return;
             }
 
-            if (url && (url.includes("reset-password") || isSupabaseRecoveryLink(url))) {
+            if (url && initialIsReset) {
               setPendingResetPasswordUrl(url);
               go("/(auth)/reset-password");
               return;

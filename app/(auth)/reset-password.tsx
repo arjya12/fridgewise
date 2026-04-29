@@ -5,6 +5,7 @@ import {
   peekPendingResetPasswordUrl,
 } from "@/lib/pendingResetUrl";
 import { supabase } from "@/lib/supabase";
+import { summarizeRecoveryLinkForLog } from "@/lib/supabaseRecoveryLink";
 import { MAX_PASSWORD_LENGTH } from "@/utils/authFieldLimits";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,7 +24,7 @@ import {
   View,
 } from "react-native";
 
-type ResetState = "loading" | "expired" | "ready" | "success";
+type ResetState = "loading" | "missing" | "expired" | "ready" | "success";
 
 const headerGradient = (
   <LinearGradient
@@ -34,16 +35,33 @@ const headerGradient = (
   />
 );
 
+function cleanParamString(paramString: string): string {
+  let clean = paramString;
+  const hashIndex = clean.indexOf("#");
+  if (hashIndex !== -1) clean = clean.slice(0, hashIndex);
+  if (clean.startsWith("?")) clean = clean.slice(1);
+  return clean;
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, "%20"));
+  } catch {
+    return value;
+  }
+}
+
 function parseKeyValueParams(paramString: string): Record<string, string> {
   const params: Record<string, string> = {};
-  if (!paramString) return params;
-  paramString.split("&").forEach((pair) => {
+  const cleanParamStringValue = cleanParamString(paramString);
+  if (!cleanParamStringValue) return params;
+  cleanParamStringValue.split("&").forEach((pair) => {
     const eqIndex = pair.indexOf("=");
     const rawKey = eqIndex === -1 ? pair : pair.slice(0, eqIndex);
     const rawValue = eqIndex === -1 ? "" : pair.slice(eqIndex + 1);
     if (!rawKey) return;
-    const key = decodeURIComponent(rawKey);
-    const value = rawValue ? decodeURIComponent(rawValue) : "";
+    const key = safeDecode(rawKey);
+    const value = rawValue ? safeDecode(rawValue) : "";
     params[key] = value;
   });
   return params;
@@ -66,11 +84,34 @@ function parseUrlParams(url: string | null): Record<string, string> {
   }
 
   if (queryIndex !== -1) {
-    const query = url.slice(queryIndex + 1);
+    const queryEnd = hashIndex !== -1 && hashIndex > queryIndex ? hashIndex : undefined;
+    const query = url.slice(queryIndex + 1, queryEnd);
     Object.assign(params, parseKeyValueParams(query));
   }
 
   return params;
+}
+
+// Prevent concurrent reset processing across component remounts.
+// Without this, the screen can mount twice (Android deep-link + routing),
+// clear the pending URL, and then get stuck with missing tokens.
+let globalResetInFlightUrl: string | null = null;
+
+function sanitizeUrlForLog(url: string | null): string | null {
+  if (!url) return url;
+  const qIndex = url.indexOf("?");
+  const hIndex = url.indexOf("#");
+  const endIndex =
+    qIndex === -1 ? hIndex : hIndex === -1 ? qIndex : Math.min(qIndex, hIndex);
+  if (endIndex === -1) return url;
+
+  const base = url.slice(0, endIndex);
+  const suffix = url.slice(endIndex + 1);
+  const keys = suffix
+    .split("&")
+    .map((pair) => pair.split("=")[0])
+    .filter(Boolean);
+  return `${base}?${keys.join("&")}`;
 }
 
 export default function ResetPasswordScreen() {
@@ -84,53 +125,132 @@ export default function ResetPasswordScreen() {
   const missingParamsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const noUrlTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastProcessedUrlRef = useRef<string | null>(null);
+  const inFlightUrlRef = useRef<string | null>(null);
+  const processingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   const debugLog = useCallback((...args: any[]) => {
     if (!__DEV__) return;
     console.log(...args);
   }, []);
 
-  const handleUrl = useCallback(async (url: string | null) => {
+  const handleUrl = useCallback(async (url: string | null): Promise<boolean> => {
+    const normalizedUrl = url ?? "";
+    if (normalizedUrl && globalResetInFlightUrl) {
+      if (globalResetInFlightUrl === normalizedUrl) {
+        debugLog("[Reset] Global in-flight URL; ignoring duplicate processing");
+        return true;
+      }
+      debugLog(
+        "[Reset] Another reset URL is already in-flight; ignoring:",
+        sanitizeUrlForLog(url)
+      );
+      return true;
+    }
+
+    const params = parseUrlParams(url);
+    const accessToken = (params.access_token ?? "").trim();
+    const refreshToken = (params.refresh_token ?? "").trim();
+    const tokenHash = ((params.token_hash ?? params.token) ?? "").trim();
+    const code = (params.code ?? "").trim();
+    const accessTokenPresent = accessToken.length > 0;
+    const refreshTokenPresent = refreshToken.length > 0;
+    const tokenHashPresent = Boolean(params.token_hash);
+    const tokenPresent = Boolean(params.token);
+    const codePresent = code.length > 0;
+    const type = params.type;
+
+    const isResetPath = Boolean(url?.includes("reset-password"));
+    const hasResetParams =
+      accessTokenPresent ||
+      refreshTokenPresent ||
+      tokenHashPresent ||
+      tokenPresent ||
+      codePresent ||
+      type === "recovery";
+
+    // Ignore unrelated URLs (ex: expo-development-client startup URL), so they
+    // don't incorrectly trigger expired state.
+    if (!isResetPath && !hasResetParams) {
+      debugLog("[Reset] Ignoring non-reset URL:", sanitizeUrlForLog(url));
+      return false;
+    }
+
+    // Avoid logging sensitive token values; only log presence & key names (dev only).
+    debugLog("[Reset] Received URL:", sanitizeUrlForLog(url));
+    debugLog("[Reset] Link summary:", summarizeRecoveryLinkForLog(url));
+    const errPresent = Boolean(params.error || params.error_code);
+    debugLog("[Reset] Params keys:", Object.keys(params));
+    debugLog("[Reset] access_token exists:", accessTokenPresent);
+    debugLog("[Reset] refresh_token exists:", refreshTokenPresent);
+    debugLog("[Reset] access_token length:", accessToken.length);
+    debugLog("[Reset] refresh_token length:", refreshToken.length);
+    debugLog("[Reset] token_hash exists:", tokenHashPresent);
+    debugLog("[Reset] token exists:", tokenPresent);
+    debugLog("[Reset] type:", params.type);
+    debugLog("[Reset] has error:", errPresent);
+    const err = params.error || params.error_code;
+
+    // Ignore non-recovery auth links (e.g. stale signup confirmation links).
+    if (type && type !== "recovery") {
+      debugLog("[Reset] Ignoring non-recovery auth link type:", type);
+      clearPendingResetPasswordUrl();
+      return false;
+    }
+
+    if (normalizedUrl && inFlightUrlRef.current === normalizedUrl) {
+      debugLog("[Reset] URL already processing");
+      return true;
+    }
+    if (normalizedUrl && lastProcessedUrlRef.current === normalizedUrl) {
+      debugLog("[Reset] Duplicate URL ignored");
+      return true;
+    }
+    if (normalizedUrl) {
+      lastProcessedUrlRef.current = normalizedUrl;
+      inFlightUrlRef.current = normalizedUrl;
+      globalResetInFlightUrl = normalizedUrl;
+    }
+
     if (missingParamsTimeoutRef.current) {
       clearTimeout(missingParamsTimeoutRef.current);
       missingParamsTimeoutRef.current = null;
     }
+    if (processingWatchdogRef.current) {
+      clearTimeout(processingWatchdogRef.current);
+      processingWatchdogRef.current = null;
+    }
+    if (noUrlTimeoutRef.current) {
+      clearTimeout(noUrlTimeoutRef.current);
+      noUrlTimeoutRef.current = null;
+    }
     setState("loading");
-
-    // Avoid logging sensitive token values; only log presence & key names (dev only).
-    debugLog("[ResetPassword] url received (prefix):", url?.split("#")[0] ?? url);
-    const params = parseUrlParams(url);
-    const accessTokenPresent = Boolean(params.access_token);
-    const refreshTokenPresent = Boolean(params.refresh_token);
-    const errPresent = Boolean(params.error || params.error_code);
-    debugLog("[ResetPassword] parsed:", {
-      keys: Object.keys(params),
-      type: params.type,
-      hasAccessToken: accessTokenPresent,
-      hasRefreshToken: refreshTokenPresent,
-      hasErr: errPresent,
-      hasCode: Boolean(params.code),
-      hasOtpToken: Boolean(params.token_hash || params.token),
-    });
-    const err = params.error || params.error_code;
-    const accessToken = params.access_token;
-    const refreshToken = params.refresh_token;
-    const type = params.type;
-    const code = params.code;
-    const tokenHash = params.token_hash ?? params.token;
+    // Safety: never leave the user stuck forever on "Verifying".
+    processingWatchdogRef.current = setTimeout(() => {
+      if (globalResetInFlightUrl) {
+        debugLog("[Reset] Processing watchdog fired; showing expired");
+        setState("expired");
+      }
+    }, 30000);
 
     // Only show "expired" when we *actually* can't process the link.
     if (err) {
+      debugLog("[Reset] Showing expired state");
       setState("expired");
       return;
     }
 
     try {
-      // Prevent "loading forever" if auth calls hang (rare, but it happens on bad deep-link flows).
-      const TIMEOUT_MS = 15000;
-      const runWithTimeout = async <T,>(label: string, fn: () => Promise<T>) => {
+      const withTimeout = async <T,>(
+        promise: Promise<T>,
+        label: string
+      ): Promise<T> => {
+        const TIMEOUT_MS = 20000;
         return await Promise.race([
-          fn(),
+          promise,
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error(`${label}-timeout`)), TIMEOUT_MS)
           ),
@@ -139,59 +259,139 @@ export default function ResetPasswordScreen() {
 
       // 1) Implicit flow: tokens directly in the URL (fragment or query).
       if (accessToken && refreshToken && (!type || type === "recovery")) {
-        const sessionResult = await runWithTimeout("setSession", () =>
+        debugLog("[Reset] Attempting setSession");
+        const sessionResult = await withTimeout(
           supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
-          })
+          }),
+          "setSession"
         );
         const { error: sessionError } = sessionResult as any;
-        if (sessionError) throw sessionError;
+        if (sessionError) {
+          debugLog("[Reset] setSession FAILED:", sessionError);
+          throw sessionError;
+        }
+        debugLog("[Reset] setSession SUCCESS");
       } else if (code && (!type || type === "recovery")) {
         // 2) PKCE flow: exchange `code` for a session.
-        const { error: exchangeError } = await runWithTimeout("exchangeCodeForSession", () =>
-          supabase.auth.exchangeCodeForSession(code)
+        debugLog("[Reset] Attempting exchangeCodeForSession");
+        const { error: exchangeError } = await withTimeout(
+          supabase.auth.exchangeCodeForSession(code),
+          "exchangeCodeForSession"
         );
-        if (exchangeError) throw exchangeError;
+        if (exchangeError) {
+          debugLog("[Reset] exchangeCodeForSession FAILED:", exchangeError);
+          throw exchangeError;
+        }
+        debugLog("[Reset] exchangeCodeForSession SUCCESS");
       } else if (tokenHash && (!type || type === "recovery")) {
         // 3) OTP/verify style links: verify token hash for recovery.
-        const { error: verifyError } = await runWithTimeout("verifyOtp", () =>
+        debugLog("[Reset] Attempting verifyOtp recovery");
+        const { error: verifyError } = await withTimeout(
           supabase.auth.verifyOtp({
             type: "recovery",
             token_hash: tokenHash,
-          })
+          }),
+          "verifyOtp"
         );
-        if (verifyError) throw verifyError;
+        if (verifyError) {
+          debugLog("[Reset] verifyOtp FAILED:", verifyError);
+          throw verifyError;
+        }
+        debugLog("[Reset] verifyOtp SUCCESS");
       } else {
         // Not a usable recovery link (common when Android drops URL fragments).
         // Give the runtime link event a brief chance to arrive before showing expired.
+        debugLog("[Reset] Missing usable recovery credentials; waiting briefly");
         missingParamsTimeoutRef.current = setTimeout(() => {
+          debugLog("[Reset] Showing expired state");
           setState("expired");
         }, 2000);
-        return;
+        return true;
       }
 
       // Session is now set for this recovery link; show the reset form.
+      debugLog("[Reset] Recovery session established; showing reset form");
       setState("ready");
-    } catch {
+      return true;
+    } catch (e: any) {
+      if (accessToken && refreshToken) {
+        debugLog("[Reset] setSession FAILED:", e?.message || e);
+      }
+      debugLog("[Reset] Showing expired state");
       setState("expired");
+      return true;
     } finally {
+      if (processingWatchdogRef.current) {
+        clearTimeout(processingWatchdogRef.current);
+        processingWatchdogRef.current = null;
+      }
+      inFlightUrlRef.current = null;
       // Clear after we processed this link so the splash/router won't briefly
       // route you back to login.
       clearPendingResetPasswordUrl();
+      if (globalResetInFlightUrl && normalizedUrl === globalResetInFlightUrl) {
+        globalResetInFlightUrl = null;
+      }
     }
-  }, [debugLog, router]);
+  }, [debugLog]);
 
   useEffect(() => {
+    debugLog("[Reset] Screen mounted");
+    debugLog("[Reset] Watchdog enabled (30s)");
     const pending = peekPendingResetPasswordUrl();
+    debugLog("[Reset] Pending URL:", sanitizeUrlForLog(pending));
+    let initialResolved = false;
+
+    // Always attach a listener. On Android, an initial bare deep link can be
+    // delivered first, and the full URL with tokens can arrive shortly after.
     if (pending) {
-      handleUrl(pending);
-      return;
+      void handleUrl(pending);
     }
-    Linking.getInitialURL().then(handleUrl);
-    const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
-    return () => sub.remove();
-  }, [handleUrl]);
+    Linking.getInitialURL().then(async (initialUrl) => {
+      initialResolved = true;
+      debugLog("[Reset] Initial URL:", sanitizeUrlForLog(initialUrl));
+      if (initialUrl && initialUrl !== pending) {
+        const handledInitialUrl = await handleUrl(initialUrl);
+        if (!pending && !handledInitialUrl) {
+          noUrlTimeoutRef.current = setTimeout(() => {
+            if (globalResetInFlightUrl) return;
+            debugLog(
+              "[Reset] Initial URL was not a reset link, showing missing state"
+            );
+            setState("missing");
+          }, 2500);
+        }
+      } else if (!pending && !initialUrl) {
+        // Prevent infinite loading when screen remounts with no URL source.
+        noUrlTimeoutRef.current = setTimeout(() => {
+          if (globalResetInFlightUrl) return;
+          debugLog("[Reset] No reset URL received, showing missing state");
+          setState("missing");
+        }, 2500);
+      }
+    });
+
+    const sub = Linking.addEventListener("url", (event) => {
+      if (noUrlTimeoutRef.current) {
+        clearTimeout(noUrlTimeoutRef.current);
+        noUrlTimeoutRef.current = null;
+      }
+      debugLog("[Reset] Linking event URL:", sanitizeUrlForLog(event.url));
+      void handleUrl(event.url);
+    });
+    return () => {
+      sub.remove();
+      if (noUrlTimeoutRef.current) {
+        clearTimeout(noUrlTimeoutRef.current);
+        noUrlTimeoutRef.current = null;
+      }
+      if (!initialResolved) {
+        debugLog("[Reset] Initial URL promise unresolved on unmount");
+      }
+    };
+  }, [debugLog, handleUrl]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -249,7 +449,9 @@ export default function ResetPasswordScreen() {
     );
   }
 
-  if (state === "expired") {
+  if (state === "expired" || state === "missing") {
+    const isMissing = state === "missing";
+
     return (
       <ScreenLayout topInsetColor="#FFFFFF" backgroundColor="#FFFFFF">
         <SafeAreaWrapper edges={["bottom", "left", "right"]} style={styles.flex1}>
@@ -263,10 +465,13 @@ export default function ResetPasswordScreen() {
                   color="#197C47"
                   style={styles.expiredIcon}
                 />
-                <Text style={styles.feedbackTitle}>Link expired</Text>
+                <Text style={styles.feedbackTitle}>
+                  {isMissing ? "Reset link missing" : "Link expired"}
+                </Text>
                 <Text style={styles.feedbackSubtitle}>
-                  Reset links only work for a short time. Request a new one from
-                  the login screen and check your inbox.
+                  {isMissing
+                    ? "The app opened without reset credentials. Return to the latest password reset email and tap the link again."
+                    : "Reset links only work for a short time. Request a new one from the login screen and check your inbox."}
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.9}
