@@ -11,14 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import {
-  Alert,
-  Linking,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   CaretRight,
@@ -155,8 +148,7 @@ export default function MoreScreen() {
   }, []);
 
   const contactSupport = useCallback(() => {
-    // Placeholder support email; you can update it later.
-    void Linking.openURL("mailto:fridgewise.app@gmail.com");
+    router.push("/(legal)/contact");
   }, []);
 
   const handleSignOut = () => setSignOutModalVisible(true);

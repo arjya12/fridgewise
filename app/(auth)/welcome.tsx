@@ -212,15 +212,14 @@ export default function WelcomeScreen() {
       return;
     }
     try {
-      // Supabase recovery links put tokens in the URL fragment (#...).
-      // Android custom-scheme deep links often drop fragments, so we relay via
-      // a web page that reads the fragment and then re-opens the app with tokens in query params.
-      const resetWebRedirectUrl =
-        process.env.EXPO_PUBLIC_RESET_WEB_REDIRECT_URL ||
-        "http://10.0.2.2:8081/reset-password-relay";
-
+      // Supabase recovery links often return tokens in the URL fragment (`#...`).
+      // Android custom-scheme deep links can drop fragments, so prefer the relay page
+      // when available (it re-opens the app with tokens in query params).
+      const resetRelayUrl = process.env.EXPO_PUBLIC_RESET_WEB_REDIRECT_URL;
       const resetRedirectUrl =
-        __DEV__ ? resetWebRedirectUrl : "fridgewise://reset-password";
+        resetRelayUrl ||
+        process.env.EXPO_PUBLIC_RESET_REDIRECT_URL ||
+        "fridgewise://reset-password";
 
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
         redirectTo: resetRedirectUrl,
@@ -236,6 +235,16 @@ export default function WelcomeScreen() {
       const msg = err?.message || "";
       const isRateLimit = /rate limit|limit reached|too many requests/i.test(msg);
       const isUserNotFound = /user.*not.*found|email.*not.*registered/i.test(msg);
+      const isRedirectNotAllowed =
+        /redirect|redirectTo|not.*allowed|url.*not.*allowed|allowed redirect/i.test(msg);
+      if (__DEV__) {
+        console.log("[Welcome] resetPasswordForEmail failed:", {
+          message: msg,
+          status: err?.status,
+          name: err?.name,
+          code: err?.code,
+        });
+      }
 
       if (isUserNotFound) {
         setLoginError({
@@ -248,6 +257,12 @@ export default function WelcomeScreen() {
           message: "Too many reset emails. Please wait a minute before trying again.",
         });
         setResetCooldownSeconds(60);
+      } else if (isRedirectNotAllowed) {
+        setLoginError({
+          kind: "auth",
+          message:
+            "Reset email couldn’t be sent because the redirect URL isn’t allowed in Supabase. Add your app link to Auth → URL Configuration → Redirect URLs.",
+        });
       } else {
         setLoginError({
           kind: "auth",

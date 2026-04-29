@@ -1,13 +1,11 @@
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
-import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useRef, useState } from "react";
+import React from "react";
 import {
   Image,
-  LayoutAnimation,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,32 +23,8 @@ const userValueFeatures = [
 ];
 
 export default function AboutScreen() {
-  const [openLegalItem, setOpenLegalItem] = useState<string | null>(null);
-  const legalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleLegalPress = (key: string) => {
-    LayoutAnimation.configureNext({
-      duration: 240,
-      create: { type: "easeInEaseOut", property: "opacity" },
-      update: { type: "easeInEaseOut" },
-      delete: { type: "easeInEaseOut", property: "opacity" },
-    });
-    setOpenLegalItem((prev) => (prev === key ? null : key));
-
-    if (legalTimeoutRef.current) {
-      clearTimeout(legalTimeoutRef.current);
-    }
-
-    legalTimeoutRef.current = setTimeout(() => {
-      LayoutAnimation.configureNext({
-        duration: 220,
-        create: { type: "easeInEaseOut", property: "opacity" },
-        update: { type: "easeInEaseOut" },
-        delete: { type: "easeInEaseOut", property: "opacity" },
-      });
-      setOpenLegalItem(null);
-      legalTimeoutRef.current = null;
-    }, 1500);
+  const handleLegalPress = (key: "privacy" | "terms") => {
+    router.push(key === "privacy" ? "/(legal)/privacy" : "/(legal)/terms");
   };
 
   return (
@@ -108,23 +82,15 @@ export default function AboutScreen() {
             <View key={item.key} style={styles.legalCard}>
               <Pressable
                 style={({ pressed }) => [styles.legalRow, pressed && styles.legalRowPressed]}
-                onPress={() => handleLegalPress(item.key)}
+                onPress={() => handleLegalPress(item.key as "privacy" | "terms")}
               >
                 <Text style={styles.legalText}>{item.label}</Text>
                 <Ionicons
-                  name={openLegalItem === item.key ? "chevron-down" : "chevron-forward"}
+                  name="chevron-forward"
                   size={16}
                   color="#166534"
                 />
               </Pressable>
-              {openLegalItem === item.key ? (
-                <View style={styles.legalDropdown}>
-                  <View style={styles.legalDropdownSeparator} />
-                  <View style={styles.comingSoonPill}>
-                    <Text style={styles.legalDropdownHint}>Coming soon</Text>
-                  </View>
-                </View>
-              ) : null}
             </View>
           ))}
         </ScrollView>

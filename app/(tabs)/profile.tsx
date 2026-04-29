@@ -291,11 +291,12 @@ const styles = StyleSheet.create({
     top: 8,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 30,
+    lineHeight: 36,
     fontFamily: "PlusJakartaSans_700Bold",
-    fontWeight: "700",
-    color: "#15803D",
-    letterSpacing: -0.2,
+    fontWeight: "800",
+    color: "#197C47",
+    letterSpacing: -0.5,
   },
   headerSpacer: {
     width: 36,

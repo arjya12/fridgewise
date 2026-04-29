@@ -127,19 +127,12 @@ export default function SettingsScreen() {
     reloadSettingsFromStorage,
   } = useSettings();
   const { user } = useAuth();
-  const [showChangeEmailSoon, setShowChangeEmailSoon] = useState(false);
   const [showExportSoon, setShowExportSoon] = useState(false);
   const [dataBusy, setDataBusy] = useState<DataBusyOp>(false);
   const [dataModal, setDataModal] = useState<SettingsDataModal>(null);
 
   const closeDataModal = useCallback(() => setDataModal(null), []);
   const anyDataBusy = dataBusy !== false;
-
-  useEffect(() => {
-    if (!showChangeEmailSoon) return;
-    const timer = setTimeout(() => setShowChangeEmailSoon(false), 2600);
-    return () => clearTimeout(timer);
-  }, [showChangeEmailSoon]);
 
   useEffect(() => {
     if (!showExportSoon) return;
@@ -324,31 +317,6 @@ export default function SettingsScreen() {
               { backgroundColor: cardBackgroundColor, borderColor: cardBorderColor },
             ]}
           >
-            <Pressable
-              onPress={() => setShowChangeEmailSoon((prev) => !prev)}
-              style={({ pressed }) => [styles.settingItem, pressed && styles.rowPressed]}
-            >
-              <View style={styles.settingIconContainer}>
-                <Ionicons name="mail-outline" size={19} color="#16A34A" />
-              </View>
-              <View style={styles.settingContent}>
-                <ThemedText style={styles.settingTitle}>Change Email</ThemedText>
-              </View>
-              <Ionicons
-                name={showChangeEmailSoon ? "chevron-down" : "chevron-forward"}
-                size={18}
-                color="#16A34A"
-              />
-            </Pressable>
-            {showChangeEmailSoon ? (
-              <View style={styles.changeEmailSoonWrap}>
-                <View style={styles.changeEmailSoonSeparator} />
-                <View style={styles.changeEmailSoonPill}>
-                  <ThemedText style={styles.changeEmailSoonText}>Coming soon</ThemedText>
-                </View>
-              </View>
-            ) : null}
-            <View style={styles.settingsSeparator} />
             <ActionRow
               icon="key-outline"
               title="Change Password"
@@ -498,13 +466,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 30,
     fontFamily: "PlusJakartaSans_700Bold",
-    fontWeight: "700",
-    color: "#15803D",
+    fontWeight: "800",
+    color: "#197C47",
     textAlign: "center",
     marginTop: 6,
-    lineHeight: 32,
+    lineHeight: 36,
+    letterSpacing: -0.5,
   },
   scrollView: {
     flex: 1,

@@ -4,6 +4,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { InteractionManager } from "react-native";
+import { LogBox } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -29,6 +30,7 @@ import { SettingsProvider } from "@/contexts/SettingsContext";
 import { TipsProvider } from "@/contexts/TipsContext";
 import { foodItemsService } from "@/services/foodItems";
 import { setPendingResetPasswordUrl } from "@/lib/pendingResetUrl";
+import { isSupabaseRecoveryLink } from "@/lib/supabaseRecoveryLink";
 
 // Custom light theme configuration to override system settings
 const CustomLightTheme = {
@@ -89,13 +91,23 @@ export default function RootLayout() {
     return () => task.cancel();
   }, [loaded]);
 
+  // Supabase auth-js logs a WebCrypto PKCE warning on React Native.
+  // It is harmless for our reset flow (we use the relay + token query params).
+  useEffect(() => {
+    LogBox.ignoreLogs([
+      "WebCrypto API is not supported. Code challenge method will default to use plain instead of sha256.",
+    ]);
+  }, []);
+
   // Handle reset-password deep links even if the app is already running.
   // Note: this hook must be registered on every render (cannot be after `if (!loaded) return null`).
   useEffect(() => {
     const handleUrl = (url: string | null) => {
       if (!url) return;
       if (!loaded) return;
-      if (url.includes("reset-password")) {
+      // Supabase may deliver recovery tokens on routes other than `/reset-password`
+      // (often in the URL fragment: `#access_token=...&refresh_token=...&type=recovery`).
+      if (url.includes("reset-password") || isSupabaseRecoveryLink(url)) {
         setPendingResetPasswordUrl(url);
         router.replace("/(auth)/reset-password");
       }
@@ -122,6 +134,7 @@ export default function RootLayout() {
                     <Stack.Screen name="index" />
                     <Stack.Screen name="(auth)" />
                     <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="(legal)" />
                     <Stack.Screen name="+not-found" />
                   </Stack>
                   <StatusBar

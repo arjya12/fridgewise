@@ -3,6 +3,7 @@ import {
   peekPendingResetPasswordUrl,
   setPendingResetPasswordUrl,
 } from "@/lib/pendingResetUrl";
+import { isSupabaseRecoveryLink } from "@/lib/supabaseRecoveryLink";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
@@ -48,13 +49,13 @@ export default function SplashScreen() {
             // If the deep link was already captured elsewhere (ex: _layout listener),
             // prefer the pending reset URL over routing to welcome.
             const pending = peekPendingResetPasswordUrl();
-            if (pending && pending.includes("reset-password")) {
+            if (pending && (pending.includes("reset-password") || isSupabaseRecoveryLink(pending))) {
               setPendingResetPasswordUrl(pending);
               go("/(auth)/reset-password");
               return;
             }
 
-            if (url && url.includes("reset-password")) {
+            if (url && (url.includes("reset-password") || isSupabaseRecoveryLink(url))) {
               setPendingResetPasswordUrl(url);
               go("/(auth)/reset-password");
               return;

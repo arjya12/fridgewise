@@ -81,55 +81,98 @@ export default function ResetPasswordScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const didRouteToChangePasswordRef = useRef(false);
+  const missingParamsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const debugLog = useCallback((...args: any[]) => {
+    if (!__DEV__) return;
+    console.log(...args);
+  }, []);
 
   const handleUrl = useCallback(async (url: string | null) => {
-    // Avoid logging sensitive token values; only log presence & key names.
-    console.log("[ResetPassword] url received (prefix):", url?.split("#")[0] ?? url);
+    if (missingParamsTimeoutRef.current) {
+      clearTimeout(missingParamsTimeoutRef.current);
+      missingParamsTimeoutRef.current = null;
+    }
+    setState("loading");
+
+    // Avoid logging sensitive token values; only log presence & key names (dev only).
+    debugLog("[ResetPassword] url received (prefix):", url?.split("#")[0] ?? url);
     const params = parseUrlParams(url);
     const accessTokenPresent = Boolean(params.access_token);
     const refreshTokenPresent = Boolean(params.refresh_token);
     const errPresent = Boolean(params.error || params.error_code);
-    console.log("[ResetPassword] parsed:", {
+    debugLog("[ResetPassword] parsed:", {
       keys: Object.keys(params),
       type: params.type,
       hasAccessToken: accessTokenPresent,
       hasRefreshToken: refreshTokenPresent,
       hasErr: errPresent,
+      hasCode: Boolean(params.code),
+      hasOtpToken: Boolean(params.token_hash || params.token),
     });
     const err = params.error || params.error_code;
     const accessToken = params.access_token;
     const refreshToken = params.refresh_token;
     const type = params.type;
+    const code = params.code;
+    const tokenHash = params.token_hash ?? params.token;
 
-    // If tokens are missing or Supabase returned an error, consider it expired/invalid.
-    // If `type` exists and isn't "recovery", also treat as expired.
-    if (err || !accessToken || !refreshToken || (type && type !== "recovery")) {
+    // Only show "expired" when we *actually* can't process the link.
+    if (err) {
       setState("expired");
       return;
     }
 
     try {
-      // Prevent "loading forever" if setSession hangs (rare, but it happens on bad deep-link flows).
+      // Prevent "loading forever" if auth calls hang (rare, but it happens on bad deep-link flows).
       const TIMEOUT_MS = 15000;
-      const sessionResult = await Promise.race([
-        supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("reset-link-timeout")), TIMEOUT_MS)
-        ),
-      ]);
+      const runWithTimeout = async <T,>(label: string, fn: () => Promise<T>) => {
+        return await Promise.race([
+          fn(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`${label}-timeout`)), TIMEOUT_MS)
+          ),
+        ]);
+      };
 
-      const { error: sessionError } = sessionResult;
-      if (sessionError) throw sessionError;
-      // Once tokens are valid, send user to the existing change-password screen,
-      // but in reset mode (so we hide the "current password" field).
-      if (!didRouteToChangePasswordRef.current) {
-        didRouteToChangePasswordRef.current = true;
-        router.replace("/(auth)/change-password?reset=1");
+      // 1) Implicit flow: tokens directly in the URL (fragment or query).
+      if (accessToken && refreshToken && (!type || type === "recovery")) {
+        const sessionResult = await runWithTimeout("setSession", () =>
+          supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+        );
+        const { error: sessionError } = sessionResult as any;
+        if (sessionError) throw sessionError;
+      } else if (code && (!type || type === "recovery")) {
+        // 2) PKCE flow: exchange `code` for a session.
+        const { error: exchangeError } = await runWithTimeout("exchangeCodeForSession", () =>
+          supabase.auth.exchangeCodeForSession(code)
+        );
+        if (exchangeError) throw exchangeError;
+      } else if (tokenHash && (!type || type === "recovery")) {
+        // 3) OTP/verify style links: verify token hash for recovery.
+        const { error: verifyError } = await runWithTimeout("verifyOtp", () =>
+          supabase.auth.verifyOtp({
+            type: "recovery",
+            token_hash: tokenHash,
+          })
+        );
+        if (verifyError) throw verifyError;
+      } else {
+        // Not a usable recovery link (common when Android drops URL fragments).
+        // Give the runtime link event a brief chance to arrive before showing expired.
+        missingParamsTimeoutRef.current = setTimeout(() => {
+          setState("expired");
+        }, 2000);
+        return;
       }
+
+      // Session is now set for this recovery link; show the reset form.
+      setState("ready");
     } catch {
       setState("expired");
     } finally {
@@ -137,7 +180,7 @@ export default function ResetPasswordScreen() {
       // route you back to login.
       clearPendingResetPasswordUrl();
     }
-  }, []);
+  }, [debugLog, router]);
 
   useEffect(() => {
     const pending = peekPendingResetPasswordUrl();
@@ -183,27 +226,20 @@ export default function ResetPasswordScreen() {
   if (state === "loading") {
     return (
       <ScreenLayout
-        topInsetColor="#C8FACC"
-        topInsetContent={headerGradient}
-        backgroundColor="#FAFEFB"
+        topInsetColor="#FFFFFF"
+        backgroundColor="#FFFFFF"
       >
         <SafeAreaWrapper edges={["bottom", "left", "right"]} style={styles.flex1}>
+          <StatusBar style="dark" backgroundColor="#FFFFFF" translucent={false} />
           <View style={styles.bgWash}>
-            <LinearGradient
-              colors={["#E8FDF3", "#FAFEFB", "#FFFFFF"]}
-              locations={[0, 0.45, 1]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
             <View style={styles.center}>
               <View style={styles.loadingCard}>
                 <View style={styles.loadingSpinnerWrap}>
                   <ActivityIndicator size="large" color="#197C47" />
                 </View>
-                <Text style={styles.feedbackTitle}>Verifying link…</Text>
+                <Text style={styles.feedbackTitle}>Verifying your request</Text>
                 <Text style={styles.feedbackSubtitle}>
-                  One moment while we confirm your reset link.
+                  Please wait while we confirm your reset link.
                 </Text>
               </View>
             </View>
@@ -371,6 +407,7 @@ const styles = StyleSheet.create({
   },
   bgWash: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
   },
   container: {
     flex: 1,

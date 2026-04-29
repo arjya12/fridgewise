@@ -676,11 +676,21 @@ export default function SignUpScreen() {
                     <View style={styles.termsTextContainer}>
                       <Text style={styles.termsText}>
                         I agree to the{" "}
-                        <Text style={styles.termsLink}>
-                          Terms and Conditions
-                        </Text>{" "}
+                      <Text
+                        style={styles.termsLink}
+                        accessibilityRole="link"
+                        onPress={() => router.push("/(legal)/terms")}
+                      >
+                        Terms and Conditions
+                      </Text>{" "}
                         and{" "}
-                        <Text style={styles.termsLink}>Privacy Policy</Text>
+                      <Text
+                        style={styles.termsLink}
+                        accessibilityRole="link"
+                        onPress={() => router.push("/(legal)/privacy")}
+                      >
+                        Privacy Policy
+                      </Text>
                       </Text>
                     </View>
                   </View>
