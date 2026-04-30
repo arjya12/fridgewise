@@ -805,7 +805,7 @@ export default function SignUpScreen() {
       <SimpleInfoModal
         visible={verifyEmailModalVisible}
         title="Verify your email"
-        message="We sent a confirmation link to your inbox. Please verify your email before signing in."
+        message="We sent a confirmation link to your inbox. Please verify your email before signing in. If you don’t see it, check your spam folder."
         onDismiss={() => {
           setVerifyEmailModalVisible(false);
           router.push("/(auth)/welcome?login=1");

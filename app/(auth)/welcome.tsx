@@ -845,7 +845,7 @@ export default function WelcomeScreen() {
     <SimpleInfoModal
       visible={resetEmailModalVisible}
       title="Check your email"
-      message="We sent you a link to reset your password. Open it on this device to choose a new password."
+      message="We sent you a link to reset your password. Open it on this device to choose a new password. If you don’t see it, check your spam folder."
       okLabel="OK"
       accentColor="#197C47"
       onDismiss={() => {
@@ -995,11 +995,8 @@ const styles = StyleSheet.create({
     top: 4,
     right: 4,
     zIndex: 10,
-    backgroundColor: "#f3f3f3",
-    borderRadius: 14,
-    padding: 2,
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -51,9 +51,6 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
         }, TIMEOUT_MS);
       });
 
-      const start = Date.now();
-      console.log("[supabase.fetch]", { method, url: safeUrl, attempt, TIMEOUT_MS });
-
       const fetchPromise = fetch(input, {
         ...(init ?? {}),
         ...(controller ? { signal: controller.signal } : null),
@@ -61,14 +58,6 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
 
       try {
         const response = await Promise.race([fetchPromise, timeoutPromise]);
-        const elapsedMs = Date.now() - start;
-        console.log("[supabase.fetch] done", {
-          method,
-          url: safeUrl,
-          attempt,
-          status: (response as Response).status,
-          elapsedMs,
-        });
         return response;
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
@@ -90,15 +79,6 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
         isAbortError ||
         isTimeoutError;
 
-      console.log("[supabase.fetch] error", {
-        method,
-        url: safeUrl,
-        attempt: i + 1,
-        name: (e as any)?.name,
-        message: (e as any)?.message,
-        isNetworkError,
-      });
-
       if (isNetworkError && i < maxRetries - 1) {
         await new Promise((r) => setTimeout(r, 500 * (i + 1)));
         continue;
@@ -116,24 +96,10 @@ const createSerializedStorage = () => {
   const enqueue = <T,>(opName: string, key: string, fn: () => Promise<T>) => {
     const safeKey = key.startsWith("sb-") ? "sb-…" : key;
     const run = async () => {
-      const start = Date.now();
-      console.log("[supabase.storage] start", { op: opName, key: safeKey });
       try {
         const result = await fn();
-        console.log("[supabase.storage] done", {
-          op: opName,
-          key: safeKey,
-          elapsedMs: Date.now() - start,
-        });
         return result;
       } catch (e: any) {
-        console.log("[supabase.storage] error", {
-          op: opName,
-          key: safeKey,
-          elapsedMs: Date.now() - start,
-          name: e?.name,
-          message: e?.message,
-        });
         throw e;
       }
     };

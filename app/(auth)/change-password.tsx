@@ -52,9 +52,7 @@ export default function ChangePasswordScreen() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSuccessText("Password updated!");
     if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
-    console.log("[change-password] success UI set; routing home soon");
     navigateTimerRef.current = setTimeout(() => {
-      console.log("[change-password] routing to /(tabs)");
       router.replace("/(tabs)");
     }, 900);
   };
@@ -91,51 +89,31 @@ export default function ChangePasswordScreen() {
   const handleChangePassword = async () => {
     if (!validate() || !user) return;
     try {
-      console.log("[change-password] submit pressed", {
-        isResetMode,
-        hasUser: Boolean(user?.id),
-      });
       setLoading(true);
 
       if (isResetMode) {
         // Reset flow: user is already authenticated via the recovery link token.
-        console.log("[change-password] calling updatePasswordDirect (reset mode)");
         await updatePasswordDirect(password);
-        console.log("[change-password] updatePasswordDirect returned (reset mode)");
 
         finishSuccess();
       } else {
-        console.log(
-          "[change-password] verifying current password via ephemeral signInWithPassword"
-        );
         const { error: verifyErr } =
           await supabaseEphemeralAuth.auth.signInWithPassword({
           email: user.email!,
           password: currentPassword,
-        });
-        console.log("[change-password] signInWithPassword returned", {
-          ok: !verifyErr,
-          error: verifyErr?.message,
         });
         if (verifyErr) {
           setErrorText("Current password is incorrect.");
           return;
         }
 
-        console.log("[change-password] calling updatePasswordDirect (normal mode)");
         await updatePasswordDirect(password);
-        console.log("[change-password] updatePasswordDirect returned (normal mode)");
 
         finishSuccess();
       }
     } catch (e: any) {
-      console.log("[change-password] submit failed", {
-        message: e?.message,
-        name: e?.name,
-      });
       setErrorText(e?.message || "Failed to update password.");
     } finally {
-      console.log("[change-password] submit finished; clearing loading");
       setLoading(false);
     }
   };
