@@ -9,102 +9,96 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Missing Supabase environment variables - check your .env file");
 }
 
-function summarizeSupabaseAuthRequest(input: Parameters<typeof fetch>[0]) {
-  const rawUrl =
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
-
-  try {
-    const parsed = new URL(rawUrl);
-    const isSupabaseAuth = parsed.href.startsWith(`${supabaseUrl}/auth/v1`);
-    const isResetRelevant =
-      parsed.pathname.includes("/recover") ||
-      parsed.pathname.includes("/verify") ||
-      parsed.pathname.includes("/token") ||
-      parsed.pathname.includes("/user");
-
-    if (!isSupabaseAuth || !isResetRelevant) return null;
-
-    const redirectTo = parsed.searchParams.get("redirect_to");
-    const grantType = parsed.searchParams.get("grant_type");
-
-    return {
-      path: parsed.pathname,
-      hasRedirectTo: Boolean(redirectTo),
-      redirectTo,
-      grantType,
-    };
-  } catch {
-    return null;
-  }
-}
-
 // Custom fetch with retry for Android "Network request failed" (common on RN + Supabase)
 const fetchWithRetry: typeof fetch = async (input, init) => {
   const maxRetries = 3;
   let lastError: unknown;
-  const authRequestSummary = __DEV__
-    ? summarizeSupabaseAuthRequest(input)
-    : null;
+
+  const url =
+    typeof input === "string"
+      ? input
+      : input instanceof Request
+        ? input.url
+        : String(input);
+  const method =
+    (init as any)?.method ??
+    (input instanceof Request ? input.method : undefined) ??
+    "GET";
+  // Avoid logging query/fragment (can contain auth tokens).
+  const safeUrl = url.split("?")[0]?.split("#")[0] ?? url;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      if (authRequestSummary) {
-        console.log("[SupabaseAuthFetch] request", {
-          ...authRequestSummary,
-          method: init?.method ?? "GET",
-          attempt: i + 1,
-        });
-      }
+      const attempt = i + 1;
+      // On some RN/Expo environments, `fetch()` can hang indefinitely and AbortController
+      // may not reliably cancel the underlying request. Use a Promise.race timeout
+      // so callers always get a resolve/reject, and also attempt abort when supported.
+      const TIMEOUT_MS = 30000;
+      const controller =
+        typeof AbortController !== "undefined" ? new AbortController() : null;
 
-      // Some environments can hang indefinitely on fetch. Add a hard timeout
-      // so auth flows (reset/verification) don't get stuck forever.
-      const controller = new AbortController();
-      const TIMEOUT_MS = 8000;
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          try {
+            controller?.abort();
+          } catch {
+            // ignore abort failures
+          }
+          const err = new Error("Fetch timeout");
+          (err as any).name = "TimeoutError";
+          reject(err);
+        }, TIMEOUT_MS);
+      });
+
+      const start = Date.now();
+      console.log("[supabase.fetch]", { method, url: safeUrl, attempt, TIMEOUT_MS });
+
+      const fetchPromise = fetch(input, {
+        ...(init ?? {}),
+        ...(controller ? { signal: controller.signal } : null),
+      });
 
       try {
-        const response = await fetch(input, {
-          ...(init ?? {}),
-          signal: controller.signal,
+        const response = await Promise.race([fetchPromise, timeoutPromise]);
+        const elapsedMs = Date.now() - start;
+        console.log("[supabase.fetch] done", {
+          method,
+          url: safeUrl,
+          attempt,
+          status: (response as Response).status,
+          elapsedMs,
         });
-        if (authRequestSummary) {
-          console.log("[SupabaseAuthFetch] response", {
-            path: authRequestSummary.path,
-            status: response.status,
-            ok: response.ok,
-            attempt: i + 1,
-          });
-        }
         return response;
       } finally {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
       }
     } catch (e) {
       lastError = e;
-      if (authRequestSummary) {
-        console.log("[SupabaseAuthFetch] error", {
-          path: authRequestSummary.path,
-          attempt: i + 1,
-          name: e instanceof Error ? e.name : undefined,
-          message: e instanceof Error ? e.message : String(e),
-        });
-      }
-
       const isAbortError =
         typeof e === "object" &&
         e !== null &&
         "name" in e &&
         e.name === "AbortError";
+      const isTimeoutError =
+        typeof e === "object" && e !== null && "name" in e && e.name === "TimeoutError";
 
       const isNetworkError =
         (e instanceof TypeError &&
           (e.message === "Network request failed" ||
             e.message?.includes("Network request failed"))) ||
-        isAbortError;
+        isAbortError ||
+        isTimeoutError;
+
+      console.log("[supabase.fetch] error", {
+        method,
+        url: safeUrl,
+        attempt: i + 1,
+        name: (e as any)?.name,
+        message: (e as any)?.message,
+        isNetworkError,
+      });
+
       if (isNetworkError && i < maxRetries - 1) {
         await new Promise((r) => setTimeout(r, 500 * (i + 1)));
         continue;
@@ -115,15 +109,126 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
   throw lastError;
 };
 
+// RN AsyncStorage can occasionally deadlock/hang under concurrent access.
+// Wrap it to (1) serialize operations and (2) emit timings for debugging.
+const createSerializedStorage = () => {
+  let chain: Promise<unknown> = Promise.resolve();
+  const enqueue = <T,>(opName: string, key: string, fn: () => Promise<T>) => {
+    const safeKey = key.startsWith("sb-") ? "sb-…" : key;
+    const run = async () => {
+      const start = Date.now();
+      console.log("[supabase.storage] start", { op: opName, key: safeKey });
+      try {
+        const result = await fn();
+        console.log("[supabase.storage] done", {
+          op: opName,
+          key: safeKey,
+          elapsedMs: Date.now() - start,
+        });
+        return result;
+      } catch (e: any) {
+        console.log("[supabase.storage] error", {
+          op: opName,
+          key: safeKey,
+          elapsedMs: Date.now() - start,
+          name: e?.name,
+          message: e?.message,
+        });
+        throw e;
+      }
+    };
+    const p = chain.then(run, run);
+    // keep chain alive but don't leak typed errors into it
+    chain = p.catch(() => undefined);
+    return p;
+  };
+
+  return {
+    getItem: (key: string) => enqueue("getItem", key, () => AsyncStorage.getItem(key)),
+    setItem: (key: string, value: string) =>
+      enqueue("setItem", key, () => AsyncStorage.setItem(key, value)),
+    removeItem: (key: string) =>
+      enqueue("removeItem", key, () => AsyncStorage.removeItem(key)),
+  };
+};
+
+const supabaseStorage = createSerializedStorage();
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: supabaseStorage as any,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
   },
   global: { fetch: fetchWithRetry },
 });
+
+// Ephemeral auth client for credential checks that must NOT mutate the app session.
+// (Using the main client for signInWithPassword can trigger auth state changes and logout.)
+export const supabaseEphemeralAuth = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+    detectSessionInUrl: false,
+  },
+  global: { fetch: fetchWithRetry },
+});
+
+async function withOpTimeout<T>(promise: Promise<T>, ms: number, name: string) {
+  return await Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${name}-timeout`)), ms)
+    ),
+  ]);
+}
+
+/**
+ * Direct password update via Supabase Auth REST endpoint.
+ *
+ * We use this instead of `supabase.auth.updateUser()` because in some RN/Expo
+ * environments the supabase-js promise can hang even after the HTTP request and
+ * AsyncStorage writes complete.
+ */
+export async function updatePasswordDirect(newPassword: string) {
+  const session = (await supabase.auth.getSession()).data.session;
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    throw new Error("Missing session");
+  }
+
+  const res = await fetchWithRetry(`${supabaseUrl}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: newPassword }),
+  });
+
+  const text = await withOpTimeout(res.text(), 10000, "auth-user-body");
+  let payload: any = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!res.ok) {
+    const message =
+      payload?.msg ||
+      payload?.message ||
+      payload?.error_description ||
+      payload?.error ||
+      text ||
+      `Auth update failed (${res.status})`;
+    throw new Error(message);
+  }
+
+  return payload;
+}
 
 // Database types
 export interface FoodItem {

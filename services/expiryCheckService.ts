@@ -28,7 +28,6 @@ export async function checkExpiringItems(
 ) {
   // If expiry alerts are disabled or there's no user ID, don't check
   if (!settings.expiryAlerts || !userId) {
-    console.log("Expiry alerts disabled or no user ID");
     return false;
   }
 
@@ -54,11 +53,10 @@ export async function checkExpiringItems(
       return false;
     }
 
-    // If there are no expiring items, return
-    if (!expiringItems || expiringItems.length === 0) {
-      console.log("No expiring items found");
-      return false;
-    }
+  // If there are no expiring items, return
+  if (!expiringItems || expiringItems.length === 0) {
+    return false;
+  }
 
     // Group items by expiry date
     const itemsByExpiryDate = expiringItems.reduce<Record<string, FoodItem[]>>(
@@ -101,9 +99,6 @@ export async function checkExpiringItems(
       );
     }
 
-    console.log(
-      `Scheduled notifications for ${expiringItems.length} expiring items`
-    );
     return true;
   } catch (error) {
     console.error("Error in checkExpiringItems:", error);

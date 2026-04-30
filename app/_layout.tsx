@@ -28,10 +28,7 @@ import { SettingsProvider } from "@/contexts/SettingsContext";
 import { TipsProvider } from "@/contexts/TipsContext";
 import { foodItemsService } from "@/services/foodItems";
 import { setPendingResetPasswordUrl } from "@/lib/pendingResetUrl";
-import {
-  isSupabaseRecoveryLink,
-  summarizeRecoveryLinkForLog,
-} from "@/lib/supabaseRecoveryLink";
+import { isSupabaseRecoveryLink } from "@/lib/supabaseRecoveryLink";
 
 // Custom light theme configuration to override system settings
 const CustomLightTheme = {
@@ -47,15 +44,6 @@ const CustomLightTheme = {
     notification: "#FF6B6B",
   },
 };
-
-function resetLinkDebugLog(message: string, details?: unknown) {
-  if (!__DEV__) return;
-  if (details === undefined) {
-    console.log(`[ResetLink] ${message}`);
-    return;
-  }
-  console.log(`[ResetLink] ${message}`, details);
-}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -81,8 +69,7 @@ export default function RootLayout() {
             registerBackgroundTasks,
             scheduleBackgroundTasks,
           } = await import("@/services/notificationService");
-          const status = await requestNotificationPermissions();
-          console.log("Notification permission status:", status);
+          await requestNotificationPermissions();
           await registerBackgroundTasks();
           await scheduleBackgroundTasks();
         } catch (error) {
@@ -105,62 +92,36 @@ export default function RootLayout() {
   // Note: this hook must be registered on every render (cannot be after `if (!loaded) return null`).
   useEffect(() => {
     const handleUrl = (url: string | null) => {
-      if (!url) {
-        resetLinkDebugLog("No URL received");
-        return;
-      }
-
-      resetLinkDebugLog("Root listener received URL", {
-        loaded,
-        summary: summarizeRecoveryLinkForLog(url),
-      });
+      if (!url) return;
 
       if (!loaded) {
-        resetLinkDebugLog("Fonts/app shell not loaded yet; ignoring for now");
         return;
       }
 
-      const isResetPasswordPath = url.includes("reset-password");
       const isRecoveryLink = isSupabaseRecoveryLink(url);
-
-      resetLinkDebugLog("Root listener classification", {
-        isResetPasswordPath,
-        isRecoveryLink,
-      });
 
       // Supabase may deliver recovery tokens on routes other than `/reset-password`
       // (often in the URL fragment: `#access_token=...&refresh_token=...&type=recovery`).
-      if (isResetPasswordPath || isRecoveryLink) {
-        resetLinkDebugLog("Storing pending URL and routing to reset screen");
+      if (isRecoveryLink) {
         setPendingResetPasswordUrl(url);
         router.replace("/(auth)/reset-password");
         return;
       }
-
-      resetLinkDebugLog("URL did not look like a reset link; no route change");
     };
 
-    resetLinkDebugLog("Registering root deep-link handlers", { loaded });
     void Linking.getInitialURL()
       .then((initialUrl) => {
-        resetLinkDebugLog("getInitialURL resolved", {
-          summary: summarizeRecoveryLinkForLog(initialUrl),
-        });
         handleUrl(initialUrl);
       })
       .catch((error) => {
-        resetLinkDebugLog("getInitialURL failed", error);
+        console.error("Error reading initial URL:", error);
       });
 
     const sub = Linking.addEventListener("url", ({ url }) => {
-      resetLinkDebugLog("Runtime Linking event fired", {
-        summary: summarizeRecoveryLinkForLog(url),
-      });
       handleUrl(url);
     });
 
     return () => {
-      resetLinkDebugLog("Removing root deep-link handler", { loaded });
       sub.remove();
     };
   }, [router, loaded]);

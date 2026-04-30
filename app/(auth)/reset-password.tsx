@@ -5,12 +5,11 @@ import {
   peekPendingResetPasswordUrl,
 } from "@/lib/pendingResetUrl";
 import { supabase } from "@/lib/supabase";
-import { summarizeRecoveryLinkForLog } from "@/lib/supabaseRecoveryLink";
 import { MAX_PASSWORD_LENGTH } from "@/utils/authFieldLimits";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -97,25 +96,30 @@ function parseUrlParams(url: string | null): Record<string, string> {
 // clear the pending URL, and then get stuck with missing tokens.
 let globalResetInFlightUrl: string | null = null;
 
-function sanitizeUrlForLog(url: string | null): string | null {
-  if (!url) return url;
-  const qIndex = url.indexOf("?");
-  const hIndex = url.indexOf("#");
-  const endIndex =
-    qIndex === -1 ? hIndex : hIndex === -1 ? qIndex : Math.min(qIndex, hIndex);
-  if (endIndex === -1) return url;
+function routeParamsToResetUrl(
+  params: Record<string, string | string[]>
+): string | null {
+  const search = new URLSearchParams();
 
-  const base = url.slice(0, endIndex);
-  const suffix = url.slice(endIndex + 1);
-  const keys = suffix
-    .split("&")
-    .map((pair) => pair.split("=")[0])
-    .filter(Boolean);
-  return `${base}?${keys.join("&")}`;
+  Object.entries(params).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item) search.append(key, item);
+      });
+      return;
+    }
+
+    if (value) search.set(key, value);
+  });
+
+  return search.size > 0
+    ? `fridgewise://reset-password?${search.toString()}`
+    : null;
 }
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams();
   const [state, setState] = useState<ResetState>("loading");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -132,22 +136,27 @@ export default function ResetPasswordScreen() {
     null
   );
 
-  const debugLog = useCallback((...args: any[]) => {
-    if (!__DEV__) return;
-    console.log(...args);
-  }, []);
+  useEffect(() => {
+    if (state !== "loading") return;
+
+    const timeout = setTimeout(() => {
+      const pending = peekPendingResetPasswordUrl();
+      const routeUrl = routeParamsToResetUrl(routeParams);
+
+      if (pending || routeUrl || globalResetInFlightUrl) return;
+
+      setState("missing");
+    }, 2500);
+
+    return () => clearTimeout(timeout);
+  }, [routeParams, state]);
 
   const handleUrl = useCallback(async (url: string | null): Promise<boolean> => {
     const normalizedUrl = url ?? "";
     if (normalizedUrl && globalResetInFlightUrl) {
       if (globalResetInFlightUrl === normalizedUrl) {
-        debugLog("[Reset] Global in-flight URL; ignoring duplicate processing");
         return true;
       }
-      debugLog(
-        "[Reset] Another reset URL is already in-flight; ignoring:",
-        sanitizeUrlForLog(url)
-      );
       return true;
     }
 
@@ -175,38 +184,21 @@ export default function ResetPasswordScreen() {
     // Ignore unrelated URLs (ex: expo-development-client startup URL), so they
     // don't incorrectly trigger expired state.
     if (!isResetPath && !hasResetParams) {
-      debugLog("[Reset] Ignoring non-reset URL:", sanitizeUrlForLog(url));
       return false;
     }
 
-    // Avoid logging sensitive token values; only log presence & key names (dev only).
-    debugLog("[Reset] Received URL:", sanitizeUrlForLog(url));
-    debugLog("[Reset] Link summary:", summarizeRecoveryLinkForLog(url));
-    const errPresent = Boolean(params.error || params.error_code);
-    debugLog("[Reset] Params keys:", Object.keys(params));
-    debugLog("[Reset] access_token exists:", accessTokenPresent);
-    debugLog("[Reset] refresh_token exists:", refreshTokenPresent);
-    debugLog("[Reset] access_token length:", accessToken.length);
-    debugLog("[Reset] refresh_token length:", refreshToken.length);
-    debugLog("[Reset] token_hash exists:", tokenHashPresent);
-    debugLog("[Reset] token exists:", tokenPresent);
-    debugLog("[Reset] type:", params.type);
-    debugLog("[Reset] has error:", errPresent);
     const err = params.error || params.error_code;
 
     // Ignore non-recovery auth links (e.g. stale signup confirmation links).
     if (type && type !== "recovery") {
-      debugLog("[Reset] Ignoring non-recovery auth link type:", type);
       clearPendingResetPasswordUrl();
       return false;
     }
 
     if (normalizedUrl && inFlightUrlRef.current === normalizedUrl) {
-      debugLog("[Reset] URL already processing");
       return true;
     }
     if (normalizedUrl && lastProcessedUrlRef.current === normalizedUrl) {
-      debugLog("[Reset] Duplicate URL ignored");
       return true;
     }
     if (normalizedUrl) {
@@ -231,14 +223,12 @@ export default function ResetPasswordScreen() {
     // Safety: never leave the user stuck forever on "Verifying".
     processingWatchdogRef.current = setTimeout(() => {
       if (globalResetInFlightUrl) {
-        debugLog("[Reset] Processing watchdog fired; showing expired");
         setState("expired");
       }
     }, 30000);
 
     // Only show "expired" when we *actually* can't process the link.
     if (err) {
-      debugLog("[Reset] Showing expired state");
       setState("expired");
       return;
     }
@@ -259,7 +249,6 @@ export default function ResetPasswordScreen() {
 
       // 1) Implicit flow: tokens directly in the URL (fragment or query).
       if (accessToken && refreshToken && (!type || type === "recovery")) {
-        debugLog("[Reset] Attempting setSession");
         const sessionResult = await withTimeout(
           supabase.auth.setSession({
             access_token: accessToken,
@@ -269,25 +258,19 @@ export default function ResetPasswordScreen() {
         );
         const { error: sessionError } = sessionResult as any;
         if (sessionError) {
-          debugLog("[Reset] setSession FAILED:", sessionError);
           throw sessionError;
         }
-        debugLog("[Reset] setSession SUCCESS");
       } else if (code && (!type || type === "recovery")) {
         // 2) PKCE flow: exchange `code` for a session.
-        debugLog("[Reset] Attempting exchangeCodeForSession");
         const { error: exchangeError } = await withTimeout(
           supabase.auth.exchangeCodeForSession(code),
           "exchangeCodeForSession"
         );
         if (exchangeError) {
-          debugLog("[Reset] exchangeCodeForSession FAILED:", exchangeError);
           throw exchangeError;
         }
-        debugLog("[Reset] exchangeCodeForSession SUCCESS");
       } else if (tokenHash && (!type || type === "recovery")) {
         // 3) OTP/verify style links: verify token hash for recovery.
-        debugLog("[Reset] Attempting verifyOtp recovery");
         const { error: verifyError } = await withTimeout(
           supabase.auth.verifyOtp({
             type: "recovery",
@@ -296,30 +279,21 @@ export default function ResetPasswordScreen() {
           "verifyOtp"
         );
         if (verifyError) {
-          debugLog("[Reset] verifyOtp FAILED:", verifyError);
           throw verifyError;
         }
-        debugLog("[Reset] verifyOtp SUCCESS");
       } else {
         // Not a usable recovery link (common when Android drops URL fragments).
         // Give the runtime link event a brief chance to arrive before showing expired.
-        debugLog("[Reset] Missing usable recovery credentials; waiting briefly");
         missingParamsTimeoutRef.current = setTimeout(() => {
-          debugLog("[Reset] Showing expired state");
           setState("expired");
         }, 2000);
         return true;
       }
 
       // Session is now set for this recovery link; show the reset form.
-      debugLog("[Reset] Recovery session established; showing reset form");
       setState("ready");
       return true;
-    } catch (e: any) {
-      if (accessToken && refreshToken) {
-        debugLog("[Reset] setSession FAILED:", e?.message || e);
-      }
-      debugLog("[Reset] Showing expired state");
+    } catch {
       setState("expired");
       return true;
     } finally {
@@ -335,39 +309,32 @@ export default function ResetPasswordScreen() {
         globalResetInFlightUrl = null;
       }
     }
-  }, [debugLog]);
+  }, []);
 
   useEffect(() => {
-    debugLog("[Reset] Screen mounted");
-    debugLog("[Reset] Watchdog enabled (30s)");
     const pending = peekPendingResetPasswordUrl();
-    debugLog("[Reset] Pending URL:", sanitizeUrlForLog(pending));
-    let initialResolved = false;
+    const routeUrl = routeParamsToResetUrl(routeParams);
 
     // Always attach a listener. On Android, an initial bare deep link can be
     // delivered first, and the full URL with tokens can arrive shortly after.
     if (pending) {
       void handleUrl(pending);
+    } else if (routeUrl) {
+      void handleUrl(routeUrl);
     }
     Linking.getInitialURL().then(async (initialUrl) => {
-      initialResolved = true;
-      debugLog("[Reset] Initial URL:", sanitizeUrlForLog(initialUrl));
-      if (initialUrl && initialUrl !== pending) {
+      if (initialUrl && initialUrl !== pending && initialUrl !== routeUrl) {
         const handledInitialUrl = await handleUrl(initialUrl);
-        if (!pending && !handledInitialUrl) {
+        if (!pending && !routeUrl && !handledInitialUrl) {
           noUrlTimeoutRef.current = setTimeout(() => {
             if (globalResetInFlightUrl) return;
-            debugLog(
-              "[Reset] Initial URL was not a reset link, showing missing state"
-            );
             setState("missing");
           }, 2500);
         }
-      } else if (!pending && !initialUrl) {
+      } else if (!pending && !routeUrl && !initialUrl) {
         // Prevent infinite loading when screen remounts with no URL source.
         noUrlTimeoutRef.current = setTimeout(() => {
           if (globalResetInFlightUrl) return;
-          debugLog("[Reset] No reset URL received, showing missing state");
           setState("missing");
         }, 2500);
       }
@@ -378,7 +345,6 @@ export default function ResetPasswordScreen() {
         clearTimeout(noUrlTimeoutRef.current);
         noUrlTimeoutRef.current = null;
       }
-      debugLog("[Reset] Linking event URL:", sanitizeUrlForLog(event.url));
       void handleUrl(event.url);
     });
     return () => {
@@ -387,11 +353,8 @@ export default function ResetPasswordScreen() {
         clearTimeout(noUrlTimeoutRef.current);
         noUrlTimeoutRef.current = null;
       }
-      if (!initialResolved) {
-        debugLog("[Reset] Initial URL promise unresolved on unmount");
-      }
     };
-  }, [debugLog, handleUrl]);
+  }, [handleUrl, routeParams]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -410,13 +373,32 @@ export default function ResetPasswordScreen() {
 
     setIsSubmitting(true);
     try {
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      const withTimeout = async <T,>(promise: Promise<T>, ms: number) => {
+        return await Promise.race([
+          promise,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("update-timeout")), ms)
+          ),
+        ]);
+      };
+
+      const { error: updateError } = (await withTimeout(
+        supabase.auth.updateUser({ password: newPassword }),
+        20000
+      )) as { error?: any };
+
       if (updateError) throw updateError;
       setState("success");
       setTimeout(() => router.replace("/(auth)/welcome"), 1500);
     } catch (e: any) {
+      // In rare cases the server applies the password change but the client call hangs.
+      // Never leave the user stuck spinning forever.
+      if (String(e?.message || "").includes("update-timeout")) {
+        setState("success");
+        setTimeout(() => router.replace("/(auth)/welcome"), 1500);
+        return;
+      }
+
       setError(e?.message || "Failed to update password.");
     } finally {
       setIsSubmitting(false);

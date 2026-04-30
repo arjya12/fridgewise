@@ -18,18 +18,12 @@ export async function checkLowStockItems(
   userId: string | undefined
 ) {
   if (!settings.lowStockAlerts || !userId) {
-    console.log("Grocery reminders disabled or no user ID");
     await syncGroceryListReminder(false);
     return false;
   }
 
   try {
     const scheduled = await syncGroceryListReminder(true);
-    if (scheduled) {
-      console.log("Grocery list reminder scheduled");
-    } else {
-      console.log("No grocery list reminder (toggle off, empty list, or scheduling skipped)");
-    }
     return scheduled;
   } catch (error) {
     console.error("Error in checkLowStockItems / grocery reminder sync:", error);

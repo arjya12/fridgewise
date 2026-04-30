@@ -2,8 +2,7 @@ import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { clearRememberMePreference } from "@/lib/authPreferences";
-import { supabase } from "@/lib/supabase";
+import { supabaseEphemeralAuth, updatePasswordDirect } from "@/lib/supabase";
 import { MAX_PASSWORD_LENGTH } from "@/utils/authFieldLimits";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -19,7 +18,7 @@ import {
 } from "react-native";
 
 export default function ChangePasswordScreen() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const params = useLocalSearchParams();
   const resetParam = params.reset;
   const isResetMode =
@@ -39,55 +38,25 @@ export default function ChangePasswordScreen() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [successText, setSuccessText] = useState<string | null>(null);
-  const [logoutCountdown, setLogoutCountdown] = useState<number | null>(null);
-  const [logoutCancelled, setLogoutCancelled] = useState(false);
-  const logoutTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const meetsPasswordRule = password.length >= 7 && /\d/.test(password);
 
   useEffect(() => {
     return () => {
-      if (logoutTimerRef.current) clearInterval(logoutTimerRef.current);
-      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+      if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
     };
   }, []);
 
-  useEffect(() => {
-    if (!successText) return;
-    if (!logoutCancelled) return;
-    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-    bannerTimerRef.current = setTimeout(() => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setSuccessText(null);
-      setLogoutCancelled(false);
-    }, 3500);
-    return () => {
-      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-    };
-  }, [successText, logoutCancelled]);
-
-  const stopLogoutCountdown = () => {
-    if (logoutTimerRef.current) {
-      clearInterval(logoutTimerRef.current);
-      logoutTimerRef.current = null;
-    }
-    setLogoutCountdown(null);
-  };
-
-  const performLogout = async () => {
-    try {
-      await signOut();
-    } catch {
-      try {
-        await supabase.auth.signOut();
-        await clearRememberMePreference();
-      } catch {
-        // no-op fallback
-      }
-    } finally {
-      router.replace("/(auth)/welcome");
-    }
+  const finishSuccess = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSuccessText("Password updated!");
+    if (navigateTimerRef.current) clearTimeout(navigateTimerRef.current);
+    console.log("[change-password] success UI set; routing home soon");
+    navigateTimerRef.current = setTimeout(() => {
+      console.log("[change-password] routing to /(tabs)");
+      router.replace("/(tabs)");
+    }, 900);
   };
 
   const validate = (): boolean => {
@@ -122,62 +91,51 @@ export default function ChangePasswordScreen() {
   const handleChangePassword = async () => {
     if (!validate() || !user) return;
     try {
+      console.log("[change-password] submit pressed", {
+        isResetMode,
+        hasUser: Boolean(user?.id),
+      });
       setLoading(true);
+
       if (isResetMode) {
         // Reset flow: user is already authenticated via the recovery link token.
-        const { error } = await supabase.auth.updateUser({ password });
-        if (error) throw error;
+        console.log("[change-password] calling updatePasswordDirect (reset mode)");
+        await updatePasswordDirect(password);
+        console.log("[change-password] updatePasswordDirect returned (reset mode)");
 
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setSuccessText("Password updated.");
-        setLogoutCancelled(false);
-        setLogoutCountdown(null);
-
-        setTimeout(() => router.replace("/(auth)/welcome"), 1200);
+        finishSuccess();
       } else {
-        const { error: verifyErr } = await supabase.auth.signInWithPassword({
+        console.log(
+          "[change-password] verifying current password via ephemeral signInWithPassword"
+        );
+        const { error: verifyErr } =
+          await supabaseEphemeralAuth.auth.signInWithPassword({
           email: user.email!,
           password: currentPassword,
+        });
+        console.log("[change-password] signInWithPassword returned", {
+          ok: !verifyErr,
+          error: verifyErr?.message,
         });
         if (verifyErr) {
           setErrorText("Current password is incorrect.");
           return;
         }
 
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setSuccessText("Password will be updated.");
-        setLogoutCancelled(false);
-        setLogoutCountdown(5);
+        console.log("[change-password] calling updatePasswordDirect (normal mode)");
+        await updatePasswordDirect(password);
+        console.log("[change-password] updatePasswordDirect returned (normal mode)");
 
-        if (logoutTimerRef.current) clearInterval(logoutTimerRef.current);
-        logoutTimerRef.current = setInterval(() => {
-          setLogoutCountdown((prev) => {
-            if (prev == null) return null;
-            if (prev <= 1) {
-              if (logoutTimerRef.current) {
-                clearInterval(logoutTimerRef.current);
-                logoutTimerRef.current = null;
-              }
-              void (async () => {
-                try {
-                  const { error } = await supabase.auth.updateUser({ password });
-                  if (error) throw error;
-                  await performLogout();
-                } catch (e: any) {
-                  setSuccessText(null);
-                  setErrorText(e?.message || "Failed to update password.");
-                  setLogoutCountdown(null);
-                }
-              })();
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
+        finishSuccess();
       }
     } catch (e: any) {
+      console.log("[change-password] submit failed", {
+        message: e?.message,
+        name: e?.name,
+      });
       setErrorText(e?.message || "Failed to update password.");
     } finally {
+      console.log("[change-password] submit finished; clearing loading");
       setLoading(false);
     }
   };
@@ -347,58 +305,22 @@ export default function ChangePasswordScreen() {
           ) : null}
 
           {successText ? (
-            <View
-              style={[
-                styles.successBanner,
-                logoutCancelled ? styles.cancelBanner : null,
-              ]}
-            >
+            <View style={styles.successBanner}>
               <View style={styles.successRow}>
                 <Ionicons
-                  name={logoutCancelled ? "close-circle" : "checkmark-circle"}
+                  name="checkmark-circle"
                   size={16}
-                  color={logoutCancelled ? "#B91C1C" : "#15803D"}
+                  color="#15803D"
                   style={styles.successIcon}
                 />
                 <View style={styles.successTextWrap}>
-                  <ThemedText
-                    style={[
-                      styles.successTextMain,
-                      logoutCancelled ? styles.cancelTextMain : null,
-                    ]}
-                  >
+                  <ThemedText style={styles.successTextMain}>
                     {isResetMode
                       ? successText ?? "Password updated."
-                      : logoutCancelled
-                        ? "Password update cancelled."
-                        : "Password update pending."}
+                      : "Password updated."}
                   </ThemedText>
-                  {!isResetMode &&
-                  !logoutCancelled &&
-                  logoutCountdown != null &&
-                  logoutCountdown > 0 ? (
-                    <ThemedText style={styles.successTextSub}>
-                      Updating and signing out in {logoutCountdown}s.
-                    </ThemedText>
-                  ) : null}
                 </View>
               </View>
-              {!isResetMode &&
-              !logoutCancelled &&
-              logoutCountdown != null &&
-              logoutCountdown > 0 ? (
-                <Pressable
-                  style={styles.cancelCountdownBtn}
-                  onPress={() => {
-                    stopLogoutCountdown();
-                    setLogoutCancelled(true);
-                  }}
-                >
-                  <ThemedText style={styles.cancelCountdownText}>
-                    Cancel password update
-                  </ThemedText>
-                </Pressable>
-              ) : null}
             </View>
           ) : null}
         </View>
@@ -465,10 +387,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     alignItems: "center",
   },
-  cancelBanner: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FECACA",
-  },
   successRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -495,24 +413,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 1,
     textAlign: "center",
-  },
-  cancelTextMain: {
-    color: "#B91C1C",
-  },
-  cancelCountdownBtn: {
-    alignSelf: "center",
-    marginTop: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
-  },
-  cancelCountdownText: {
-    color: "#166534",
-    fontSize: 12,
-    fontWeight: "600",
   },
   passwordHelperRow: {
     flexDirection: "row",

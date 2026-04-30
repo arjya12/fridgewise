@@ -41,7 +41,6 @@ export async function requestNotificationPermissions() {
     await setupNotificationChannels();
   }
 
-  console.log("Notification permission status:", finalStatus);
   return finalStatus;
 }
 
@@ -172,7 +171,6 @@ export async function registerBackgroundTasks() {
     // Register the low stock check task
     registerLowStockCheckTask();
 
-    console.log("Background tasks registered");
   } catch (error) {
     console.warn("Failed to register background tasks:", error);
   }
@@ -185,7 +183,6 @@ export async function scheduleBackgroundTasks() {
   try {
     // Skip background task scheduling in Expo Go as it's not fully supported
     if (isExpoGo) {
-      console.log("Background tasks not scheduled in Expo Go");
       return;
     }
 
@@ -199,7 +196,6 @@ export async function scheduleBackgroundTasks() {
       minimumInterval: 24 * 60, // 24 hours in minutes
     });
 
-    console.log("Background tasks scheduled successfully");
   } catch (error) {
     console.error("Error scheduling background tasks:", error);
   }
