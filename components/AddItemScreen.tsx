@@ -149,6 +149,9 @@ export default function AddItemScreen() {
   const [notesFocused, setNotesFocused] = useState(false);
   const [showUnitDropdown, setShowUnitDropdown] = useState(false);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [repeatOption, setRepeatOption] = useState("None");
+  const [repeatMenuOpen, setRepeatMenuOpen] = useState(false);
   const unitDropdownTriggerRef = useRef<View>(null);
   const [dropdownPos, setDropdownPos] = useState<{ x: number; y: number }>({
     x: 0,
@@ -165,6 +168,7 @@ export default function AddItemScreen() {
   const addItemScrollRef = useRef<ScrollView>(null);
   const addButtonScale = useRef(new Animated.Value(1)).current;
   const notificationExpandAnim = useRef(new Animated.Value(0)).current;
+  const notificationToggleAnim = useRef(new Animated.Value(1)).current;
   const [showSuccess, setShowSuccess] = useState(false);
   /** Measured height of green header + Fridge/Shelf row (absolute overlay) for scroll inset. */
   const [headerChromeHeight, setHeaderChromeHeight] = useState(96);
@@ -187,7 +191,7 @@ export default function AddItemScreen() {
   const navigateBackAfterSuccessRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationCardHeight = notificationExpandAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [40, 112],
+    outputRange: [40, repeatMenuOpen ? 300 : 232],
   });
   const notificationBodyOpacity = notificationExpandAnim.interpolate({
     inputRange: [0, 0.45, 1],
@@ -233,6 +237,15 @@ export default function AddItemScreen() {
       });
     };
   }, [notificationExpandAnim, notificationSettingsOpen]);
+
+  useEffect(() => {
+    Animated.timing(notificationToggleAnim, {
+      toValue: notificationsEnabled ? 1 : 0,
+      duration: 160,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [notificationToggleAnim, notificationsEnabled]);
 
   const runSuccessCelebrationAndExit = useCallback(() => {
     successAnim.setValue(0);
@@ -1192,17 +1205,229 @@ export default function AddItemScreen() {
                     paddingHorizontal: 12,
                   }}
                 >
-                  <ThemedText
+                  <View
                     style={{
-                      color: "#6B7280",
-                      fontSize: 11,
-                      fontWeight: "500",
-                      textAlign: "center",
-                      fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                      borderTopWidth: 0,
                     }}
                   >
-                    Notification controls preview
-                  </ThemedText>
+                    <View
+                      style={{
+                        height: 34,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <ThemedText
+                        style={{
+                          color: "#4B5563",
+                          fontSize: 12,
+                          fontWeight: "500",
+                          fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                        }}
+                      >
+                        Enable notifications
+                      </ThemedText>
+                      <Pressable
+                        onPress={() => {
+                          setNotificationsEnabled((enabled) => !enabled);
+                          Haptics.selectionAsync();
+                        }}
+                        style={{
+                          width: 34,
+                          height: 18,
+                          borderRadius: 999,
+                          backgroundColor: notificationsEnabled ? "#BBF7D0" : "#E5E7EB",
+                          justifyContent: "center",
+                          paddingHorizontal: 2,
+                        }}
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: notificationsEnabled }}
+                        accessibilityLabel="Enable notifications"
+                      >
+                        <Animated.View
+                          style={{
+                            width: 14,
+                            height: 14,
+                            borderRadius: 999,
+                            backgroundColor: notificationsEnabled ? "#22C55E" : "#FFFFFF",
+                            transform: [
+                              {
+                                translateX: notificationToggleAnim.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0, 16],
+                                }),
+                              },
+                            ],
+                          }}
+                        />
+                      </Pressable>
+                    </View>
+
+                    {[
+                      ["Reminder", "2 days before"],
+                      ["Time", "9:00 AM"],
+                    ].map(([label, value]) => (
+                      <Pressable
+                        key={label}
+                        style={{
+                          height: 34,
+                          borderTopWidth: 1,
+                          borderTopColor: "#E5E7EB",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <ThemedText
+                          style={{
+                            color: "#4B5563",
+                            fontSize: 12,
+                            fontWeight: "500",
+                            fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                          }}
+                        >
+                          {label}
+                        </ThemedText>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <ThemedText
+                            style={{
+                              color: "#374151",
+                              fontSize: 12,
+                              fontWeight: "500",
+                              fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                            }}
+                          >
+                            {value}
+                          </ThemedText>
+                          <Ionicons name="chevron-down" size={16} color="#22C55E" />
+                        </View>
+                      </Pressable>
+                    ))}
+
+                    <Pressable
+                      onPress={() => {
+                        setRepeatMenuOpen((open) => !open);
+                        Haptics.selectionAsync();
+                      }}
+                      style={{
+                        height: 34,
+                        borderTopWidth: 1,
+                        borderTopColor: "#E5E7EB",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <ThemedText
+                        style={{
+                          color: "#4B5563",
+                          fontSize: 12,
+                          fontWeight: "500",
+                          fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                        }}
+                      >
+                        Repeat
+                      </ThemedText>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <ThemedText
+                          style={{
+                            color: "#374151",
+                            fontSize: 12,
+                            fontWeight: "500",
+                            fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                          }}
+                        >
+                          {repeatOption}
+                        </ThemedText>
+                        <Ionicons
+                          name={repeatMenuOpen ? "chevron-up" : "chevron-down"}
+                          size={16}
+                          color="#22C55E"
+                        />
+                      </View>
+                    </Pressable>
+
+                    {repeatMenuOpen && (
+                      <View
+                        style={{
+                          borderTopWidth: 1,
+                          borderTopColor: "#E5E7EB",
+                          paddingVertical: 4,
+                        }}
+                      >
+                        {["None", "Daily", "Weekly", "Monthly"].map((option) => (
+                          <Pressable
+                            key={option}
+                            onPress={() => {
+                              setRepeatOption(option);
+                              setRepeatMenuOpen(false);
+                              Haptics.selectionAsync();
+                            }}
+                            style={{
+                              height: 28,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              paddingHorizontal: 8,
+                              borderRadius: 8,
+                              backgroundColor:
+                                repeatOption === option ? "#ECFDF3" : "#FFF",
+                            }}
+                          >
+                            <ThemedText
+                              style={{
+                                color: repeatOption === option ? "#166534" : "#4B5563",
+                                fontSize: 12,
+                                fontWeight: "500",
+                                fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                              }}
+                            >
+                              {option}
+                            </ThemedText>
+                            {repeatOption === option && (
+                              <Ionicons name="checkmark" size={15} color="#22C55E" />
+                            )}
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+
+                    <View
+                      style={{
+                        borderTopWidth: 1,
+                        borderTopColor: "#E5E7EB",
+                        paddingTop: 7,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <ThemedText
+                        style={{
+                          color: "#6B7280",
+                          fontSize: 11,
+                          fontWeight: "500",
+                          textAlign: "center",
+                          fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                        }}
+                      >
+                        You'll be reminded on Aug 29, 2026 at 9:00 AM
+                      </ThemedText>
+                    </View>
+                  </View>
                 </Animated.View>
               </Animated.View>
             </View>
