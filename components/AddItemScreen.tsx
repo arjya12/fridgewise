@@ -148,6 +148,7 @@ export default function AddItemScreen() {
   const [loading, setLoading] = useState(false);
   const [notesFocused, setNotesFocused] = useState(false);
   const [showUnitDropdown, setShowUnitDropdown] = useState(false);
+  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const unitDropdownTriggerRef = useRef<View>(null);
   const [dropdownPos, setDropdownPos] = useState<{ x: number; y: number }>({
     x: 0,
@@ -161,8 +162,12 @@ export default function AddItemScreen() {
   const [calendarWeeks, setCalendarWeeks] = useState(5);
 
   const { width } = useWindowDimensions();
+  const addItemScrollRef = useRef<ScrollView>(null);
   const addButtonScale = useRef(new Animated.Value(1)).current;
+  const notificationExpandAnim = useRef(new Animated.Value(0)).current;
   const [showSuccess, setShowSuccess] = useState(false);
+  /** Measured height of green header + Fridge/Shelf row (absolute overlay) for scroll inset. */
+  const [headerChromeHeight, setHeaderChromeHeight] = useState(96);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const successAnim = useRef(new Animated.Value(0)).current;
   const successPop = useRef(new Animated.Value(0)).current;
@@ -180,9 +185,54 @@ export default function AddItemScreen() {
   });
   const insets = useSafeAreaInsets();
   const navigateBackAfterSuccessRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationCardHeight = notificationExpandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [40, 112],
+  });
+  const notificationBodyOpacity = notificationExpandAnim.interpolate({
+    inputRange: [0, 0.45, 1],
+    outputRange: [0, 0, 1],
+  });
 
   // Calendar context for real-time updates after save
   const { refresh, invalidateCache } = useCalendar();
+
+  useEffect(() => {
+    Animated.timing(notificationExpandAnim, {
+      toValue: notificationSettingsOpen ? 1 : 0,
+      duration: 220,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+
+    const scrollWithAnimation = () => {
+      addItemScrollRef.current?.scrollToEnd({ animated: true });
+    };
+    const scrollUpWithAnimation = () => {
+      addItemScrollRef.current?.scrollTo({ y: 0, animated: true });
+    };
+    const scrollTimers = notificationSettingsOpen
+      ? [
+          requestAnimationFrame(scrollWithAnimation),
+          setTimeout(scrollWithAnimation, 80),
+          setTimeout(scrollWithAnimation, 160),
+          setTimeout(scrollWithAnimation, 240),
+        ]
+      : [
+          setTimeout(scrollUpWithAnimation, 120),
+          setTimeout(scrollUpWithAnimation, 230),
+        ];
+
+    return () => {
+      scrollTimers.forEach((timer) => {
+        if (typeof timer === "number") {
+          clearTimeout(timer);
+        } else {
+          cancelAnimationFrame(timer);
+        }
+      });
+    };
+  }, [notificationExpandAnim, notificationSettingsOpen]);
 
   const runSuccessCelebrationAndExit = useCallback(() => {
     successAnim.setValue(0);
@@ -230,10 +280,10 @@ export default function AddItemScreen() {
   const shelfIcon = require("../assets/images/icons/shelf_icon.png");
 
   // Layout constants
-  const UNIT_DROPDOWN_WIDTH = 115;
+  const UNIT_DROPDOWN_WIDTH = 95;
   const unitDropdownLeft = Math.min(
-    Math.max(dropdownPos.x - 10, 16),
-    width - 25 - UNIT_DROPDOWN_WIDTH
+    Math.max(dropdownPos.x - UNIT_DROPDOWN_WIDTH / 2, 16),
+    width - 16 - UNIT_DROPDOWN_WIDTH
   );
 
   // Animate card entrance
@@ -429,13 +479,30 @@ export default function AddItemScreen() {
       />
       {!showSuccess && (
         <>
+      {/* Green header + toggles: fixed overlay (green above scrolling form; labels above white scroll fill). */}
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 40,
+          elevation: 40,
+        }}
+      >
+        <View
+          onLayout={(e) =>
+            setHeaderChromeHeight(e.nativeEvent.layout.height)
+          }
+        >
       {/* Add Item / Edit Item Heading with green background */}
       <View
         style={{
           width: "100%",
           backgroundColor: "#22C55E",
-          paddingTop: 18,
-          paddingBottom: 10,
+          paddingTop: 5,
+          paddingBottom: 2,
           alignItems: "center",
           borderBottomLeftRadius: 18,
           borderBottomRightRadius: 18,
@@ -444,7 +511,7 @@ export default function AddItemScreen() {
       >
         <ThemedText
           style={{
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: "700",
             color: "#FFF",
             textAlign: "center",
@@ -473,8 +540,8 @@ export default function AddItemScreen() {
           justifyContent: "center",
           alignItems: "center",
           gap: 16,
-          marginTop: -18,
-          marginBottom: 18,
+          marginTop: -22,
+          marginBottom: 8,
         }}
       >
         <Pressable
@@ -568,27 +635,48 @@ export default function AddItemScreen() {
           </ThemedText>
         </Pressable>
       </View>
+        </View>
+      </View>
         </>
       )}
       {/* Main Content with horizontal padding */}
       {!showSuccess && (
         <KeyboardAvoidingView
-          style={{ flex: 1 }}
+          style={{ flex: 1, zIndex: 0 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
         >
-          <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-            <View
+          <Animated.View style={{ flex: 1, opacity: fadeAnim, zIndex: 0 }}>
+            <ScrollView
+              ref={addItemScrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               style={{
                 flex: 1,
-                backgroundColor: "#FFF",
+                backgroundColor: "transparent",
+                zIndex: 0,
+                elevation: 0,
+              }}
+              contentContainerStyle={{
                 paddingHorizontal: 16,
-                paddingBottom: 32,
+                paddingTop: headerChromeHeight + 6,
+                paddingBottom: notificationSettingsOpen
+                  ? insets.bottom + 72
+                  : 42,
                 justifyContent: "flex-start",
+                backgroundColor: "#FFF",
               }}
             >
-            {/* Name | Quantity (same row) */}
-            <View style={{ width: "100%", marginBottom: 16, alignItems: "center" }}>
+            {/* Name | Quantity (same row) — above scroll fill, below fixed green chrome */}
+            <View
+              style={{
+                width: "100%",
+                marginBottom: 8,
+                alignItems: "center",
+                zIndex: 1,
+                elevation: Platform.OS === "android" ? 1 : 0,
+              }}
+            >
               <View style={{ width: "100%", maxWidth: 360 }}>
                 <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
                   {/* Item Name */}
@@ -599,7 +687,7 @@ export default function AddItemScreen() {
                         fontWeight: "500",
                         fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                         color: "#4B5563",
-                        marginBottom: 6,
+                        marginBottom: 2,
                         marginLeft: 12,
                       }}
                     >
@@ -611,7 +699,7 @@ export default function AddItemScreen() {
                           style={{
                             position: "absolute",
                             left: 18,
-                            top: 14,
+                            top: 11,
                             fontSize: 13,
                             color: "#A1A1AB",
                             zIndex: 1,
@@ -630,9 +718,9 @@ export default function AddItemScreen() {
                           borderWidth: 1.2,
                           borderColor: "#E5E7EB",
                           paddingHorizontal: 14,
-                          paddingVertical: 10,
+                          paddingVertical: 8,
                           width: "100%",
-                          height: 44,
+                          height: 40,
                           fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                           textAlign: "left",
                         }}
@@ -654,7 +742,7 @@ export default function AddItemScreen() {
                         fontWeight: "500",
                         fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                         color: "#4B5563",
-                        marginBottom: 6,
+                        marginBottom: 2,
                         textAlign: "center",
                       }}
                     >
@@ -662,7 +750,7 @@ export default function AddItemScreen() {
                     </ThemedText>
                     <View
                       style={{
-                        height: 44,
+                        height: 40,
                         backgroundColor: "#F5F5F5",
                         borderRadius: 16,
                         borderWidth: 1.2,
@@ -814,7 +902,7 @@ export default function AddItemScreen() {
                                     } else {
                                       offsetY -= insets.top;
                                     }
-                                    setDropdownPos({ x, y: offsetY });
+                                    setDropdownPos({ x: x + width / 2, y: offsetY });
                                     setShowUnitDropdown(true);
                                   }
                                 );
@@ -860,14 +948,14 @@ export default function AddItemScreen() {
             </View>
 
             {/* Category — DoorDash-style: Phosphor icons, 2 rows, compact pills */}
-            <View style={{ width: "100%", marginBottom: 16 }}>
+            <View style={{ width: "100%", marginBottom: 10 }}>
               <ThemedText
                 style={{
                   fontSize: 12,
                   fontWeight: "500",
                   fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                   color: "#4B5563",
-                  marginBottom: 6,
+                  marginBottom: 2,
                 }}
               >
                 Category
@@ -882,7 +970,7 @@ export default function AddItemScreen() {
                   style={{
                     minWidth: width * 1.6,
                     flexDirection: "column",
-                    gap: 5,
+                    gap: 4,
                   }}
                 >
                   <View style={{ flexDirection: "row", gap: 6, flexWrap: "nowrap" }}>
@@ -898,8 +986,8 @@ export default function AddItemScreen() {
                           style={{
                             flexDirection: "row",
                             alignItems: "center",
-                            paddingVertical: 6,
-                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                            paddingHorizontal: 9,
                             borderRadius: 999,
                             backgroundColor: selected ? "#22C55E" : "#F0F0F0",
                             borderWidth: 0,
@@ -910,13 +998,13 @@ export default function AddItemScreen() {
                           accessibilityState={{ selected }}
                         >
                           <Icon
-                            size={14}
+                            size={13}
                             color={selected ? "#FFF" : "#1A1A1A"}
                             weight="regular"
                           />
                           <ThemedText
                             style={{
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: "500",
                               fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                               color: selected ? "#FFF" : "#4B5563",
@@ -941,8 +1029,8 @@ export default function AddItemScreen() {
                           style={{
                             flexDirection: "row",
                             alignItems: "center",
-                            paddingVertical: 6,
-                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                            paddingHorizontal: 9,
                             borderRadius: 999,
                             backgroundColor: selected ? "#22C55E" : "#F0F0F0",
                             borderWidth: 0,
@@ -953,13 +1041,13 @@ export default function AddItemScreen() {
                           accessibilityState={{ selected }}
                         >
                           <Icon
-                            size={14}
+                            size={13}
                             color={selected ? "#FFF" : "#1A1A1A"}
                             weight="regular"
                           />
                           <ThemedText
                             style={{
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: "500",
                               fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                               color: selected ? "#FFF" : "#4B5563",
@@ -989,7 +1077,7 @@ export default function AddItemScreen() {
                   fontWeight: "500",
                   fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                   color: "#4B5563",
-                  marginBottom: 2,
+                  marginBottom: -6,
                 }}
               >
                 Expiry Date
@@ -1001,7 +1089,7 @@ export default function AddItemScreen() {
                   marginLeft: "auto",
                   marginRight: "auto",
                   alignItems: "center",
-                  marginTop: 0,
+                  marginTop: -4,
                   marginBottom: 0,
                   paddingBottom: 0,
                   paddingTop: 0,
@@ -1015,14 +1103,118 @@ export default function AddItemScreen() {
                 />
               </View>
             </View>
+            <View
+              style={{
+                width: "100%",
+                alignItems: "center",
+                marginTop: calendarWeeks >= 6 ? 6 : 8,
+                marginBottom: 6,
+              }}
+            >
+              <Animated.View
+                style={{
+                  width: "92%",
+                  maxWidth: 320,
+                  height: notificationCardHeight,
+                  borderRadius: 11,
+                  backgroundColor: "#FFF",
+                  borderWidth: 1.2,
+                  borderColor: "#CBD5E1",
+                  borderStyle: "solid",
+                  overflow: "hidden",
+                }}
+              >
+                <Pressable
+                  onPress={() => {
+                    setNotificationSettingsOpen((open) => !open);
+                    Haptics.selectionAsync();
+                  }}
+                  style={{
+                    height: 40,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 12,
+                    paddingVertical: 3,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Notification settings"
+                accessibilityState={{ expanded: notificationSettingsOpen }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    flex: 1,
+                  }}
+                >
+                  <Ionicons name="notifications-outline" size={17} color="#22C55E" />
+                  <View style={{ flex: 1 }}>
+                    <ThemedText
+                      style={{
+                        color: "#4B5563",
+                          fontSize: 13,
+                          fontWeight: "500",
+                          lineHeight: 16,
+                        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                      }}
+                    >
+                      Notifications
+                    </ThemedText>
+                    <ThemedText
+                      style={{
+                        color: "#6B7280",
+                          fontSize: 10,
+                          fontWeight: "500",
+                          lineHeight: 13,
+                        marginTop: 0,
+                        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                      }}
+                    >
+                      Default • 2 days before at 9:00 AM
+                    </ThemedText>
+                  </View>
+                </View>
+                <Ionicons
+                  name={notificationSettingsOpen ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#22C55E"
+                />
+                </Pressable>
+                <Animated.View
+                  style={{
+                    opacity: notificationBodyOpacity,
+                    borderTopWidth: 1,
+                    borderTopColor: "#E5E7EB",
+                    marginHorizontal: 12,
+                    paddingTop: 8,
+                    paddingHorizontal: 12,
+                  }}
+                >
+                  <ThemedText
+                    style={{
+                      color: "#6B7280",
+                      fontSize: 11,
+                      fontWeight: "500",
+                      textAlign: "center",
+                      fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                    }}
+                  >
+                    Notification controls preview
+                  </ThemedText>
+                </Animated.View>
+              </Animated.View>
+            </View>
             {/* FloatingAddItemButton below the calendar, kept a bit higher so it doesn't sit too close to the bottom even with tall calendars */}
             <View
               style={{
                 width: "100%",
                 alignItems: "center",
-                marginTop: calendarWeeks >= 6 ? 4 : 12,
-                paddingBottom:
-                  insets.bottom + (calendarWeeks >= 6 ? 8 : 20),
+                marginTop: calendarWeeks >= 6 ? 4 : 8,
+                paddingBottom: notificationSettingsOpen
+                  ? insets.bottom + (calendarWeeks >= 6 ? 28 : 36)
+                  : insets.bottom + (calendarWeeks >= 6 ? 8 : 20),
               }}
             >
               <FloatingAddItemButton
@@ -1040,7 +1232,7 @@ export default function AddItemScreen() {
                 isEditing={isEditing}
               />
             </View>
-          </View>
+          </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
       )}
