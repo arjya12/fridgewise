@@ -20,9 +20,9 @@ export {
 
 const ACCENT_EXPIRY = "#15803D";
 
-/** iOS secondary line — reminder-focused, not “expiring soon” vagueness. */
-function iosSubtitle(): string {
-  return "FridgeWise · Item reminder";
+/** iOS only — Android maps `subtitle` to subtext and duplicates the app title line. */
+function itemReminderSubtitleIos(): string {
+  return "Item reminder";
 }
 
 export function formatTimeForStorage(date: Date): string {
@@ -79,12 +79,42 @@ export async function cancelNotificationIds(ids: string[]): Promise<void> {
   }
 }
 
+function notificationDataType(data: Record<string, unknown> | undefined): string {
+  if (!data || typeof data !== "object") return "";
+  const t = (data as { type?: unknown }).type;
+  return typeof t === "string" ? t : "";
+}
+
+/**
+ * Cancels scheduled notifications from `expiryCheckService` (`data.type === "expiry"`)
+ * that still list this item id. Per-item DATE reminders use `item_expiry` and are rebuilt
+ * by `rescheduleAllItemReminderNotificationsForUser` — do not cancel those by id here or grouped
+ * reminders for other items would be dropped.
+ */
+export async function cancelLegacyExpiryBatchNotificationsForFoodItemId(
+  itemId: string
+): Promise<void> {
+  try {
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of all) {
+      const d = n.content.data as Record<string, unknown> | undefined;
+      if (notificationDataType(d) !== "expiry") continue;
+      const items = d?.items;
+      if (Array.isArray(items) && items.some((x) => x === itemId)) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
+  } catch (e) {
+    console.warn("cancelLegacyExpiryBatchNotificationsForFoodItemId:", e);
+  }
+}
+
 /** All per-item reminders use `data.type === "item_expiry"` (single or grouped). */
 export async function cancelAllScheduledItemExpiryNotifications(): Promise<void> {
   try {
     const all = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of all) {
-      if (n.content.data?.type === "item_expiry") {
+      if (notificationDataType(n.content.data as Record<string, unknown>) === "item_expiry") {
         await Notifications.cancelScheduledNotificationAsync(n.identifier);
       }
     }
@@ -183,14 +213,13 @@ async function scheduleNotificationAt(
   fireDate: Date,
   data: Record<string, unknown>
 ): Promise<string | null> {
-  const subtitle = iosSubtitle();
   try {
     return await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
         data,
-        ...(subtitle ? { subtitle } : {}),
+        ...(Platform.OS === "ios" ? { subtitle: itemReminderSubtitleIos() } : {}),
         sound: "default",
         ...(Platform.OS === "ios"
           ? {}

@@ -13,7 +13,6 @@ const isExpoGo = Constants.appOwnership === "expo";
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -114,7 +113,7 @@ export async function scheduleNotification(
         title,
         body,
         data,
-        ...(subtitle ? { subtitle } : {}),
+        ...(subtitle && Platform.OS === "ios" ? { subtitle } : {}),
         ...(Platform.OS === "ios"
           ? {}
           : {
