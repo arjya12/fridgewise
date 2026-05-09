@@ -179,6 +179,11 @@ export const foodItemsService = {
     const { error } = await supabase.from("food_items").delete().eq("id", id);
 
     if (error) throw error;
+
+    const { rescheduleAllItemReminderNotificationsForUser } = await import(
+      "@/services/itemExpiryNotificationService"
+    );
+    await rescheduleAllItemReminderNotificationsForUser().catch(() => {});
   },
 
   // Mark item as used (consumed). Logs to usage_logs and reduces/removes from food_items.
@@ -229,7 +234,11 @@ export const foodItemsService = {
     const remainingQuantity = (item as FoodItem).quantity - quantity;
 
     if (remainingQuantity <= 0) {
-      await this.updateItem(itemId, { quantity: 0 });
+      const updated = await this.updateItem(itemId, { quantity: 0 });
+      const { syncItemExpiryNotificationsAfterSave } = await import(
+        "@/services/itemExpiryNotificationService"
+      );
+      await syncItemExpiryNotificationsAfterSave(updated);
     } else {
       await this.updateItem(itemId, { quantity: remainingQuantity });
     }

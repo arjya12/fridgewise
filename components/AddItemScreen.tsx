@@ -7,7 +7,17 @@ import {
   sanitizeQuantityInputString,
 } from "@/utils/quantityLimits";
 import { foodItemsService } from "@/services/foodItems";
+import {
+  formatTimeForStorage,
+  normalizeItemNotificationRepeat,
+  normalizeRepeatForUi,
+  parseStoredTimeToDate,
+  syncItemExpiryNotificationsAfterSave,
+} from "@/services/itemExpiryNotificationService";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
@@ -22,6 +32,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -86,6 +97,15 @@ const commonUnits = [
 
 const CATEGORY_OPTIONS = FOOD_CATEGORY_OPTIONS;
 const CATEGORY_LABELS = FOOD_CATEGORY_LABELS;
+const REPEAT_OPTIONS = ["None", "Daily", "Weekly", "Monthly"];
+const CUSTOM_REMINDER_UNITS = ["days", "weeks", "months"];
+const REMINDER_QUICK_OPTIONS = [
+  { label: "3d", days: 3 },
+  { label: "5d", days: 5 },
+  { label: "1w", days: 7 },
+  { label: "2w", days: 14 },
+  { label: "1m", days: 30 },
+];
 
 const parseYmdToLocalDate = (value?: string): Date | null => {
   if (!value) return null;
@@ -107,6 +127,72 @@ const formatLocalDateToYmd = (date?: Date | null): string | undefined => {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
+
+const createTimeDate = (hours: number, minutes: number) => {
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+};
+
+const formatNotificationTime = (date: Date) =>
+  date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+const formatReminderDatePreview = (date: Date) =>
+  date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+const getCalendarDaysAway = (date?: Date | null) => {
+  if (!date) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const isRepeatOptionEnabled = (option: string, daysAway: number) => {
+  if (option === "Weekly") return daysAway >= 7;
+  if (option === "Monthly") return daysAway >= 30;
+  return true;
+};
+
+const getCustomReminderDays = (countText: string, unit: string) => {
+  const count = Math.max(1, parseInt(countText, 10) || 1);
+  if (unit === "weeks") return count * 7;
+  if (unit === "months") return count * 30;
+  return count;
+};
+
+const getReminderUnitDays = (unit: string) => {
+  if (unit === "weeks") return 7;
+  if (unit === "months") return 30;
+  return 1;
+};
+
+const getMaxReminderCount = (unit: string, daysAway: number, hasExpiryDate: boolean) => {
+  if (!hasExpiryDate) return 999;
+  return Math.floor(daysAway / getReminderUnitDays(unit));
+};
+
+const clampReminderCount = (
+  count: number,
+  unit: string,
+  daysAway: number,
+  hasExpiryDate: boolean
+) => {
+  const maxCount = getMaxReminderCount(unit, daysAway, hasExpiryDate);
+  if (maxCount < 1) return 1;
+  return Math.min(Math.max(1, count), maxCount);
+};
+
+const formatReminderDaysLabel = (days: number) =>
+  `${days} ${days === 1 ? "day" : "days"} before`;
 
 const CHIPS_PER_ROW = 9;
 const CATEGORY_ROW_1 = CATEGORY_OPTIONS.slice(0, CHIPS_PER_ROW);
@@ -150,6 +236,17 @@ export default function AddItemScreen() {
   const [showUnitDropdown, setShowUnitDropdown] = useState(false);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationTime, setNotificationTime] = useState(() =>
+    createTimeDate(13, 0)
+  );
+  const [pendingNotificationTime, setPendingNotificationTime] = useState(() =>
+    createTimeDate(13, 0)
+  );
+  const [showNotificationTimePicker, setShowNotificationTimePicker] =
+    useState(false);
+  const [reminderMenuOpen, setReminderMenuOpen] = useState(false);
+  const [customReminderCount, setCustomReminderCount] = useState("7");
+  const [customReminderUnit, setCustomReminderUnit] = useState("days");
   const [repeatOption, setRepeatOption] = useState("None");
   const [repeatMenuOpen, setRepeatMenuOpen] = useState(false);
   const unitDropdownTriggerRef = useRef<View>(null);
@@ -169,6 +266,9 @@ export default function AddItemScreen() {
   const addButtonScale = useRef(new Animated.Value(1)).current;
   const notificationExpandAnim = useRef(new Animated.Value(0)).current;
   const notificationToggleAnim = useRef(new Animated.Value(1)).current;
+  const reminderStepHoldRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const quantityStepHoldRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reminderDefaultModeRef = useRef(true);
   const [showSuccess, setShowSuccess] = useState(false);
   /** Measured height of green header + Fridge/Shelf row (absolute overlay) for scroll inset. */
   const [headerChromeHeight, setHeaderChromeHeight] = useState(96);
@@ -189,14 +289,168 @@ export default function AddItemScreen() {
   });
   const insets = useSafeAreaInsets();
   const navigateBackAfterSuccessRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const customReminderDays = getCustomReminderDays(
+    customReminderCount,
+    customReminderUnit
+  );
+  const reminderOffsetDays = customReminderDays;
+  const reminderLabel = formatReminderDaysLabel(reminderOffsetDays);
+  const notificationTimeLabel = formatNotificationTime(notificationTime);
+  const expiryDaysAway = getCalendarDaysAway(expiryDate);
+  const hasExpiryDate = Boolean(expiryDate);
+  const notificationsUnavailable = hasExpiryDate && expiryDaysAway <= 0;
+  const todayNotificationTime = createTimeDate(
+    notificationTime.getHours(),
+    notificationTime.getMinutes()
+  );
+  const latestValidReminderDays = hasExpiryDate
+    ? Math.max(
+        1,
+        expiryDaysAway - (todayNotificationTime.getTime() <= Date.now() ? 1 : 0)
+      )
+    : 999;
+  const maxReminderCount = getMaxReminderCount(
+    customReminderUnit,
+    latestValidReminderDays,
+    hasExpiryDate
+  );
+  const parsedReminderCount = Math.max(
+    1,
+    parseInt(customReminderCount, 10) || 1
+  );
+  const reminderRangeInvalid =
+    notificationsEnabled &&
+    Boolean(expiryDate) &&
+    reminderOffsetDays > latestValidReminderDays;
+  const reminderDateCandidate = expiryDate ? new Date(expiryDate) : null;
+  if (reminderDateCandidate) {
+    reminderDateCandidate.setDate(
+      reminderDateCandidate.getDate() - reminderOffsetDays
+    );
+    reminderDateCandidate.setHours(
+      notificationTime.getHours(),
+      notificationTime.getMinutes(),
+      0,
+      0
+    );
+  }
+  const reminderTimeInvalid =
+    notificationsEnabled &&
+    Boolean(reminderDateCandidate) &&
+    !reminderRangeInvalid &&
+    reminderDateCandidate!.getTime() <= Date.now();
+  const notificationReminderInvalid = reminderRangeInvalid || reminderTimeInvalid;
+  const notificationControlsEnabled =
+    notificationsEnabled && !notificationsUnavailable;
+  const notificationExpandedHeight =
+    repeatMenuOpen ? 260 : reminderMenuOpen ? 306 : 232;
   const notificationCardHeight = notificationExpandAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [40, repeatMenuOpen ? 300 : 232],
+    outputRange: [48, notificationExpandedHeight],
   });
   const notificationBodyOpacity = notificationExpandAnim.interpolate({
     inputRange: [0, 0.45, 1],
     outputRange: [0, 0, 1],
   });
+  const setClampedReminderCount = useCallback(
+    (count: number, unit = customReminderUnit) => {
+      setCustomReminderCount(
+        String(
+          clampReminderCount(count, unit, latestValidReminderDays, hasExpiryDate)
+        )
+      );
+    },
+    [customReminderUnit, hasExpiryDate, latestValidReminderDays]
+  );
+  const adjustReminderCount = useCallback(
+    (delta: number) => {
+      setCustomReminderCount((currentCount) => {
+        const current = parseInt(currentCount, 10) || 1;
+        return String(
+          clampReminderCount(
+            current + delta,
+            customReminderUnit,
+            latestValidReminderDays,
+            hasExpiryDate
+          )
+        );
+      });
+    },
+    [customReminderUnit, hasExpiryDate, latestValidReminderDays]
+  );
+  const stopReminderStepHold = useCallback(() => {
+    if (reminderStepHoldRef.current) {
+      clearInterval(reminderStepHoldRef.current);
+      reminderStepHoldRef.current = null;
+    }
+  }, []);
+  const startReminderStepHold = useCallback(
+    (delta: number) => {
+      stopReminderStepHold();
+      adjustReminderCount(delta);
+      reminderStepHoldRef.current = setInterval(() => {
+        adjustReminderCount(delta);
+      }, 95);
+    },
+    [adjustReminderCount, stopReminderStepHold]
+  );
+  const adjustQuantityCount = useCallback((delta: number) => {
+    setQuantity((currentQuantity) =>
+      String(
+        Math.max(
+          1,
+          Math.min(
+            MAX_INVENTORY_QUANTITY,
+            (parseInt(currentQuantity, 10) || 1) + delta
+          )
+        )
+      )
+    );
+  }, []);
+  const stopQuantityStepHold = useCallback(() => {
+    if (quantityStepHoldRef.current) {
+      clearInterval(quantityStepHoldRef.current);
+      quantityStepHoldRef.current = null;
+    }
+  }, []);
+  const startQuantityStepHold = useCallback(
+    (delta: number) => {
+      stopQuantityStepHold();
+      adjustQuantityCount(delta);
+      quantityStepHoldRef.current = setInterval(() => {
+        adjustQuantityCount(delta);
+      }, 95);
+    },
+    [adjustQuantityCount, stopQuantityStepHold]
+  );
+  const reminderPreviewText = (() => {
+    if (notificationsUnavailable) {
+      return "Choose a later expiry date or turn notifications off";
+    }
+    if (!notificationsEnabled) return "Notifications are off for this item";
+    if (!expiryDate) return "Select an expiry date to schedule a reminder";
+
+    if (reminderRangeInvalid) {
+      return "Reminder needs to happen before expiry.";
+    }
+
+    if (!reminderDateCandidate || reminderTimeInvalid) {
+      return "Set a later reminder time.";
+    }
+
+    const reminderDateLabel = formatReminderDatePreview(reminderDateCandidate);
+    if (repeatOption === "None") {
+      return `You'll be reminded on ${reminderDateLabel} at ${notificationTimeLabel}`;
+    }
+
+    return `You'll be reminded ${repeatOption.toLowerCase()} from ${reminderDateLabel} until expiry at ${notificationTimeLabel}`;
+  })();
+  const reminderPreviewIsGuidance =
+    notificationsUnavailable ||
+    !notificationsEnabled ||
+    !expiryDate ||
+    reminderRangeInvalid ||
+    reminderTimeInvalid;
 
   // Calendar context for real-time updates after save
   const { refresh, invalidateCache } = useCalendar();
@@ -246,6 +500,94 @@ export default function AddItemScreen() {
       useNativeDriver: true,
     }).start();
   }, [notificationToggleAnim, notificationsEnabled]);
+
+  useEffect(() => {
+    if (!notificationsUnavailable) return;
+    setNotificationsEnabled(false);
+    setReminderMenuOpen(false);
+    setRepeatMenuOpen(false);
+  }, [notificationsUnavailable]);
+
+  useEffect(() => stopReminderStepHold, [stopReminderStepHold]);
+
+  useEffect(() => stopQuantityStepHold, [stopQuantityStepHold]);
+
+  useEffect(() => {
+    if (!isRepeatOptionEnabled(repeatOption, expiryDaysAway)) {
+      setRepeatOption("None");
+    }
+  }, [expiryDaysAway, repeatOption]);
+
+  useEffect(() => {
+    if (reminderDefaultModeRef.current && hasExpiryDate) {
+      const defaultReminderDays = latestValidReminderDays < 7 ? 1 : 7;
+      if (customReminderUnit !== "days") {
+        setCustomReminderUnit("days");
+      }
+      if (customReminderCount !== String(defaultReminderDays)) {
+        setCustomReminderCount(String(defaultReminderDays));
+      }
+      return;
+    }
+
+    const maxForCurrentUnit = getMaxReminderCount(
+      customReminderUnit,
+      latestValidReminderDays,
+      hasExpiryDate
+    );
+
+    if (hasExpiryDate && maxForCurrentUnit < 1) {
+      setCustomReminderUnit("days");
+      setClampedReminderCount(parsedReminderCount, "days");
+      return;
+    }
+
+    const clampedCount = clampReminderCount(
+      parsedReminderCount,
+      customReminderUnit,
+      latestValidReminderDays,
+      hasExpiryDate
+    );
+
+    if (String(clampedCount) !== customReminderCount) {
+      setCustomReminderCount(String(clampedCount));
+    }
+  }, [
+    customReminderCount,
+    customReminderUnit,
+    hasExpiryDate,
+    latestValidReminderDays,
+    parsedReminderCount,
+    setClampedReminderCount,
+  ]);
+
+  const openNotificationTimePicker = useCallback(() => {
+    if (!notificationControlsEnabled) return;
+    setPendingNotificationTime(new Date(notificationTime));
+    setShowNotificationTimePicker(true);
+    Haptics.selectionAsync();
+  }, [notificationControlsEnabled, notificationTime]);
+
+  const handleAndroidNotificationTimeChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      setShowNotificationTimePicker(false);
+      if (event.type !== "set" || !selectedDate) return;
+      const nextTime = createTimeDate(
+        selectedDate.getHours(),
+        selectedDate.getMinutes()
+      );
+      setNotificationTime(nextTime);
+      setPendingNotificationTime(nextTime);
+      Haptics.selectionAsync();
+    },
+    []
+  );
+
+  const applyIosNotificationTime = useCallback(() => {
+    setNotificationTime(pendingNotificationTime);
+    setShowNotificationTimePicker(false);
+    Haptics.selectionAsync();
+  }, [pendingNotificationTime]);
 
   const runSuccessCelebrationAndExit = useCallback(() => {
     successAnim.setValue(0);
@@ -409,6 +751,7 @@ export default function AddItemScreen() {
       const item = items.find((item) => item.id === params.id);
 
       if (item) {
+        reminderDefaultModeRef.current = false;
         setName(item.name);
         setQuantity(String(item.quantity));
         setUnit(item.unit || "pcs");
@@ -418,6 +761,15 @@ export default function AddItemScreen() {
         setCategory(CATEGORY_LABELS.includes(cat) ? cat : cat ? "Other" : "");
         setNotes(item.notes || "");
         setExpiryDate(parseYmdToLocalDate(item.expiry_date ?? undefined));
+        setNotificationsEnabled(item.notifications_enabled ?? true);
+        setCustomReminderUnit("days");
+        setCustomReminderCount(
+          String(Math.max(1, item.notification_reminder_days ?? 7))
+        );
+        const t = parseStoredTimeToDate(item.notification_time);
+        setNotificationTime(t);
+        setPendingNotificationTime(new Date(t.getTime()));
+        setRepeatOption(normalizeRepeatForUi(item.notification_repeat));
       } else {
         Alert.alert("Error", "Item not found");
         router.back();
@@ -453,21 +805,36 @@ export default function AddItemScreen() {
 
     setLoading(true);
     try {
+      const expiryYmd = formatLocalDateToYmd(expiryDate);
+      const daysAway = expiryDate ? getCalendarDaysAway(expiryDate) : 0;
+      const effectiveNotificationsEnabled =
+        !expiryDate || daysAway <= 0 ? false : notificationsEnabled;
+
       const itemData = {
         name: name.trim(),
         quantity: quantityNum,
         unit: unit.trim() || undefined,
         location,
         category: category.trim() || undefined,
-        expiry_date: formatLocalDateToYmd(expiryDate),
+        expiry_date: expiryYmd,
         notes: notes.trim() || undefined,
+        notifications_enabled: effectiveNotificationsEnabled,
+        notification_reminder_days: Math.max(1, reminderOffsetDays),
+        notification_time: formatTimeForStorage(notificationTime),
+        notification_repeat: normalizeItemNotificationRepeat(
+          repeatOption.toLowerCase(),
+          expiryYmd
+        ),
       };
 
-      if (isEditing) {
-        await foodItemsService.updateItem(params.id!, itemData);
-      } else {
-        await foodItemsService.addItem(itemData);
-      }
+      const saved = isEditing
+        ? await foodItemsService.updateItem(params.id!, itemData)
+        : await foodItemsService.addItem(itemData);
+
+      await syncItemExpiryNotificationsAfterSave(saved, {
+        showPermissionDeniedAlert: true,
+      });
+
       try {
         invalidateCache();
         void refresh();
@@ -783,19 +1150,12 @@ export default function AddItemScreen() {
                       >
                         <Pressable
                           onPress={() => {
-                            setQuantity((q) =>
-                              String(
-                                Math.max(
-                                  1,
-                                  Math.min(
-                                    MAX_INVENTORY_QUANTITY,
-                                    (parseInt(q, 10) || 1) - 1
-                                  )
-                                )
-                              )
-                            );
+                            adjustQuantityCount(-1);
                             Haptics.selectionAsync();
                           }}
+                          onLongPress={() => startQuantityStepHold(-1)}
+                          onPressOut={stopQuantityStepHold}
+                          delayLongPress={260}
                           style={{
                             width: 22,
                             height: 22,
@@ -851,16 +1211,12 @@ export default function AddItemScreen() {
 
                         <Pressable
                           onPress={() => {
-                            setQuantity((q) =>
-                              String(
-                                Math.min(
-                                  MAX_INVENTORY_QUANTITY,
-                                  (parseInt(q, 10) || 1) + 1
-                                )
-                              )
-                            );
+                            adjustQuantityCount(1);
                             Haptics.selectionAsync();
                           }}
+                          onLongPress={() => startQuantityStepHold(1)}
+                          onPressOut={stopQuantityStepHold}
+                          delayLongPress={260}
                           style={{
                             width: 22,
                             height: 22,
@@ -1111,7 +1467,14 @@ export default function AddItemScreen() {
                 <SimpleCalendar
                   key={`calendar-${String(params.id ?? "new")}`}
                   selectedDate={expiryDate}
-                  onSelect={(date: Date) => setExpiryDate(date)}
+                  onSelect={(date: Date) => {
+                    setExpiryDate(date);
+                    if (reminderDefaultModeRef.current) {
+                      const daysAway = getCalendarDaysAway(date);
+                      setCustomReminderUnit("days");
+                      setCustomReminderCount(daysAway < 7 ? "1" : "7");
+                    }
+                  }}
                   onWeeksChange={(weeks) => setCalendarWeeks(weeks)}
                 />
               </View>
@@ -1132,7 +1495,7 @@ export default function AddItemScreen() {
                   borderRadius: 11,
                   backgroundColor: "#FFF",
                   borderWidth: 1.2,
-                  borderColor: "#CBD5E1",
+                  borderColor: "#E5E7EB",
                   borderStyle: "solid",
                   overflow: "hidden",
                 }}
@@ -1143,12 +1506,12 @@ export default function AddItemScreen() {
                     Haptics.selectionAsync();
                   }}
                   style={{
-                    height: 40,
+                    height: 48,
                     flexDirection: "row",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    paddingHorizontal: 12,
-                    paddingVertical: 3,
+                    paddingHorizontal: 14,
+                    paddingVertical: 5,
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Notification settings"
@@ -1166,7 +1529,7 @@ export default function AddItemScreen() {
                   <View style={{ flex: 1 }}>
                     <ThemedText
                       style={{
-                        color: "#4B5563",
+                        color: "#111827",
                           fontSize: 13,
                           fontWeight: "500",
                           lineHeight: 16,
@@ -1175,23 +1538,51 @@ export default function AddItemScreen() {
                     >
                       Notifications
                     </ThemedText>
-                    <ThemedText
-                      style={{
-                        color: "#6B7280",
-                          fontSize: 10,
-                          fontWeight: "500",
-                          lineHeight: 13,
-                        marginTop: 0,
-                        fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-                      }}
-                    >
-                      Default • 2 days before at 9:00 AM
-                    </ThemedText>
                   </View>
                 </View>
+                <Pressable
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    if (notificationsUnavailable) return;
+                    setNotificationsEnabled((enabled) => !enabled);
+                    Haptics.selectionAsync();
+                  }}
+                  disabled={notificationsUnavailable}
+                  style={{
+                    width: 34,
+                    height: 20,
+                    borderRadius: 999,
+                    backgroundColor: notificationsEnabled ? "#16A34A" : "#E5E7EB",
+                    justifyContent: "center",
+                    paddingHorizontal: 2,
+                    marginLeft: 8,
+                    marginRight: 8,
+                    opacity: notificationsUnavailable ? 0.55 : 1,
+                  }}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: notificationsEnabled }}
+                  accessibilityLabel="Enable notifications"
+                >
+                  <Animated.View
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 999,
+                      backgroundColor: "#FFFFFF",
+                      transform: [
+                        {
+                          translateX: notificationToggleAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 14],
+                          }),
+                        },
+                      ],
+                    }}
+                  />
+                </Pressable>
                 <Ionicons
                   name={notificationSettingsOpen ? "chevron-up" : "chevron-down"}
-                  size={18}
+                  size={16}
                   color="#22C55E"
                 />
                 </Pressable>
@@ -1199,10 +1590,10 @@ export default function AddItemScreen() {
                   style={{
                     opacity: notificationBodyOpacity,
                     borderTopWidth: 1,
-                    borderTopColor: "#E5E7EB",
-                    marginHorizontal: 12,
-                    paddingTop: 8,
-                    paddingHorizontal: 12,
+                    borderTopColor: "#D1D5DB",
+                    marginHorizontal: 16,
+                    paddingTop: 6,
+                    paddingHorizontal: 8,
                   }}
                 >
                   <View
@@ -1210,125 +1601,314 @@ export default function AddItemScreen() {
                       borderTopWidth: 0,
                     }}
                   >
-                    <View
+                    <Pressable
+                      disabled={!notificationControlsEnabled}
+                      onPress={() => {
+                        setReminderMenuOpen((open) => !open);
+                        setRepeatMenuOpen(false);
+                        Haptics.selectionAsync();
+                      }}
                       style={{
-                        height: 34,
+                        height: 36,
                         flexDirection: "row",
                         alignItems: "center",
                         justifyContent: "space-between",
+                        opacity: notificationControlsEnabled ? 1 : 0.45,
                       }}
                     >
                       <ThemedText
                         style={{
-                          color: "#4B5563",
-                          fontSize: 12,
+                          color: "#111827",
+                          fontSize: 13,
                           fontWeight: "500",
                           fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                         }}
                       >
-                        Enable notifications
+                        Reminder
                       </ThemedText>
-                      <Pressable
-                        onPress={() => {
-                          setNotificationsEnabled((enabled) => !enabled);
-                          Haptics.selectionAsync();
-                        }}
+                      <View
                         style={{
-                          width: 34,
-                          height: 18,
-                          borderRadius: 999,
-                          backgroundColor: notificationsEnabled ? "#BBF7D0" : "#E5E7EB",
-                          justifyContent: "center",
-                          paddingHorizontal: 2,
-                        }}
-                        accessibilityRole="switch"
-                        accessibilityState={{ checked: notificationsEnabled }}
-                        accessibilityLabel="Enable notifications"
-                      >
-                        <Animated.View
-                          style={{
-                            width: 14,
-                            height: 14,
-                            borderRadius: 999,
-                            backgroundColor: notificationsEnabled ? "#22C55E" : "#FFFFFF",
-                            transform: [
-                              {
-                                translateX: notificationToggleAnim.interpolate({
-                                  inputRange: [0, 1],
-                                  outputRange: [0, 16],
-                                }),
-                              },
-                            ],
-                          }}
-                        />
-                      </Pressable>
-                    </View>
-
-                    {[
-                      ["Reminder", "2 days before"],
-                      ["Time", "9:00 AM"],
-                    ].map(([label, value]) => (
-                      <Pressable
-                        key={label}
-                        style={{
-                          height: 34,
-                          borderTopWidth: 1,
-                          borderTopColor: "#E5E7EB",
                           flexDirection: "row",
                           alignItems: "center",
-                          justifyContent: "space-between",
+                          gap: 8,
                         }}
                       >
                         <ThemedText
                           style={{
-                            color: "#4B5563",
-                            fontSize: 12,
+                            color: "#111827",
+                            fontSize: 13,
                             fontWeight: "500",
                             fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                           }}
                         >
-                          {label}
+                          {reminderLabel}
                         </ThemedText>
+                        <Ionicons
+                          name={reminderMenuOpen ? "chevron-up" : "chevron-down"}
+                          size={17}
+                          color="#22C55E"
+                        />
+                      </View>
+                    </Pressable>
+
+                    {reminderMenuOpen && (
+                      <View
+                        style={{
+                          borderTopWidth: 0,
+                          paddingTop: 8,
+                          paddingBottom: 8,
+                        }}
+                      >
                         <View
                           style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 8,
+                            borderWidth: 1,
+                            borderColor: "#E5E7EB",
+                            borderRadius: 10,
+                            paddingVertical: 10,
+                            paddingHorizontal: 12,
+                            backgroundColor: "#FFF",
                           }}
                         >
-                          <ThemedText
+                          <View
                             style={{
-                              color: "#374151",
-                              fontSize: 12,
-                              fontWeight: "500",
-                              fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 8,
                             }}
                           >
-                            {value}
-                          </ThemedText>
-                          <Ionicons name="chevron-down" size={16} color="#22C55E" />
+                            <Pressable
+                              disabled={parsedReminderCount <= 1}
+                              onPress={() => {
+                                reminderDefaultModeRef.current = false;
+                                adjustReminderCount(-1);
+                                Haptics.selectionAsync();
+                              }}
+                              onLongPress={() => {
+                                reminderDefaultModeRef.current = false;
+                                startReminderStepHold(-1);
+                              }}
+                              onPressOut={stopReminderStepHold}
+                              delayLongPress={260}
+                              style={({ pressed }) => ({
+                                width: 36,
+                                height: 34,
+                                borderRadius: 8,
+                                borderWidth: 1,
+                                borderColor: "#E5E7EB",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor:
+                                  pressed && parsedReminderCount > 1
+                                    ? "#F9FAFB"
+                                    : "#FFF",
+                                opacity: parsedReminderCount > 1 ? 1 : 0.45,
+                              })}
+                            >
+                              <Ionicons name="remove" size={20} color="#22C55E" />
+                            </Pressable>
+
+                            <TextInput
+                              value={customReminderCount}
+                              onChangeText={(text) => {
+                                reminderDefaultModeRef.current = false;
+                                const clean = text.replace(/\D/g, "").slice(0, 3);
+                                if (!clean) {
+                                  setCustomReminderCount("");
+                                  return;
+                                }
+                                setClampedReminderCount(parseInt(clean, 10));
+                              }}
+                              onBlur={() => {
+                                reminderDefaultModeRef.current = false;
+                                if (!customReminderCount.trim()) {
+                                  setClampedReminderCount(1);
+                                }
+                              }}
+                              keyboardType="number-pad"
+                              selectTextOnFocus
+                              style={{
+                                width: 80,
+                                height: 34,
+                                borderRadius: 8,
+                                borderWidth: 1,
+                                borderColor: "#E5E7EB",
+                                textAlign: "center",
+                                textAlignVertical: "center",
+                                color: "#111827",
+                                fontSize: 18,
+                                fontWeight: "600",
+                                lineHeight: 22,
+                                includeFontPadding: false,
+                                paddingVertical: 0,
+                                paddingHorizontal: 6,
+                              }}
+                            />
+
+                            <Pressable
+                              disabled={
+                                maxReminderCount < 1 ||
+                                parsedReminderCount >= maxReminderCount
+                              }
+                              onPress={() => {
+                                reminderDefaultModeRef.current = false;
+                                adjustReminderCount(1);
+                                Haptics.selectionAsync();
+                              }}
+                              onLongPress={() => {
+                                reminderDefaultModeRef.current = false;
+                                startReminderStepHold(1);
+                              }}
+                              onPressOut={stopReminderStepHold}
+                              delayLongPress={260}
+                              style={({ pressed }) => {
+                                const canIncrease =
+                                  maxReminderCount >= 1 &&
+                                  parsedReminderCount < maxReminderCount;
+                                return {
+                                  width: 36,
+                                  height: 34,
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor: "#E5E7EB",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  backgroundColor:
+                                    pressed && canIncrease ? "#F9FAFB" : "#FFF",
+                                  opacity: canIncrease ? 1 : 0.45,
+                                };
+                              }}
+                            >
+                              <Ionicons name="add" size={21} color="#22C55E" />
+                            </Pressable>
+                          </View>
+
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 6,
+                              marginTop: 10,
+                            }}
+                          >
+                            {REMINDER_QUICK_OPTIONS.map((option) => {
+                              const optionEnabled =
+                                !hasExpiryDate ||
+                                option.days <= latestValidReminderDays;
+                              const selected = reminderOffsetDays === option.days;
+
+                              return (
+                                <Pressable
+                                  key={option.label}
+                                  disabled={!optionEnabled}
+                                  onPress={() => {
+                                    if (!optionEnabled) return;
+                                    reminderDefaultModeRef.current = false;
+                                    setCustomReminderUnit("days");
+                                    setCustomReminderCount(String(option.days));
+                                    Haptics.selectionAsync();
+                                  }}
+                                  style={({ pressed }) => ({
+                                    flex: 1,
+                                    height: 30,
+                                    minWidth: 36,
+                                    borderRadius: 15,
+                                    borderWidth: 1,
+                                    borderColor: selected ? "#22C55E" : "#E5E7EB",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    backgroundColor: selected
+                                      ? "#DCFCE7"
+                                      : pressed && optionEnabled
+                                        ? "#F9FAFB"
+                                        : "#F8FAFC",
+                                    opacity: optionEnabled ? 1 : 0.35,
+                                  })}
+                                >
+                                  <ThemedText
+                                    style={{
+                                      color: selected ? "#16A34A" : "#374151",
+                                      fontSize: 13,
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    {option.label}
+                                  </ThemedText>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
                         </View>
-                      </Pressable>
-                    ))}
+
+                      </View>
+                    )}
 
                     <Pressable
-                      onPress={() => {
-                        setRepeatMenuOpen((open) => !open);
-                        Haptics.selectionAsync();
-                      }}
+                      disabled={!notificationControlsEnabled}
+                      onPress={openNotificationTimePicker}
                       style={{
-                        height: 34,
+                        height: 36,
                         borderTopWidth: 1,
                         borderTopColor: "#E5E7EB",
                         flexDirection: "row",
                         alignItems: "center",
                         justifyContent: "space-between",
+                        opacity: notificationControlsEnabled ? 1 : 0.45,
                       }}
                     >
                       <ThemedText
                         style={{
-                          color: "#4B5563",
-                          fontSize: 12,
+                          color: "#111827",
+                          fontSize: 13,
+                          fontWeight: "500",
+                          fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                        }}
+                      >
+                        Time
+                      </ThemedText>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <ThemedText
+                          style={{
+                            color: "#111827",
+                            fontSize: 13,
+                            fontWeight: "500",
+                            fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                          }}
+                        >
+                          {notificationTimeLabel}
+                        </ThemedText>
+                        <Ionicons name="chevron-down" size={17} color="#22C55E" />
+                      </View>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        setRepeatMenuOpen((open) => !open);
+                        setReminderMenuOpen(false);
+                        Haptics.selectionAsync();
+                      }}
+                      disabled={!notificationControlsEnabled}
+                      style={{
+                        height: 36,
+                        borderTopWidth: 1,
+                        borderTopColor: "#E5E7EB",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        opacity: notificationControlsEnabled ? 1 : 0.45,
+                      }}
+                    >
+                      <ThemedText
+                        style={{
+                          color: "#111827",
+                          fontSize: 13,
                           fontWeight: "500",
                           fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                         }}
@@ -1344,8 +1924,8 @@ export default function AddItemScreen() {
                       >
                         <ThemedText
                           style={{
-                            color: "#374151",
-                            fontSize: 12,
+                            color: "#111827",
+                            fontSize: 13,
                             fontWeight: "500",
                             fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                           }}
@@ -1354,7 +1934,7 @@ export default function AddItemScreen() {
                         </ThemedText>
                         <Ionicons
                           name={repeatMenuOpen ? "chevron-up" : "chevron-down"}
-                          size={16}
+                          size={17}
                           color="#22C55E"
                         />
                       </View>
@@ -1365,68 +1945,88 @@ export default function AddItemScreen() {
                         style={{
                           borderTopWidth: 1,
                           borderTopColor: "#E5E7EB",
-                          paddingVertical: 4,
+                          paddingVertical: 2,
                         }}
                       >
-                        {["None", "Daily", "Weekly", "Monthly"].map((option) => (
-                          <Pressable
-                            key={option}
-                            onPress={() => {
-                              setRepeatOption(option);
-                              setRepeatMenuOpen(false);
-                              Haptics.selectionAsync();
-                            }}
-                            style={{
-                              height: 28,
-                              flexDirection: "row",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              paddingHorizontal: 8,
-                              borderRadius: 8,
-                              backgroundColor:
-                                repeatOption === option ? "#ECFDF3" : "#FFF",
-                            }}
-                          >
-                            <ThemedText
-                              style={{
-                                color: repeatOption === option ? "#166534" : "#4B5563",
-                                fontSize: 12,
-                                fontWeight: "500",
-                                fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                        {REPEAT_OPTIONS.map((option) => {
+                          const optionEnabled = isRepeatOptionEnabled(
+                            option,
+                            expiryDaysAway
+                          );
+                          const selected = repeatOption === option;
+
+                          return (
+                            <Pressable
+                              key={option}
+                              disabled={!optionEnabled}
+                              onPress={() => {
+                                if (!optionEnabled) return;
+                                setRepeatOption(option);
+                                setRepeatMenuOpen(false);
+                                Haptics.selectionAsync();
                               }}
+                              style={({ pressed }) => ({
+                                height: 22,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                paddingHorizontal: 8,
+                                borderRadius: 7,
+                                opacity: optionEnabled ? 1 : 0.38,
+                                backgroundColor: selected
+                                  ? "#ECFDF3"
+                                  : pressed && optionEnabled
+                                    ? "#F9FAFB"
+                                    : "#FFF",
+                              })}
                             >
-                              {option}
-                            </ThemedText>
-                            {repeatOption === option && (
-                              <Ionicons name="checkmark" size={15} color="#22C55E" />
-                            )}
-                          </Pressable>
-                        ))}
+                              <ThemedText
+                                style={{
+                                  color: selected ? "#166534" : "#4B5563",
+                                  fontSize: 11,
+                                  fontWeight: "500",
+                                  fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                                }}
+                              >
+                                {option}
+                              </ThemedText>
+                              {selected && optionEnabled && (
+                                <Ionicons name="checkmark" size={15} color="#22C55E" />
+                              )}
+                            </Pressable>
+                          );
+                        })}
                       </View>
                     )}
 
-                    <View
-                      style={{
-                        borderTopWidth: 1,
-                        borderTopColor: "#E5E7EB",
-                        paddingTop: 7,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <ThemedText
+                    {!repeatMenuOpen && !reminderMenuOpen && (
+                      <View
                         style={{
-                          color: "#6B7280",
-                          fontSize: 11,
-                          fontWeight: "500",
-                          textAlign: "center",
-                          fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                          marginTop: 5,
+                          borderTopWidth: 1,
+                          borderTopColor: "#E5E7EB",
+                          minHeight: 42,
+                          paddingTop: 8,
+                          paddingHorizontal: 8,
+                          alignItems: "center",
+                          justifyContent: "center",
                         }}
                       >
-                        You'll be reminded on Aug 29, 2026 at 9:00 AM
-                      </ThemedText>
-                    </View>
+                        <ThemedText
+                          style={{
+                            color: reminderPreviewIsGuidance ? "#64748B" : "#16A34A",
+                            fontSize: 12,
+                            fontWeight: "600",
+                            textAlign: "center",
+                            lineHeight: 16,
+                            fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+                          }}
+                          numberOfLines={2}
+                        >
+                          {reminderPreviewText}
+                        </ThemedText>
+                      </View>
+                    )}
                   </View>
                 </Animated.View>
               </Animated.View>
@@ -1450,7 +2050,8 @@ export default function AddItemScreen() {
                   !unit.trim() ||
                   !location ||
                   !category ||
-                  !expiryDate
+                  !expiryDate ||
+                  notificationReminderInvalid
                 }
                 loading={loading}
                 singleLineText
@@ -1561,6 +2162,76 @@ export default function AddItemScreen() {
             </Pressable>
           </View>
         </>
+      )}
+      {showNotificationTimePicker && Platform.OS === "android" && (
+        <DateTimePicker
+          value={notificationTime}
+          mode="time"
+          display="default"
+          onChange={handleAndroidNotificationTimeChange}
+        />
+      )}
+      {showNotificationTimePicker && Platform.OS !== "android" && (
+        <Modal
+          transparent
+          animationType="fade"
+          visible={showNotificationTimePicker}
+          onRequestClose={() => setShowNotificationTimePicker(false)}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(15,23,42,0.35)",
+              justifyContent: "center",
+              paddingHorizontal: 24,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: "#FFF",
+                borderRadius: 18,
+                padding: 16,
+              }}
+            >
+              <DateTimePicker
+                value={pendingNotificationTime}
+                mode="time"
+                display="spinner"
+                onChange={(_, selectedDate) => {
+                  if (selectedDate) setPendingNotificationTime(selectedDate);
+                }}
+              />
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "flex-end",
+                  gap: 12,
+                  marginTop: 12,
+                }}
+              >
+                <Pressable
+                  onPress={() => setShowNotificationTimePicker(false)}
+                  style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+                >
+                  <Text style={{ color: "#6B7280", fontWeight: "600" }}>
+                    Cancel
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={applyIosNotificationTime}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 999,
+                    backgroundColor: "#22C55E",
+                  }}
+                >
+                  <Text style={{ color: "#FFF", fontWeight: "700" }}>Done</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
       {showSuccess && (
         <>

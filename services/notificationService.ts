@@ -79,6 +79,7 @@ const ACCENT_LOW_STOCK = "#0284C7";
 function iosSubtitleForData(data: Record<string, unknown>): string | undefined {
   const t = data.type;
   if (t === "expiry") return "FridgeWise · Expiring soon";
+  if (t === "item_expiry") return "FridgeWise · Item reminder";
   if (t === "low_stock") return "FridgeWise · Running low";
   if (t === "grocery_list") return "FridgeWise · Grocery list";
   return undefined;

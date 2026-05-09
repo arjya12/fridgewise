@@ -211,6 +211,16 @@ export interface FoodItem {
   barcode?: string;
   image_url?: string;
   notes?: string;
+  /** When false, no per-item expiry notifications are scheduled. */
+  notifications_enabled?: boolean | null;
+  /** Calendar days before expiry for the first reminder. */
+  notification_reminder_days?: number | null;
+  /** Local reminder time, 24h `HH:mm`. */
+  notification_time?: string | null;
+  /** `none` | `daily` | `weekly` | `monthly` */
+  notification_repeat?: string | null;
+  /** Expo scheduled notification identifiers for this item (JSON array in DB). */
+  notification_ids?: string[] | null;
   created_at: string;
   updated_at: string;
 }

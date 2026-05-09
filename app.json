@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/logowithtext.jpg",
     "notification": {
+      "icon": "./assets/images/logo_white.png",
       "color": "#15803D"
     },
     "scheme": "fridgewise",
