@@ -71,12 +71,9 @@ export async function purgeUserRemoteData(userId: string): Promise<void> {
  */
 export async function clearAllAppData(userId: string): Promise<void> {
   await purgeUserRemoteData(userId);
-  const [{ syncGroceryListReminder }, { cancelAllScheduledLocalNotifications }] =
-    await Promise.all([
-      import("@/services/groceryListReminderService"),
-      import("@/services/notificationService"),
-    ]);
-  await syncGroceryListReminder(false);
+  const { cancelAllScheduledLocalNotifications } = await import(
+    "@/services/notificationService"
+  );
   await cancelAllScheduledLocalNotifications();
   await clearFridgewiseAsyncStorage();
 }
@@ -94,12 +91,9 @@ export async function deleteUserAccount(userId: string): Promise<void> {
   if (profileErr) {
     throw new Error(profileErr.message || "Failed to delete profile");
   }
-  const [{ syncGroceryListReminder }, { cancelAllScheduledLocalNotifications }] =
-    await Promise.all([
-      import("@/services/groceryListReminderService"),
-      import("@/services/notificationService"),
-    ]);
-  await syncGroceryListReminder(false);
+  const { cancelAllScheduledLocalNotifications } = await import(
+    "@/services/notificationService"
+  );
   await cancelAllScheduledLocalNotifications();
   await clearFridgewiseAsyncStorage();
   const { error: signErr } = await supabase.auth.signOut();

@@ -8,7 +8,6 @@ import SkeletonBlock from "@/components/SkeletonBlock";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSettings } from "@/contexts/SettingsContext";
 import { SHOPPING_LIST_STORAGE_KEY } from "@/services/groceryListStorage";
 import { GROCERY_CATEGORY_OPTIONS, GROCERY_CATEGORY_ORDER } from "@/lib/foodCategories";
 import { Ionicons } from "@expo/vector-icons";
@@ -97,7 +96,6 @@ function grocerySheetQuantityValid(raw: string): boolean {
 
 export default function ShoppingListScreen() {
   useAuth();
-  const { lowStockAlerts } = useSettings();
   const insets = useSafeAreaInsets();
   const [shoppingList, setShoppingList] = useState<GroceryItem[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -176,16 +174,6 @@ export default function ShoppingListScreen() {
       }
     })();
   }, [shoppingList]);
-
-  useEffect(() => {
-    if (initialLoading) return;
-    const t = setTimeout(() => {
-      void import("@/services/groceryListReminderService").then((m) =>
-        m.syncGroceryListReminder(lowStockAlerts).catch(() => {})
-      );
-    }, 400);
-    return () => clearTimeout(t);
-  }, [shoppingList, lowStockAlerts, initialLoading]);
 
   // =============================================================================
   // ACTIONS

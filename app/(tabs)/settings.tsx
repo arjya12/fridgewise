@@ -122,8 +122,6 @@ export default function SettingsScreen() {
   const {
     expiryAlerts,
     setExpiryAlerts,
-    lowStockAlerts,
-    setLowStockAlerts,
     reloadSettingsFromStorage,
   } = useSettings();
   const { user } = useAuth();
@@ -340,16 +338,6 @@ export default function SettingsScreen() {
               description="Get alerts before items expire"
               value={expiryAlerts}
               onValueChange={setExpiryAlerts}
-              primaryColor={primaryColor}
-              subTextColor={subTextColor}
-            />
-            <View style={styles.settingsSeparator} />
-            <ToggleRow
-              icon="basket-outline"
-              title="Grocery Reminders"
-              description="Reminders for items to buy"
-              value={lowStockAlerts}
-              onValueChange={setLowStockAlerts}
               primaryColor={primaryColor}
               subTextColor={subTextColor}
             />

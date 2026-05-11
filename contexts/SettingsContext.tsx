@@ -6,8 +6,6 @@ interface SettingsContextType {
   // Notification settings
   expiryAlerts: boolean;
   setExpiryAlerts: (enabled: boolean) => void;
-  lowStockAlerts: boolean;
-  setLowStockAlerts: (enabled: boolean) => void;
   helpfulTips: boolean;
   setHelpfulTips: (enabled: boolean) => void;
 
@@ -24,7 +22,6 @@ interface SettingsContextType {
 // Storage keys
 const STORAGE_KEYS = {
   EXPIRY_ALERTS: "settings.expiryAlerts",
-  LOW_STOCK_ALERTS: "settings.lowStockAlerts",
   HELPFUL_TIPS: "settings.helpfulTips",
   // APP_UPDATES removed (migration cleans old key)
   ANALYTICS: "settings.analytics",
@@ -35,8 +32,6 @@ const STORAGE_KEYS = {
 const SettingsContext = createContext<SettingsContextType>({
   expiryAlerts: true,
   setExpiryAlerts: () => {},
-  lowStockAlerts: true,
-  setLowStockAlerts: () => {},
   helpfulTips: true,
   setHelpfulTips: () => {},
   analytics: true,
@@ -50,11 +45,9 @@ const SettingsContext = createContext<SettingsContextType>({
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   // State for all settings
   const [expiryAlerts, setExpiryAlertsState] = useState(true);
-  const [lowStockAlerts, setLowStockAlertsState] = useState(true);
   const [helpfulTips, setHelpfulTipsState] = useState(true);
   const [analytics, setAnalyticsState] = useState(true);
   const [crashReports, setCrashReportsState] = useState(true);
-  const [settingsHydrated, setSettingsHydrated] = useState(false);
 
   // Load settings from AsyncStorage on mount
   useEffect(() => {
@@ -68,12 +61,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           setExpiryAlertsState(savedExpiryAlerts === "true");
         }
 
-        const savedLowStockAlerts = await AsyncStorage.getItem(
-          STORAGE_KEYS.LOW_STOCK_ALERTS
-        );
-        if (savedLowStockAlerts !== null) {
-          setLowStockAlertsState(savedLowStockAlerts === "true");
-        }
+        try {
+          await AsyncStorage.removeItem("settings.lowStockAlerts");
+        } catch {}
 
         const savedHelpfulTips = await AsyncStorage.getItem(
           STORAGE_KEYS.HELPFUL_TIPS
@@ -103,37 +93,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
-      } finally {
-        setSettingsHydrated(true);
       }
     };
 
     loadSettings();
   }, []);
 
-  useEffect(() => {
-    if (!settingsHydrated) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { syncGroceryListReminder } = await import(
-          "@/services/groceryListReminderService"
-        );
-        if (!cancelled) {
-          await syncGroceryListReminder(lowStockAlerts).catch(() => {});
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [settingsHydrated, lowStockAlerts]);
-
   const reloadSettingsFromStorage = useCallback(async () => {
     setExpiryAlertsState(true);
-    setLowStockAlertsState(true);
     setHelpfulTipsState(true);
     setAnalyticsState(true);
     setCrashReportsState(true);
@@ -143,13 +110,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       );
       if (savedExpiryAlerts !== null) {
         setExpiryAlertsState(savedExpiryAlerts === "true");
-      }
-
-      const savedLowStockAlerts = await AsyncStorage.getItem(
-        STORAGE_KEYS.LOW_STOCK_ALERTS
-      );
-      if (savedLowStockAlerts !== null) {
-        setLowStockAlertsState(savedLowStockAlerts === "true");
       }
 
       const savedHelpfulTips = await AsyncStorage.getItem(
@@ -181,18 +141,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setExpiryAlertsState(enabled);
     } catch (error) {
       console.error("Failed to save expiry alerts setting:", error);
-    }
-  };
-
-  const setLowStockAlerts = async (enabled: boolean) => {
-    try {
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.LOW_STOCK_ALERTS,
-        String(enabled)
-      );
-      setLowStockAlertsState(enabled);
-    } catch (error) {
-      console.error("Failed to save low stock alerts setting:", error);
     }
   };
 
@@ -229,8 +177,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const value: SettingsContextType = {
     expiryAlerts,
     setExpiryAlerts,
-    lowStockAlerts,
-    setLowStockAlerts,
     helpfulTips,
     setHelpfulTips,
     analytics,

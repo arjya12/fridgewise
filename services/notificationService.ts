@@ -5,7 +5,6 @@ import { Platform } from "react-native";
 
 // Define task names for background task operations
 export const EXPIRY_CHECK_TASK = "EXPIRY_CHECK_TASK";
-export const LOW_STOCK_CHECK_TASK = "LOW_STOCK_CHECK_TASK";
 
 // Check if running in Expo Go
 const isExpoGo = Constants.appOwnership === "expo";
@@ -56,14 +55,6 @@ async function setupNotificationChannels() {
       lightColor: "#22C55E",
     });
 
-    await Notifications.setNotificationChannelAsync("low-stock-alerts", {
-      name: "Grocery list",
-      description: "Weekday reminders for items on your Groceries list",
-      importance: Notifications.AndroidImportance.DEFAULT,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#0284C7",
-    });
-
     await Notifications.setNotificationChannelAsync("app-updates", {
       name: "App Updates",
       description: "Notifications about app updates and new features",
@@ -73,19 +64,15 @@ async function setupNotificationChannels() {
 }
 
 const ACCENT_EXPIRY = "#15803D";
-const ACCENT_LOW_STOCK = "#0284C7";
 
 function iosSubtitleForData(data: Record<string, unknown>): string | undefined {
   const t = data.type;
   if (t === "expiry") return "FridgeWise · Expiring soon";
   if (t === "item_expiry") return "FridgeWise · Item reminder";
-  if (t === "low_stock") return "FridgeWise · Running low";
-  if (t === "grocery_list") return "FridgeWise · Grocery list";
   return undefined;
 }
 
-function androidAccentColor(channelId: string): string {
-  if (channelId === "low-stock-alerts") return ACCENT_LOW_STOCK;
+function androidAccentColor(_channelId: string): string {
   return ACCENT_EXPIRY;
 }
 
@@ -129,7 +116,7 @@ export async function scheduleNotification(
   }
 }
 
-/** Cancel every scheduled local notification (expiry, grocery, tests, etc.). */
+/** Cancel every scheduled local notification (expiry, tests, etc.). */
 export async function cancelAllScheduledLocalNotifications(): Promise<void> {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
@@ -138,38 +125,17 @@ export async function cancelAllScheduledLocalNotifications(): Promise<void> {
   }
 }
 
-/** Cancel scheduled local notifications created for the in-app grocery list feature. */
-export async function cancelScheduledGroceryListReminders(): Promise<void> {
-  try {
-    const all = await Notifications.getAllScheduledNotificationsAsync();
-    for (const n of all) {
-      const t = n.content.data?.type;
-      if (t === "grocery_list") {
-        await Notifications.cancelScheduledNotificationAsync(n.identifier);
-      }
-    }
-  } catch (e) {
-    console.warn("Failed to cancel grocery list reminders:", e);
-  }
-}
-
 /**
- * Register background tasks for checking expiry and low stock
+ * Register background tasks for checking expiry.
  * This function should be called from the main app after all services are loaded
  */
 export async function registerBackgroundTasks() {
   try {
     // Dynamically import the task registration functions to avoid circular dependencies
     const { registerExpiryCheckTask } = await import("./expiryCheckService");
-    const { registerLowStockCheckTask } = await import(
-      "./lowStockCheckService"
-    );
 
     // Register the expiry check task
     registerExpiryCheckTask();
-
-    // Register the low stock check task
-    registerLowStockCheckTask();
 
   } catch (error) {
     console.warn("Failed to register background tasks:", error);
@@ -188,11 +154,6 @@ export async function scheduleBackgroundTasks() {
 
     // Schedule the expiry check task to run daily (minimum 15 minutes for testing)
     await BackgroundTask.registerTaskAsync(EXPIRY_CHECK_TASK, {
-      minimumInterval: 24 * 60, // 24 hours in minutes
-    });
-
-    // Schedule the low stock check task to run daily (minimum 15 minutes for testing)
-    await BackgroundTask.registerTaskAsync(LOW_STOCK_CHECK_TASK, {
       minimumInterval: 24 * 60, // 24 hours in minutes
     });
 

@@ -41,25 +41,25 @@ export type FoodCategoryOption = {
   Icon: CategoryIconComponent;
 };
 
-/** Inventory / add-item order (matches previous AddItemScreen). */
+/** Inventory / add-item order: staples first (two compact rows before scroll on typical widths). */
 export const FOOD_CATEGORY_OPTIONS: FoodCategoryOption[] = [
   { label: "Dairy", Icon: DairyLucideMilkIcon },
   { label: "Meat", Icon: MeatLucideBeefIcon },
-  { label: "Seafood", Icon: FishIcon },
-  { label: "Deli", Icon: DeliLucideSandwichIcon },
+  { label: "Bakery", Icon: BakeryBaguetteIcon },
+  { label: "Grains", Icon: GrainsLucideWheatIcon },
+  { label: "Eggs", Icon: EggIcon },
   { label: "Vegetables", Icon: CarrotIcon },
   { label: "Fruits", Icon: FruitsLucideGrapeIcon },
-  { label: "Bakery", Icon: BakeryBaguetteIcon },
-  { label: "Eggs", Icon: EggIcon },
-  { label: "Grains", Icon: GrainsLucideWheatIcon },
-  { label: "Canned", Icon: CylinderIcon },
+  { label: "Seafood", Icon: FishIcon },
+  { label: "Frozen", Icon: SnowflakeIcon },
   { label: "Snacks", Icon: CookieIcon },
   { label: "Beverages", Icon: CoffeeIcon },
+  { label: "Deli", Icon: DeliLucideSandwichIcon },
   { label: "Condiments", Icon: SoySauceIcon },
   { label: "Sauces", Icon: JarIcon },
+  { label: "Canned", Icon: CylinderIcon },
   { label: "Spices", Icon: GiSaltShakerIcon },
   { label: "Ready-to-eat", Icon: CookingPotIcon },
-  { label: "Frozen", Icon: SnowflakeIcon },
   { label: "Other", Icon: PackageIcon },
 ];
 

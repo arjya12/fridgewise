@@ -22,14 +22,7 @@
         "foregroundImage": "./assets/images/logowithtext.jpg",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-        "CAMERA",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "CAMERA",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
-      ],
+      "permissions": ["CAMERA"],
       "package": "com.aseef217.fridgewise"
     },
     "web": {
