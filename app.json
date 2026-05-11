@@ -22,7 +22,15 @@
         "foregroundImage": "./assets/images/logowithtext.jpg",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.aseef217.fridgewise"
     },
     "web": {
       "bundler": "metro",

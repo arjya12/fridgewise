@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import "react-native-url-polyfill/auto";
 
@@ -91,6 +90,50 @@ const fetchWithRetry: typeof fetch = async (input, init) => {
 
 // RN AsyncStorage can occasionally deadlock/hang under concurrent access.
 // Wrap it to (1) serialize operations and (2) emit timings for debugging.
+type StorageLike = {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+};
+
+function createMemoryStorage(): StorageLike {
+  const m = new Map<string, string>();
+  return {
+    getItem: async (key) => (m.has(key) ? m.get(key)! : null),
+    setItem: async (key, value) => {
+      m.set(key, value);
+    },
+    removeItem: async (key) => {
+      m.delete(key);
+    },
+  };
+}
+
+function getAsyncStorageOrFallback(): StorageLike {
+  // Expo CLI / node scripts can import this module; AsyncStorage expects a browser-like env.
+  if (typeof window === "undefined") {
+    return createMemoryStorage();
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("@react-native-async-storage/async-storage");
+    const AsyncStorage = mod?.default ?? mod;
+    if (
+      AsyncStorage &&
+      typeof AsyncStorage.getItem === "function" &&
+      typeof AsyncStorage.setItem === "function" &&
+      typeof AsyncStorage.removeItem === "function"
+    ) {
+      return AsyncStorage as StorageLike;
+    }
+  } catch {
+    // ignore
+  }
+  return createMemoryStorage();
+}
+
+const AsyncStorage = getAsyncStorageOrFallback();
+
 const createSerializedStorage = () => {
   let chain: Promise<unknown> = Promise.resolve();
   const enqueue = <T,>(opName: string, key: string, fn: () => Promise<T>) => {
