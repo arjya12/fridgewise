@@ -15,7 +15,7 @@ export default function TabLayout() {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={["right", "left"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }} edges={["right", "left"]}>
       <Tabs
         // Custom tab bar uses its own bottom offset; forcing bottom inset to 0
         // avoids stale initialWindowMetrics on cold start (splash → tabs) stacking
@@ -26,8 +26,8 @@ export default function TabLayout() {
           tabBarShowLabel: true,
           lazy: true,
           freezeOnBlur: true,
-          detachInactiveScreens: false,
           animation: "none",
+          sceneContainerStyle: { backgroundColor: "#FFFFFF" },
           tabBarStyle: {
             position: "absolute",
             backgroundColor: "transparent",

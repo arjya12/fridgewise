@@ -109,9 +109,20 @@ function createMemoryStorage(): StorageLike {
   };
 }
 
+function isReactNativeIosOrAndroid(): boolean {
+  try {
+    // Hermes/Android often has no `window`; do not use that as the RN signal.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Platform } = require("react-native");
+    return Platform.OS === "ios" || Platform.OS === "android";
+  } catch {
+    return false;
+  }
+}
+
 function getAsyncStorageOrFallback(): StorageLike {
-  // Expo CLI / node scripts can import this module; AsyncStorage expects a browser-like env.
-  if (typeof window === "undefined") {
+  // Node / Jest: no react-native bridge — avoid AsyncStorage (needs `window` in some builds).
+  if (!isReactNativeIosOrAndroid() && typeof window === "undefined") {
     return createMemoryStorage();
   }
   try {

@@ -7,7 +7,13 @@ import React from "react";
 
 export default function AuthLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { flex: 1, backgroundColor: "#FFFFFF" },
+        animation: "fade",
+      }}
+    >
       <Stack.Screen name="welcome" />
       <Stack.Screen name="signup" />
       <Stack.Screen name="reset-password" />

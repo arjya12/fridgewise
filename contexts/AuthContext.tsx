@@ -38,6 +38,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Cold-start `getSession()` / storage can hang on some devices; never block the UI forever. */
+const AUTH_INIT_TIMEOUT_MS = 12_000;
+
 async function fetchUserProfileById(
   userId: string
 ): Promise<UserProfile | null> {
@@ -113,23 +116,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const init = async () => {
-      let session = (await supabase.auth.getSession()).data.session;
-      const rememberRaw = await AsyncStorage.getItem(REMEMBER_ME_STORAGE_KEY);
+      try {
+        let session = await Promise.race([
+          (async () => (await supabase.auth.getSession()).data.session)(),
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error("auth-init-timeout")),
+              AUTH_INIT_TIMEOUT_MS
+            );
+          }),
+        ]);
 
-      if (session && rememberRaw === "false") {
-        await supabase.auth.signOut();
-        session = (await supabase.auth.getSession()).data.session;
-      }
+        const rememberRaw = await Promise.race([
+          AsyncStorage.getItem(REMEMBER_ME_STORAGE_KEY),
+          new Promise<string | null>((resolve) =>
+            setTimeout(() => resolve(null), AUTH_INIT_TIMEOUT_MS)
+          ),
+        ]);
 
-      if (cancelled) return;
+        if (session && rememberRaw === "false") {
+          await supabase.auth.signOut();
+          session = (await supabase.auth.getSession()).data.session;
+        }
 
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+        if (cancelled) return;
 
-      if (session?.user) {
-        const profile = await fetchUserProfileById(session.user.id);
-        if (!cancelled && profile) setUserProfile(profile);
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+
+        if (session?.user) {
+          void fetchUserProfileById(session.user.id).then((profile) => {
+            if (!cancelled && profile) setUserProfile(profile);
+          });
+        }
+      } catch (e) {
+        if (cancelled) return;
+        console.error("Auth init failed or timed out:", e);
+        setSession(null);
+        setUser(null);
+        setLoading(false);
       }
     };
 

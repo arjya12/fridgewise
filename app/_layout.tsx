@@ -1,9 +1,10 @@
 import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
-import { InteractionManager, LogBox } from "react-native";
+import { useEffect, useLayoutEffect } from "react";
+import { InteractionManager, LogBox, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -29,6 +30,11 @@ import { TipsProvider } from "@/contexts/TipsContext";
 import { foodItemsService } from "@/services/foodItems";
 import { setPendingResetPasswordUrl } from "@/lib/pendingResetUrl";
 import { isSupabaseRecoveryLink } from "@/lib/supabaseRecoveryLink";
+
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/** Matches `components/SplashScreen` so we never flash black while fonts load. */
+const FONT_LOADING_BG = "rgb(204, 245, 201)";
 
 // Custom light theme configuration to override system settings
 const CustomLightTheme = {
@@ -57,6 +63,22 @@ export default function RootLayout() {
     DMMono_400Regular,
     DMMono_500Medium,
   });
+
+  // Hide native splash only after this commit + two frames so the first RN paint
+  // is not a black native-stack scene behind an empty navigator.
+  useLayoutEffect(() => {
+    if (!loaded) return;
+    let innerRaf: number | undefined;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        void SplashScreen.hideAsync().catch(() => {});
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      if (innerRaf !== undefined) cancelAnimationFrame(innerRaf);
+    };
+  }, [loaded]);
 
   // Defer expo-notifications (large native module) until after fonts + first interactions.
   useEffect(() => {
@@ -95,7 +117,7 @@ export default function RootLayout() {
   }, []);
 
   // Handle reset-password deep links even if the app is already running.
-  // Note: this hook must be registered on every render (cannot be after `if (!loaded) return null`).
+  // Note: this hook must be registered on every render (cannot be after the `if (!loaded)` early return).
   useEffect(() => {
     const handleUrl = (url: string | null) => {
       if (!url) return;
@@ -115,7 +137,12 @@ export default function RootLayout() {
       }
     };
 
-    void Linking.getInitialURL()
+    void Promise.race([
+      Linking.getInitialURL(),
+      new Promise<string | null>((resolve) =>
+        setTimeout(() => resolve(null), 5000)
+      ),
+    ])
       .then((initialUrl) => {
         handleUrl(initialUrl);
       })
@@ -133,18 +160,29 @@ export default function RootLayout() {
   }, [router, loaded]);
 
   if (!loaded) {
-    return null;
+    return (
+      <View style={{ flex: 1, backgroundColor: FONT_LOADING_BG }} />
+    );
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
       <SafeAreaProvider>
         <AuthProvider>
           <SettingsProvider>
             <TipsProvider>
               <CalendarProvider foodItemsService={foodItemsService}>
                 <ThemeProvider value={CustomLightTheme}>
-                  <Stack screenOptions={{ headerShown: false }}>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: {
+                        flex: 1,
+                        backgroundColor: "#FFFFFF",
+                      },
+                      animation: "fade",
+                    }}
+                  >
                     <Stack.Screen name="index" />
                     <Stack.Screen name="(auth)" />
                     <Stack.Screen name="(tabs)" />
