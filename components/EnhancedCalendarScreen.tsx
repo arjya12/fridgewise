@@ -1003,7 +1003,7 @@ function EnhancedCalendarScreenCore({
         {/* Green banner header with embedded toggle */}
         <View style={S.banner}>
           <View style={S.toggleBar}>
-            {(["calendar", "timeline"] as ViewMode[]).map(mode => (
+            {(["calendar", "timeline"] as ViewMode[]).map((mode) => (
               <TouchableOpacity
                 key={mode}
                 onPress={() => switchViewMode(mode)}

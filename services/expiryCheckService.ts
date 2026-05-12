@@ -96,7 +96,11 @@ export async function checkExpiringItems(
       await scheduleNotification(
         notificationTitle,
         notificationBody,
-        { type: "expiry", items: items.map((item: FoodItem) => item.id) },
+        {
+          type: "expiry",
+          items: items.map((item: FoodItem) => item.id),
+          expiryYmd: expiryDate,
+        },
         "expiry-alerts"
       );
     }

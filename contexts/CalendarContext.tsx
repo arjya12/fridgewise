@@ -54,7 +54,7 @@ export interface CalendarContextValue {
   setSort: (sort: Partial<SortOptionsEnhanced>) => void;
   clearFilters: () => void;
 
-  // Item actions (with optimistic updates)
+  // Item actions (server-backed; callers often show row-level pending UI)
   markItemUsed: (itemId: string, quantity?: number) => Promise<void>;
   extendExpiry: (itemId: string, days: number) => Promise<void>;
 
@@ -172,20 +172,12 @@ export function CalendarProvider({
 
   const markItemUsed = useCallback(
     async (itemId: string, quantity?: number) => {
-      // Optimistic update
-      dispatch({
-        type: "MARK_ITEM_USED_OPTIMISTIC",
-        payload: { itemId, quantity },
-      });
-
       try {
-        // Perform actual update via service
         if (foodItemsService && foodItemsService.markItemUsed) {
           await foodItemsService.markItemUsed(itemId, quantity);
           dispatch({ type: "MARK_ITEM_USED_SUCCESS" });
         }
       } catch (error) {
-        // Revert optimistic update
         dispatch({
           type: "MARK_ITEM_USED_ERROR",
           payload: { error },

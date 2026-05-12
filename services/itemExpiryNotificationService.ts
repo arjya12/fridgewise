@@ -366,14 +366,26 @@ export async function rescheduleAllItemReminderNotificationsForUser(
 
     if (list.length === 1) {
       const item = list[0];
+      const expiryYmd = (item.expiry_date ?? "").includes("T")
+        ? item.expiry_date!.split("T")[0]!
+        : (item.expiry_date ?? "");
       notifId = await scheduleNotificationAt(
         singleItemTitle(item),
         singleItemBody(item),
         slot.fireAt,
-        { type: "item_expiry", itemId: item.id, group: false }
+        {
+          type: "item_expiry",
+          itemId: item.id,
+          group: false,
+          expiryYmd: expiryYmd || undefined,
+        }
       );
     } else {
       const count = list.length;
+      const focus = list[0];
+      const expiryYmd = (focus.expiry_date ?? "").includes("T")
+        ? focus.expiry_date!.split("T")[0]!
+        : (focus.expiry_date ?? "");
       notifId = await scheduleNotificationAt(
         `${count} item reminders`,
         groupedReminderBody(list),
@@ -382,6 +394,7 @@ export async function rescheduleAllItemReminderNotificationsForUser(
           type: "item_expiry",
           group: true,
           itemIds: list.map((i) => i.id),
+          expiryYmd: expiryYmd || undefined,
         }
       );
     }

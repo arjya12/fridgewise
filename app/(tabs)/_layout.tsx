@@ -1,5 +1,6 @@
 import EnhancedTabBar from "@/components/EnhancedTabBar";
 import SafeText from "@/components/SafeText";
+import { useExpiryNotificationNavigation } from "@/hooks/useExpiryNotificationNavigation";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -9,6 +10,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
  * Professional navigation structure following UI/UX best practices
  */
 export default function TabLayout() {
+  useExpiryNotificationNavigation();
+
   // Wrapper for tab labels to ensure proper text rendering
   const TabLabel = ({ label }: { label: string }) => (
     <SafeText>{label}</SafeText>

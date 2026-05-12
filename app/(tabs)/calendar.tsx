@@ -56,17 +56,29 @@ export default function CalendarScreen() {
   }>({ view: "calendar" });
 
   React.useEffect(() => {
-    if (typeof params.nonce !== "string") return;
     const hasDayFocus =
       typeof params.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(params.date);
     // Deep-link to a specific day always opens calendar (avoids stale ?view=timeline from last visit).
     const view: "calendar" | "timeline" =
       hasDayFocus ? "calendar" : params.view === "timeline" ? "timeline" : "calendar";
+    const itemId = typeof params.itemId === "string" ? params.itemId : undefined;
+
+    const hasDeepLinkIntent = hasDayFocus || view === "timeline" || Boolean(itemId);
+
+    if (!hasDeepLinkIntent) return;
+
+    const nonce =
+      typeof params.nonce === "string" && params.nonce.length > 0
+        ? params.nonce
+        : `route-${view}-${itemId ?? "none"}-${params.date ?? "nodate"}-${
+            params.openExpired ?? ""
+          }`;
+
     setOpenIntent({
       view,
       date: typeof params.date === "string" ? params.date : undefined,
-      itemId: typeof params.itemId === "string" ? params.itemId : undefined,
-      nonce: params.nonce,
+      itemId,
+      nonce,
       openExpired: params.openExpired === "true",
     });
   }, [params.nonce, params.view, params.date, params.itemId, params.openExpired]);
