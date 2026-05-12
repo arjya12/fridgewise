@@ -14,6 +14,22 @@ import {
 
 export type FoodItemWithUrgency = FoodItem & { urgency: UrgencyInfo };
 
+let notificationMaintenanceQueue: Promise<void> = Promise.resolve();
+
+function enqueueNotificationMaintenance(
+  label: string,
+  task: () => Promise<void>
+): void {
+  notificationMaintenanceQueue = notificationMaintenanceQueue
+    .catch(() => {
+      // Keep the queue alive if an earlier maintenance task failed.
+    })
+    .then(task)
+    .catch((error) => {
+      console.warn(label, error);
+    });
+}
+
 export const foodItemsService = {
   // Get all food items for the current user
   async getItems(
@@ -180,14 +196,14 @@ export const foodItemsService = {
 
     if (error) throw error;
 
-    const {
-      cancelLegacyExpiryBatchNotificationsForFoodItemId,
-      rescheduleAllItemReminderNotificationsForUser,
-    } = await import("@/services/itemExpiryNotificationService");
-    await cancelLegacyExpiryBatchNotificationsForFoodItemId(id);
-    await rescheduleAllItemReminderNotificationsForUser().catch((e) =>
-      console.warn("reschedule after deleteItem:", e)
-    );
+    enqueueNotificationMaintenance("notification maintenance after deleteItem:", async () => {
+      const {
+        cancelLegacyExpiryBatchNotificationsForFoodItemId,
+        rescheduleAllItemReminderNotificationsForUser,
+      } = await import("@/services/itemExpiryNotificationService");
+      await cancelLegacyExpiryBatchNotificationsForFoodItemId(id);
+      await rescheduleAllItemReminderNotificationsForUser();
+    });
   },
 
   // Mark item as used (consumed). Logs to usage_logs and reduces/removes from food_items.
@@ -239,19 +255,27 @@ export const foodItemsService = {
 
     if (remainingQuantity <= 0) {
       const updated = await this.updateItem(itemId, { quantity: 0 });
-      const {
-        cancelLegacyExpiryBatchNotificationsForFoodItemId,
-        syncItemExpiryNotificationsAfterSave,
-      } = await import("@/services/itemExpiryNotificationService");
-      await cancelLegacyExpiryBatchNotificationsForFoodItemId(itemId);
-      await syncItemExpiryNotificationsAfterSave(updated);
+      enqueueNotificationMaintenance(
+        "notification maintenance after full usage:",
+        async () => {
+          const {
+            cancelLegacyExpiryBatchNotificationsForFoodItemId,
+            syncItemExpiryNotificationsAfterSave,
+          } = await import("@/services/itemExpiryNotificationService");
+          await cancelLegacyExpiryBatchNotificationsForFoodItemId(itemId);
+          await syncItemExpiryNotificationsAfterSave(updated);
+        }
+      );
     } else {
       await this.updateItem(itemId, { quantity: remainingQuantity });
-      const { rescheduleAllItemReminderNotificationsForUser } = await import(
-        "@/services/itemExpiryNotificationService"
-      );
-      await rescheduleAllItemReminderNotificationsForUser().catch((e) =>
-        console.warn("reschedule after partial usage:", e)
+      enqueueNotificationMaintenance(
+        "notification maintenance after partial usage:",
+        async () => {
+          const { rescheduleAllItemReminderNotificationsForUser } = await import(
+            "@/services/itemExpiryNotificationService"
+          );
+          await rescheduleAllItemReminderNotificationsForUser();
+        }
       );
     }
   },

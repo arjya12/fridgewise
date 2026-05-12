@@ -139,6 +139,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.EXPIRY_ALERTS, String(enabled));
       setExpiryAlertsState(enabled);
+      if (!enabled) {
+        const { clearLocalExpiryAlertsForCurrentUser } = await import(
+          "@/services/itemExpiryNotificationService"
+        );
+        await clearLocalExpiryAlertsForCurrentUser().catch((e) =>
+          console.warn("clear expiry notifications after disable:", e)
+        );
+      }
     } catch (error) {
       console.error("Failed to save expiry alerts setting:", error);
     }

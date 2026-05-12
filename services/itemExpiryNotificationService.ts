@@ -1,5 +1,6 @@
 import type { FoodItem } from "@/lib/supabase";
 import { supabase } from "@/lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { Alert, Platform } from "react-native";
 import { requestNotificationPermissions } from "./notificationService";
@@ -10,6 +11,14 @@ import {
 
 const MAX_TOTAL_ITEM_REMINDER_NOTIFICATIONS = 64;
 const DEFAULT_TIME = "13:00";
+
+/** Same key as `SettingsContext` — expiry toggle lives on device. */
+const EXPIRY_ALERTS_STORAGE_KEY = "settings.expiryAlerts";
+
+async function readExpiryAlertsEnabledFromDevice(): Promise<boolean> {
+  const raw = await AsyncStorage.getItem(EXPIRY_ALERTS_STORAGE_KEY);
+  return raw === null ? true : raw === "true";
+}
 
 export type { ItemNotificationRepeat } from "./itemExpiryReminderSchedule";
 export {
@@ -120,6 +129,34 @@ export async function cancelAllScheduledItemExpiryNotifications(): Promise<void>
     }
   } catch (e) {
     console.warn("cancelAllScheduledItemExpiryNotifications:", e);
+  }
+}
+
+/**
+ * Cancels scheduled locals from inventory expiry flows: grouped batch (`expiry`) and
+ * per-item DATE reminders (`item_expiry`). Does not touch other `data.type` values.
+ */
+export async function cancelAllFridgeExpiryScheduledNotifications(): Promise<void> {
+  try {
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of all) {
+      const t = notificationDataType(n.content.data as Record<string, unknown>);
+      if (t === "expiry" || t === "item_expiry") {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
+  } catch (e) {
+    console.warn("cancelAllFridgeExpiryScheduledNotifications:", e);
+  }
+}
+
+/** Clears scheduled fridge expiry notifications and `notification_ids` on food rows for the signed-in user. */
+export async function clearLocalExpiryAlertsForCurrentUser(): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  await cancelAllFridgeExpiryScheduledNotifications();
+  if (userId) {
+    await clearAllNotificationIdsForUser(userId);
   }
 }
 
@@ -258,6 +295,12 @@ export async function rescheduleAllItemReminderNotificationsForUser(
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) return;
+
+  if (!(await readExpiryAlertsEnabledFromDevice())) {
+    await cancelAllFridgeExpiryScheduledNotifications();
+    await clearAllNotificationIdsForUser(userId);
+    return;
+  }
 
   await cancelAllScheduledItemExpiryNotifications();
   await clearAllNotificationIdsForUser(userId);

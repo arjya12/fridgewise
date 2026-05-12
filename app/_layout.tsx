@@ -64,11 +64,17 @@ export default function RootLayout() {
     const task = InteractionManager.runAfterInteractions(() => {
       void (async () => {
         try {
+          // Warm per-item expiry notification module in the same idle window as
+          // notificationService so consume/delete does not pay a separate Metro fetch.
+          const [notifMod] = await Promise.all([
+            import("@/services/notificationService"),
+            import("@/services/itemExpiryNotificationService"),
+          ]);
           const {
             requestNotificationPermissions,
             registerBackgroundTasks,
             scheduleBackgroundTasks,
-          } = await import("@/services/notificationService");
+          } = notifMod;
           await requestNotificationPermissions();
           await registerBackgroundTasks();
           await scheduleBackgroundTasks();

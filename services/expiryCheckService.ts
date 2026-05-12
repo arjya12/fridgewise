@@ -1,7 +1,9 @@
 import { supabase } from "@/lib/supabase";
 import { formatExpiry } from "@/utils/formatExpiry";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
+import { clearLocalExpiryAlertsForCurrentUser } from "./itemExpiryNotificationService";
 import { EXPIRY_CHECK_TASK, scheduleNotification } from "./notificationService";
 
 // Define the food item type
@@ -106,6 +108,8 @@ export async function checkExpiringItems(
   }
 }
 
+const EXPIRY_ALERTS_STORAGE_KEY = "settings.expiryAlerts";
+
 /**
  * Register the background task for checking expiring items
  */
@@ -118,31 +122,23 @@ export function registerExpiryCheckTask() {
       }
 
       try {
-        // Get the user's settings and ID
         const session = await supabase.auth.getSession();
         const userId = session.data.session?.user?.id;
-
-        // Get the user's settings
-        const { data: userSettings, error: settingsError } = await supabase
-          .from("user_settings")
-          .select("expiry_alerts")
-          .eq("user_id", userId)
-          .single();
-
-        if (settingsError) {
-          console.error("Error fetching user settings:", settingsError);
-          return BackgroundTask.BackgroundTaskResult.Failed;
+        if (!userId) {
+          return BackgroundTask.BackgroundTaskResult.Success;
         }
 
-        // Check for expiring items
-        const result = await checkExpiringItems(
-          { expiryAlerts: userSettings?.expiry_alerts ?? true },
-          userId
-        );
+        // Same key as Settings screen / `SettingsContext` (device-local).
+        const raw = await AsyncStorage.getItem(EXPIRY_ALERTS_STORAGE_KEY);
+        const expiryAlertsOn = raw === null ? true : raw === "true";
+        if (!expiryAlertsOn) {
+          await clearLocalExpiryAlertsForCurrentUser();
+          return BackgroundTask.BackgroundTaskResult.Success;
+        }
 
-        return result
-          ? BackgroundTask.BackgroundTaskResult.Success
-          : BackgroundTask.BackgroundTaskResult.Success;
+        await checkExpiringItems({ expiryAlerts: true }, userId);
+
+        return BackgroundTask.BackgroundTaskResult.Success;
       } catch (error) {
         console.error("Error in expiry check task:", error);
         return BackgroundTask.BackgroundTaskResult.Failed;
