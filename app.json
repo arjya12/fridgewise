@@ -4,7 +4,7 @@
     "slug": "fridgewise",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logowithtext.jpg",
+    "icon": "./assets/generated-app-icon/fridgewise_app_icon_1024.png",
     "notification": {
       "icon": "./assets/generated-notification-icons/notification_small_xxxhdpi_96.png",
       "color": "#15803D"
@@ -19,7 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logowithtext.jpg",
+        "foregroundImage": "./assets/generated-app-icon/fridgewise_adaptive_foreground_1024.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": ["CAMERA"],
