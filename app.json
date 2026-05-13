@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/logowithtext.jpg",
     "notification": {
-      "icon": "./assets/images/notification-fridge-icon.png",
+      "icon": "./assets/generated-notification-icons/notification_small_xxxhdpi_96.png",
       "color": "#15803D"
     },
     "scheme": "fridgewise",
