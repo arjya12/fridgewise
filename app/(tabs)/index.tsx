@@ -35,6 +35,7 @@ import Svg, { Path } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { Dimensions } from "react-native";
 
+import FirstRunOnboarding from "@/components/FirstRunOnboarding";
 import { ConsumeModal } from "@/components/ConsumeModal";
 import {
   ItemCardPendingOverlay,
@@ -2335,6 +2336,12 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      <FirstRunOnboarding
+        userId={user?.id}
+        loading={loading}
+        itemCount={items.length}
+      />
     </ScreenLayout>
   );
 }

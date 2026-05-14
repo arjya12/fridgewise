@@ -38,8 +38,33 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/** Cold-start `getSession()` / storage can hang on some devices; never block the UI forever. */
-const AUTH_INIT_TIMEOUT_MS = 12_000;
+/** Cold-start `getSession()` can exceed a few seconds (network, token refresh, device wake). */
+const AUTH_INIT_TIMEOUT_MS = 28_000;
+
+/** Stale or revoked refresh token in local storage — clear session instead of surfacing a red error loop. */
+function isRefreshTokenDeadError(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false;
+  const msg = (err.message ?? "").toLowerCase();
+  const code = (err.code ?? "").toLowerCase();
+  return (
+    msg.includes("invalid refresh token") ||
+    msg.includes("refresh token not found") ||
+    code === "refresh_token_not_found"
+  );
+}
+
+async function readSessionOrClearStaleAuth(): Promise<Session | null> {
+  const { data, error } = await supabase.auth.getSession();
+  if (!error) return data.session ?? null;
+
+  if (isRefreshTokenDeadError(error)) {
+    await supabase.auth.signOut().catch(() => {});
+    return null;
+  }
+
+  console.warn("Auth getSession:", error.message);
+  return data.session ?? null;
+}
 
 async function fetchUserProfileById(
   userId: string
@@ -49,18 +74,27 @@ async function fetchUserProfileById(
       .from("user_profiles")
       .select("*")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error("Error fetching user profile:", error);
       return null;
     }
 
-    return data as UserProfile;
+    return (data ?? null) as UserProfile | null;
   } catch (error) {
     console.error("Error in fetchUserProfileById:", error);
     return null;
   }
+}
+
+function readSessionWithinTimeout(ms: number): Promise<Session | null> {
+  return Promise.race([
+    readSessionOrClearStaleAuth(),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("auth-init-timeout")), ms);
+    }),
+  ]);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -70,12 +104,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   // Fetch user profile data (pass user id when React state `user` is not updated yet)
+  // Fetch profile: `.single()` errors with PGRST116 when no row exists; `.maybeSingle()` returns null.
   const getUserProfile = useCallback(
     async (userIdOverride?: string): Promise<UserProfile | null> => {
       const id = userIdOverride ?? user?.id;
       if (!id) return null;
       const profile = await fetchUserProfileById(id);
-      if (profile) setUserProfile(profile);
+      setUserProfile(profile);
       return profile;
     },
     [user?.id]
@@ -117,15 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const init = async () => {
       try {
-        let session = await Promise.race([
-          (async () => (await supabase.auth.getSession()).data.session)(),
-          new Promise<never>((_, reject) => {
-            setTimeout(
-              () => reject(new Error("auth-init-timeout")),
-              AUTH_INIT_TIMEOUT_MS
-            );
-          }),
-        ]);
+        let session: Session | null = null;
+        try {
+          session = await readSessionWithinTimeout(AUTH_INIT_TIMEOUT_MS);
+        } catch {
+          // One retry after cold start / slow DNS (common after long idle on Android).
+          await new Promise((r) => setTimeout(r, 500));
+          session = await readSessionWithinTimeout(AUTH_INIT_TIMEOUT_MS);
+        }
 
         const rememberRaw = await Promise.race([
           AsyncStorage.getItem(REMEMBER_ME_STORAGE_KEY),
@@ -136,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session && rememberRaw === "false") {
           await supabase.auth.signOut();
-          session = (await supabase.auth.getSession()).data.session;
+          session = await readSessionOrClearStaleAuth();
         }
 
         if (cancelled) return;
@@ -147,12 +181,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user) {
           void fetchUserProfileById(session.user.id).then((profile) => {
-            if (!cancelled && profile) setUserProfile(profile);
+            if (!cancelled) setUserProfile(profile);
           });
         }
       } catch (e) {
         if (cancelled) return;
-        console.error("Auth init failed or timed out:", e);
+        console.warn("Auth init failed or timed out:", e);
         setSession(null);
         setUser(null);
         setLoading(false);
@@ -168,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user) {
           const profile = await fetchUserProfileById(session.user.id);
-          if (profile) setUserProfile(profile);
+          setUserProfile(profile);
         } else {
           setUserProfile(null);
         }

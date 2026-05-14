@@ -92,5 +92,8 @@
   "private": true,
   "overrides": {
     "react-native-worklets": "0.5.1"
+  },
+  "jest": {
+    "preset": "jest-expo"
   }
 }
