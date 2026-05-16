@@ -9,7 +9,8 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
-import React, { useEffect, useRef, useState } from "react";
+import * as ExpoSplashScreen from "expo-splash-screen";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dimensions, Image, StyleSheet, View } from "react-native";
 
 const { width, height } = Dimensions.get("window");
@@ -35,6 +36,23 @@ export default function SplashScreen() {
   /** Do not put `session` in the navigation effect deps: auth listener updates would cancel in-flight work and skip `replace`. */
   const sessionRef = useRef(session);
   const navigatedRef = useRef(false);
+  const nativeSplashHiddenRef = useRef(false);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [logoReady, setLogoReady] = useState(false);
+
+  const hideNativeSplash = useCallback(() => {
+    if (nativeSplashHiddenRef.current) return;
+    nativeSplashHiddenRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            void ExpoSplashScreen.hideAsync().catch(() => {});
+          }, 50);
+        });
+      });
+    });
+  }, []);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -44,6 +62,12 @@ export default function SplashScreen() {
     const t = setTimeout(() => setMinSplashElapsed(true), MIN_SPLASH_MS);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (layoutReady && logoReady) {
+      hideNativeSplash();
+    }
+  }, [hideNativeSplash, layoutReady, logoReady]);
 
   useEffect(() => {
     const failSafe = setTimeout(() => {
@@ -114,12 +138,13 @@ export default function SplashScreen() {
   }, [loading, minSplashElapsed, router]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={() => setLayoutReady(true)}>
       <StatusBar style="dark" backgroundColor={BACKGROUND_COLOR} translucent={false} />
       <Image
         source={require("../assets/images/launchpng.png")}
         style={styles.logo}
         resizeMode="contain"
+        onLoadEnd={() => setLogoReady(true)}
         accessible
         accessibilityLabel="Fridge Wise logo"
       />

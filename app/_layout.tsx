@@ -3,7 +3,7 @@ import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect } from "react";
 import { InteractionManager, LogBox, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
@@ -64,21 +64,7 @@ export default function RootLayout() {
     DMMono_500Medium,
   });
 
-  // Hide native splash only after this commit + two frames so the first RN paint
-  // is not a black native-stack scene behind an empty navigator.
-  useLayoutEffect(() => {
-    if (!loaded) return;
-    let innerRaf: number | undefined;
-    const outerRaf = requestAnimationFrame(() => {
-      innerRaf = requestAnimationFrame(() => {
-        void SplashScreen.hideAsync().catch(() => {});
-      });
-    });
-    return () => {
-      cancelAnimationFrame(outerRaf);
-      if (innerRaf !== undefined) cancelAnimationFrame(innerRaf);
-    };
-  }, [loaded]);
+  // Native splash is hidden from components/SplashScreen once the logo has painted.
 
   // Defer expo-notifications (large native module) until after fonts + first interactions.
   useEffect(() => {
@@ -170,7 +156,7 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: FONT_LOADING_BG }}>
       <SafeAreaProvider>
         <AuthProvider>
           <SettingsProvider>
@@ -182,7 +168,7 @@ export default function RootLayout() {
                       headerShown: false,
                       contentStyle: {
                         flex: 1,
-                        backgroundColor: "#FFFFFF",
+                        backgroundColor: FONT_LOADING_BG,
                       },
                       animation: "fade",
                     }}
