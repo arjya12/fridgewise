@@ -359,27 +359,6 @@ export const batchOperations = {
   },
 
   /**
-   * Batch mark multiple items as used
-   */
-  async batchMarkUsed(itemIds: string[]): Promise<void> {
-    try {
-      const usagePromises = itemIds.map((itemId) =>
-        supabase.from("food_usage_log").insert({
-          food_item_id: itemId,
-          action: "used",
-          quantity: 1,
-          timestamp: new Date().toISOString(),
-        })
-      );
-
-      await Promise.allSettled(usagePromises);
-    } catch (error) {
-      console.error("Batch mark used failed:", error);
-      throw error;
-    }
-  },
-
-  /**
    * Batch delete multiple items
    */
   async batchDeleteItems(itemIds: string[]): Promise<void> {

@@ -52,7 +52,6 @@ export async function purgeUserRemoteData(userId: string): Promise<void> {
   const tablesInOrder = [
     { name: "usage_logs", column: "user_id" as const },
     { name: "food_items", column: "user_id" as const },
-    { name: "user_settings", column: "user_id" as const },
   ];
 
   for (const { name, column } of tablesInOrder) {
