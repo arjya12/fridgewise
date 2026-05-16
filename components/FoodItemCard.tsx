@@ -244,7 +244,9 @@ export const sampleFoodItems: FoodItem[] = [
  */
 export function FoodItemCardExample() {
   const handleItemPress = (item: FoodItem) => {
-    console.log("Item pressed:", item.name);
+    if (__DEV__) {
+      console.log("Item pressed");
+    }
     // Handle navigation or modal opening here
   };
 

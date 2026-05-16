@@ -489,7 +489,9 @@ const PerformanceOptimizedCalendar: React.FC<
         onItemPress={(item: FoodItem) => {
           // Handle item press with performance optimization
           InteractionManager.runAfterInteractions(() => {
-            console.log("Item pressed:", item.name);
+            if (__DEV__) {
+              console.log("Item pressed");
+            }
           });
         }}
         style={styles.panel}

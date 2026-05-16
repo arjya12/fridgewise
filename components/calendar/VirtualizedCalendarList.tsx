@@ -312,7 +312,11 @@ const VirtualizedCalendarList: React.FC<VirtualizedCalendarListProps> = ({
           title="No Items"
           message="No food items found for the selected criteria."
           actionLabel="Add Item"
-          onAction={() => console.log("Add item pressed")}
+          onAction={() => {
+            if (__DEV__) {
+              console.log("Add item pressed");
+            }
+          }}
         />
       </View>
     );

@@ -135,7 +135,9 @@ const ColorSchemeProvider: React.FC<ColorSchemeProviderProps> = ({
     () => (newScheme: Partial<CalendarColorScheme>) => {
       // This would typically update a global state or context
       // For now, we'll just log the update
-      console.log("Color scheme update requested:", newScheme);
+      if (__DEV__) {
+        console.log("Color scheme update requested");
+      }
     },
     []
   );
@@ -143,7 +145,9 @@ const ColorSchemeProvider: React.FC<ColorSchemeProviderProps> = ({
   const toggleHighContrast = useMemo(
     () => () => {
       // This would typically toggle a global accessibility setting
-      console.log("High contrast toggle requested");
+      if (__DEV__) {
+        console.log("High contrast toggle requested");
+      }
     },
     []
   );
@@ -151,7 +155,9 @@ const ColorSchemeProvider: React.FC<ColorSchemeProviderProps> = ({
   const togglePatterns = useMemo(
     () => () => {
       // This would typically toggle pattern visibility
-      console.log("Pattern visibility toggle requested");
+      if (__DEV__) {
+        console.log("Pattern visibility toggle requested");
+      }
     },
     []
   );

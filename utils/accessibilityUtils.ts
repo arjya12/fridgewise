@@ -320,7 +320,9 @@ export function useFocusManagement() {
     // This is a placeholder for custom focus management
     // React Native doesn't have built-in directional focus APIs
     // but we can implement custom logic here
-    console.log(`Moving focus ${direction}`);
+    if (__DEV__) {
+      console.log(`Moving focus ${direction}`);
+    }
   }, []);
 
   return { setFocus, moveFocusTo };
@@ -384,7 +386,9 @@ export function useVoiceControlSupport() {
   return useCallback((actionName: string, callback: () => void) => {
     // This would integrate with a voice control system
     // For now, it's a placeholder for future implementation
-    console.log(`Voice command registered: ${actionName}`);
+    if (__DEV__) {
+      console.log(`Voice command registered: ${actionName}`);
+    }
     return callback;
   }, []);
 }

@@ -167,7 +167,9 @@ export class AchievementService {
       await this.saveUserAchievements(newAchievements);
       return newAchievements;
     } catch (error) {
-      console.error('Error loading user achievements:', error);
+      if (__DEV__) {
+        console.error("Error loading user achievements");
+      }
       throw error;
     }
   }
@@ -179,7 +181,9 @@ export class AchievementService {
         JSON.stringify(achievements)
       );
     } catch (error) {
-      console.error('Error saving user achievements:', error);
+      if (__DEV__) {
+        console.error("Error saving user achievements");
+      }
       throw error;
     }
   }
@@ -217,7 +221,9 @@ export class AchievementService {
 
       return newlyUnlocked;
     } catch (error) {
-      console.error('Error updating achievements:', error);
+      if (__DEV__) {
+        console.error("Error updating achievements");
+      }
       return [];
     }
   }
@@ -440,7 +446,9 @@ export class AchievementService {
 
       return 0; // Streak broken
     } catch (error) {
-      console.error('Error getting current streak:', error);
+      if (__DEV__) {
+        console.error("Error getting current streak");
+      }
       return 0;
     }
   }
@@ -472,7 +480,9 @@ export class AchievementService {
 
       return newStreak;
     } catch (error) {
-      console.error('Error updating streak:', error);
+      if (__DEV__) {
+        console.error("Error updating streak");
+      }
       return 0;
     }
   }

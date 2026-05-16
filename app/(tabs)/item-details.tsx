@@ -136,7 +136,9 @@ export default function ItemDetailsScreen() {
 
   const handleEntryOptions = (entryId: string) => {
     // This is a placeholder for any additional options menu functionality
-    console.log("Options for entry", entryId);
+    if (__DEV__) {
+      console.log("Options requested for entry");
+    }
   };
 
   const handleEditEntry = (entryId: string) => {

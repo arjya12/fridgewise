@@ -100,7 +100,9 @@ class OfflineDataService {
 
       if (!wasOnline && this.isOnline) {
         // Just came back online
-        console.log("Back online - processing pending actions");
+        if (__DEV__) {
+          console.log("Back online - processing pending actions");
+        }
         if (this.config.autoSync) {
           this.processPendingActions();
         }
@@ -286,11 +288,15 @@ class OfflineDataService {
             await this.markCacheClean(`${action.table}_${action.recordId}`);
           }
         } catch (error) {
-          console.error(`Failed to execute action ${action.id}:`, error);
+          if (__DEV__) {
+            console.error("Failed to execute offline action");
+          }
 
           action.retryCount++;
           if (action.retryCount >= action.maxRetries) {
-            console.error(`Action ${action.id} exceeded max retries`);
+            if (__DEV__) {
+              console.error("Offline action exceeded max retries");
+            }
             await this.logFailedAction(action, error as Error);
           } else {
             failedActions.push(action);
@@ -334,10 +340,9 @@ class OfflineDataService {
     // This would integrate with your actual API service
     // For now, we'll simulate the execution
 
-    console.log(
-      `Executing ${action.type} action on ${action.table}:`,
-      action.data
-    );
+    if (__DEV__) {
+      console.log(`Executing ${action.type} action on ${action.table}`);
+    }
 
     switch (action.type) {
       case "CREATE":
@@ -647,7 +652,9 @@ class OfflineDataService {
         JSON.stringify(log)
       );
     } catch (storageError) {
-      console.error("Error logging failed action:", storageError);
+      if (__DEV__) {
+        console.error("Error logging failed action");
+      }
     }
   }
 

@@ -100,8 +100,10 @@ export default function RootLayout() {
           await requestNotificationPermissions();
           await registerBackgroundTasks();
           await scheduleBackgroundTasks();
-        } catch (error) {
-          console.error("Error initializing notifications:", error);
+        } catch {
+          if (__DEV__) {
+            console.error("Error initializing notifications");
+          }
         }
       })();
     });
@@ -146,8 +148,10 @@ export default function RootLayout() {
       .then((initialUrl) => {
         handleUrl(initialUrl);
       })
-      .catch((error) => {
-        console.error("Error reading initial URL:", error);
+      .catch(() => {
+        if (__DEV__) {
+          console.error("Error reading initial URL");
+        }
       });
 
     const sub = Linking.addEventListener("url", ({ url }) => {

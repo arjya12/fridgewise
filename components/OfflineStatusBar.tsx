@@ -318,9 +318,8 @@ export const OfflineSyncPanel: React.FC<{
 
   const handleExportData = async () => {
     try {
-      const backup = await offlineDataService.exportData();
+      await offlineDataService.exportData();
       // In a real app, you would save this to a file or share it
-      console.log("Backup data:", backup);
       Alert.alert("Success", "Data exported successfully.");
     } catch (error) {
       Alert.alert("Error", "Failed to export data.");

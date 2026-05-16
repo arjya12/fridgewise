@@ -159,8 +159,10 @@ export default function MoreScreen() {
       await signOut();
       setSignOutModalVisible(false);
       router.replace("/(auth)/welcome");
-    } catch (error: any) {
-      console.error("Sign out error:", error);
+    } catch {
+      if (__DEV__) {
+        console.error("Sign out error");
+      }
       Alert.alert("Error", "Failed to sign out. Please try again.");
     } finally {
       setSignOutBusy(false);

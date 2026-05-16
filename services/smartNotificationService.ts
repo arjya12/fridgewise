@@ -471,7 +471,9 @@ class SmartNotificationService {
         break;
 
       default:
-        console.log("Unknown notification action:", actionId);
+        if (__DEV__) {
+          console.log("Unknown notification action");
+        }
     }
 
     // Update user patterns based on action taken

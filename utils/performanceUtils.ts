@@ -328,7 +328,9 @@ export function useImageLoadOptimization() {
 
         setLoadedImages((prev) => new Set(prev).add(uri));
       } catch (error) {
-        console.warn("Failed to preload image:", uri, error);
+        if (__DEV__) {
+          console.warn("Failed to preload image:", error);
+        }
       } finally {
         loadingRef.current.delete(uri);
       }

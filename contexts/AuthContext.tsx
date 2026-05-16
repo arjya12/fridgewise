@@ -62,7 +62,9 @@ async function readSessionOrClearStaleAuth(): Promise<Session | null> {
     return null;
   }
 
-  console.warn("Auth getSession:", error.message);
+  if (__DEV__) {
+    console.warn("Auth getSession failed");
+  }
   return data.session ?? null;
 }
 
@@ -77,13 +79,17 @@ async function fetchUserProfileById(
       .maybeSingle();
 
     if (error) {
-      console.error("Error fetching user profile:", error);
+      if (__DEV__) {
+        console.error("Error fetching user profile");
+      }
       return null;
     }
 
     return (data ?? null) as UserProfile | null;
-  } catch (error) {
-    console.error("Error in fetchUserProfileById:", error);
+  } catch {
+    if (__DEV__) {
+      console.error("Error in fetchUserProfileById");
+    }
     return null;
   }
 }
@@ -134,15 +140,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error("Error updating user profile:", error);
+        if (__DEV__) {
+          console.error("Error updating user profile");
+        }
         return null;
       }
 
       // Update the local state
       setUserProfile(updatedProfile as UserProfile);
       return updatedProfile as UserProfile;
-    } catch (error) {
-      console.error("Error in updateUserProfile:", error);
+    } catch {
+      if (__DEV__) {
+        console.error("Error in updateUserProfile");
+      }
       return null;
     }
   };
@@ -184,9 +194,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!cancelled) setUserProfile(profile);
           });
         }
-      } catch (e) {
+      } catch {
         if (cancelled) return;
-        console.warn("Auth init failed or timed out:", e);
+        if (__DEV__) {
+          console.warn("Auth init failed or timed out");
+        }
         setSession(null);
         setUser(null);
         setLoading(false);

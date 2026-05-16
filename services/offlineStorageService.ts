@@ -193,7 +193,9 @@ class OfflineStorageService {
         return;
       }
 
-      console.log(`Syncing ${pendingActions.length} pending actions...`);
+      if (__DEV__) {
+        console.log(`Syncing ${pendingActions.length} pending actions...`);
+      }
 
       // Process actions in order (FIFO)
       const results = await Promise.allSettled(
@@ -224,9 +226,11 @@ class OfflineStorageService {
       await this.updatePendingActions(successful, failed);
       await this.updateLastSyncTime();
 
-      console.log(
-        `Sync completed: ${successful.length} successful, ${failed.length} failed`
-      );
+      if (__DEV__) {
+        console.log(
+          `Sync completed: ${successful.length} successful, ${failed.length} failed`
+        );
+      }
     } catch (error) {
       console.error("Sync failed:", error);
     } finally {
