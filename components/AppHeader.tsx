@@ -1,5 +1,5 @@
 import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type AppHeaderProps = {
@@ -23,11 +23,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         { paddingTop: Math.max(insets.top, 16) }, // Ensure minimum padding of 16
       ]}
     >
-      <Image
-        source={require("../assets/images/figma/fridgewise_logo.png")}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <View style={styles.logo} />
       <View style={styles.titleContainer}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
@@ -51,6 +47,7 @@ const styles = StyleSheet.create({
     height: 43,
     borderRadius: 10,
     marginRight: 10,
+    backgroundColor: "#E8F5EF",
   },
   titleContainer: {
     justifyContent: "center",

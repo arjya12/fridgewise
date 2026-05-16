@@ -1,6 +1,5 @@
 import { render } from "@testing-library/react-native";
 import React from "react";
-import { Image } from "react-native";
 import AppHeader from "../AppHeader";
 
 // Mock useSafeAreaInsets hook
@@ -38,12 +37,4 @@ describe("AppHeader", () => {
     expect(getByText("FridgeWise")).toBeTruthy();
   });
 
-  it("renders the logo image", () => {
-    const { UNSAFE_getAllByType } = render(<AppHeader />);
-
-    // Check if the logo image is rendered
-    const images = UNSAFE_getAllByType(Image);
-    expect(images.length).toBeGreaterThan(0);
-    expect(images[0].props.source).toBeDefined();
-  });
 });

@@ -50,41 +50,6 @@ import { formatQuantityWithUnit } from "../utils/formatQuantityUnit";
 
 // ─── Asset & icon helpers ────────────────────────────────────────────────────
 
-function getCategoryAsset(category?: string, name?: string) {
-  const cat = (category || "").toLowerCase();
-  const n = (name || "").toLowerCase();
-  const pick = (k: string) => {
-    switch (k) {
-      case "milk": case "dairy":       return require("../assets/images/food-icons/milk.svg");
-      case "bread": case "bakery": case "grain": case "grains":
-                                        return require("../assets/images/food-icons/bread.svg");
-      case "egg": case "eggs":         return require("../assets/images/food-icons/egg.svg");
-      case "meat": case "protein": case "chicken": case "beef": case "pork":
-                                        return require("../assets/images/food-icons/meat.svg");
-      case "fish": case "seafood":     return require("../assets/images/food-icons/fish.svg");
-      case "vegetable": case "vegetables": case "veg":
-                                        return require("../assets/images/food-icons/vegetable.svg");
-      case "fruit": case "fruits":     return require("../assets/images/food-icons/fruit.svg");
-      case "cheese":                   return require("../assets/images/food-icons/cheese.svg");
-      default:                         return null;
-    }
-  };
-  const direct = pick(cat);
-  if (direct) return direct;
-  if (n.includes("milk") || n.includes("cream"))   return require("../assets/images/food-icons/milk.svg");
-  if (n.includes("bread") || n.includes("toast"))  return require("../assets/images/food-icons/bread.svg");
-  if (n.includes("egg"))                           return require("../assets/images/food-icons/egg.svg");
-  if (n.includes("meat") || n.includes("beef") || n.includes("chicken") || n.includes("pork"))
-                                                    return require("../assets/images/food-icons/meat.svg");
-  if (n.includes("fish") || n.includes("shrimp"))  return require("../assets/images/food-icons/fish.svg");
-  if (n.includes("carrot") || n.includes("broccoli") || n.includes("lettuce"))
-                                                    return require("../assets/images/food-icons/vegetable.svg");
-  if (n.includes("apple") || n.includes("banana") || n.includes("orange"))
-                                                    return require("../assets/images/food-icons/fruit.svg");
-  if (n.includes("cheese"))                        return require("../assets/images/food-icons/cheese.svg");
-  return require("../assets/images/food-icons/fruit.svg");
-}
-
 const getCategoryIconComponent = getFoodCategoryIcon;
 
 function getCategoryEmoji(category?: string, name?: string) {
@@ -354,22 +319,6 @@ function EnhancedCalendarScreenCore({
   }, [screenWidth, slideTranslate, slideTarget, runSpringTo]);
 
   // ── icon renderer ──
-  const renderAssetIcon = useCallback((asset: any, size: number, bg?: string) => {
-    const Comp = asset?.default ?? asset;
-    const wrapStyle = [S.iconWrap, bg ? { backgroundColor: bg, borderColor: "transparent" } : null];
-    if (typeof Comp === "function") {
-      return <View style={wrapStyle}><Comp width={size} height={size} /></View>;
-    }
-    if (typeof asset === "number") {
-      return (
-        <View style={wrapStyle}>
-          <Image source={asset} style={{ width: size, height: size }} resizeMode="contain" />
-        </View>
-      );
-    }
-    return null;
-  }, []);
-
   // ── handlers ──
   const handleDatePress = useCallback((day: any) => {
     if (!day?.dateString) return;
@@ -2367,16 +2316,6 @@ const S = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-  },
-  iconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 5,
   },
   itemBody: {
     flex: 1,
