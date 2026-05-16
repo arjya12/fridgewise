@@ -11,9 +11,16 @@ web-build/
 out/
 .bundle/
 .gradle/
+*.apk
+*.aab
+*.ipa
+*.tar.gz
+*.tgz
+*.zip
 *.keystore
 *.keystore.properties
 expo-env.d.ts
+credentials.json
 
 # Native
 .kotlin/
@@ -23,7 +30,19 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
-android/
+*.provisionprofile
+*.cer
+*.der
+*.csr
+key.properties
+local.properties
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/**/local.properties
 
 # Metro
 .metro-health-check*
@@ -46,13 +65,12 @@ logs/
 Thumbs.db
 desktop.ini
 
-# Environment files (ignore all .env variants and examples)
+# Environment files
 .env
 .env.local
 .env.production
 .env.*.local
 .env.*
-.env.example
 
 # typescript
 *.tsbuildinfo
@@ -71,14 +89,10 @@ temp/
 .eslintcache
 
 # Project config and tooling to keep local-only
-/jest.config.js
-/jest.setup.js
-/metro.config.js
 /settings-feature-plan.md
 /shelf_fridge_tracker_mvp_plan.md
 /test-utils.tsx
-/tsconfig.json
-.gradle-local
+.gradle-local/
 # Repo-level folders to keep local-only
 /.github/
 /__tests__/
@@ -87,4 +101,3 @@ temp/
 /CHANGELOG.md
 /CONTRIBUTING.md
 /FEATURE_PLAN.md
-/eslint.config.js
