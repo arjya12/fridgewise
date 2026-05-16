@@ -30,7 +30,7 @@ export default function TabLayout() {
           lazy: true,
           freezeOnBlur: true,
           animation: "none",
-          sceneContainerStyle: { backgroundColor: "#FFFFFF" },
+          sceneStyle: { backgroundColor: "#FFFFFF" },
           tabBarStyle: {
             position: "absolute",
             backgroundColor: "transparent",

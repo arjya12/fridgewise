@@ -1,8 +1,13 @@
 import React from "react";
 
-const AnimatedCalendarTransitions: React.FC<{ children?: React.ReactNode }> = ({
-  children,
-}) => {
+interface AnimatedCalendarTransitionsProps {
+  children?: React.ReactNode;
+  preset?: "smooth" | "gentle" | string;
+}
+
+const AnimatedCalendarTransitions: React.FC<
+  AnimatedCalendarTransitionsProps
+> = ({ children }) => {
   return <>{children}</>;
 };
 

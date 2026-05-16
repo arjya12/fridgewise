@@ -1,4 +1,6 @@
-type RouterWithPush = { push: (href: string) => void };
+import type { Router } from "expo-router";
+
+type RouterWithPush = Pick<Router, "push">;
 
 function ymdTodayLocal(): string {
   const n = new Date();

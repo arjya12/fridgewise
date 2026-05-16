@@ -12,7 +12,7 @@ export const AccessibleButton: React.FC<{ label: string }> = ({ label }) => (
 
 export const AccessibleText: React.FC<{ children: React.ReactNode }> = ({
   children,
-}) => <Text>{children as any}</Text>;
+}) => <Text>{children}</Text>;
 
 const AccessibilityAudit: React.FC<{ children?: React.ReactNode }> = ({
   children,
@@ -21,6 +21,3 @@ const AccessibilityAudit: React.FC<{ children?: React.ReactNode }> = ({
 };
 
 export default AccessibilityAudit;
-
-
-

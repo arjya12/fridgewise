@@ -2,12 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
-  PanGestureHandler,
-  PanGestureHandlerGestureEvent,
+  Gesture,
+  GestureDetector,
 } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
-  useAnimatedGestureHandler,
   withTiming,
 } from "react-native-reanimated";
 import { useCalendar } from "../hooks/useCalendar";
@@ -224,18 +223,12 @@ export function Calendar({
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
-  const monthGestureHandler = useAnimatedGestureHandler<
-    PanGestureHandlerGestureEvent,
-    { startX: number }
-  >({
-    onStart: (_, ctx) => {
-      ctx.startX = translateX.value;
-    },
-    onActive: (event, ctx) => {
-      translateX.value = ctx.startX + event.translationX;
+  const monthGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      translateX.value = event.translationX;
       opacity.value = withTiming(0.5, { duration: 100 });
-    },
-    onEnd: (event) => {
+    })
+    .onEnd((event) => {
       const { translationX } = event;
       if (Math.abs(translationX) > 50) {
         const increment = translationX > 0 ? -1 : 1;
@@ -243,21 +236,14 @@ export function Calendar({
       }
       translateX.value = withTiming(0);
       opacity.value = withTiming(1);
-    },
-  });
+    });
 
-  const yearGestureHandler = useAnimatedGestureHandler<
-    PanGestureHandlerGestureEvent,
-    { startY: number }
-  >({
-    onStart: (_, ctx) => {
-      ctx.startY = yearTranslateX.value;
-    },
-    onActive: (event, ctx) => {
-      yearTranslateX.value = ctx.startY + event.translationY;
+  const yearGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      yearTranslateX.value = event.translationY;
       yearOpacity.value = withTiming(0.5, { duration: 100 });
-    },
-    onEnd: (event) => {
+    })
+    .onEnd((event) => {
       const { translationY } = event;
       if (Math.abs(translationY) > 50) {
         const increment = translationY > 0 ? -1 : 1;
@@ -265,8 +251,7 @@ export function Calendar({
       }
       yearTranslateX.value = withTiming(0);
       yearOpacity.value = withTiming(1);
-    },
-  });
+    });
 
   // Build days grid for a given year/month, always starting with 1 in the first cell
   function buildDaysGrid(y: number, m: number) {
@@ -335,7 +320,7 @@ export function Calendar({
         <Pressable onPress={() => changeYear(-1)} style={styles.arrowCircle}>
           <Ionicons name="chevron-back" size={12} style={styles.arrowIcon} />
         </Pressable>
-        <PanGestureHandler onGestureEvent={yearGestureHandler}>
+        <GestureDetector gesture={yearGesture}>
           <Animated.View
             style={[
               yearAnimatedStyle,
@@ -362,7 +347,7 @@ export function Calendar({
               <Text style={[styles.monthYear, { color: "#FFF" }]}>{year}</Text>
             </View>
           </Animated.View>
-        </PanGestureHandler>
+        </GestureDetector>
         <Pressable onPress={() => changeYear(1)} style={styles.arrowCircle}>
           <Ionicons name="chevron-forward" size={12} style={styles.arrowIcon} />
         </Pressable>
@@ -379,7 +364,7 @@ export function Calendar({
         <Pressable onPress={() => changeMonth(-1)} style={styles.arrowCircle}>
           <Ionicons name="chevron-back" size={12} style={styles.arrowIcon} />
         </Pressable>
-        <PanGestureHandler onGestureEvent={monthGestureHandler}>
+        <GestureDetector gesture={monthGesture}>
           <Animated.View
             style={[
               animatedStyle,
@@ -408,7 +393,7 @@ export function Calendar({
               </Text>
             </View>
           </Animated.View>
-        </PanGestureHandler>
+        </GestureDetector>
         <Pressable onPress={() => changeMonth(1)} style={styles.arrowCircle}>
           <Ionicons name="chevron-forward" size={12} style={styles.arrowIcon} />
         </Pressable>

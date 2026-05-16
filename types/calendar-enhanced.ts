@@ -351,6 +351,7 @@ export interface CalendarPerformanceMetrics {
 }
 
 export interface PerformanceOptimizedCalendarProps {
+  children?: React.ReactNode;
   items?: FoodItem[];
   selectedDate?: string | null;
   onDatePress?: (date: string, info?: any) => void;
