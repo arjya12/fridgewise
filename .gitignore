@@ -96,6 +96,7 @@ temp/
 # Repo-level folders to keep local-only
 /.github/
 /__tests__/
+/docs/
 
 # Root files to keep local-only (keep README.md tracked)
 /CHANGELOG.md
