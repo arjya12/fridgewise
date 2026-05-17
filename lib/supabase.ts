@@ -262,7 +262,6 @@ export interface FoodItem {
   location: "fridge" | "shelf";
   expiry_date?: string;
   category?: string;
-  barcode?: string;
   image_url?: string;
   notes?: string;
   /** When false, no per-item expiry notifications are scheduled. */

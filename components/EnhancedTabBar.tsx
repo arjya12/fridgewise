@@ -7,7 +7,7 @@ import { BottomTabBarHeightCallbackContext } from "@react-navigation/bottom-tabs
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useContext, useState } from "react";
+import React, { useContext } from "react";
 import {
   LayoutChangeEvent,
   Platform,
@@ -17,7 +17,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SpeedDial, SpeedDialAction } from "./SpeedDial";
 
 /** Extra space above the safe-area line (float look). System nav is cleared by `insets.bottom`, not this alone. */
 const PILL_FLOAT_GAP = 10;
@@ -77,7 +76,6 @@ const HIDDEN_ROUTES = [
   "settings",
   "profile",
   "menu",
-  "barcode-test",
 ];
 
 // =============================================================================
@@ -89,7 +87,6 @@ export function EnhancedTabBar({
   descriptors,
   navigation,
 }: TabBarProps) {
-  const [speedDialVisible, setSpeedDialVisible] = useState(false);
   const insets = useSafeAreaInsets();
   const onTabBarHeightChange = useContext(BottomTabBarHeightCallbackContext);
 
@@ -105,31 +102,6 @@ export function EnhancedTabBar({
   const borderColor = "#F3F4F6";
   const activeColor = "#22C55E";
   const inactiveColor = "#6B7280";
-
-  // =============================================================================
-  // FAB ACTIONS
-  // =============================================================================
-
-  const speedDialActions: SpeedDialAction[] = [
-    {
-      id: "manual-entry",
-      label: "Manual Entry",
-      icon: "create-outline",
-      color: "#3B82F6",
-      onPress: () => {
-        router.push("/(tabs)/add");
-      },
-    },
-    {
-      id: "scan-barcode",
-      label: "Scan Barcode",
-      icon: "qr-code-outline",
-      color: "#8B5CF6",
-      onPress: () => {
-        router.push("/(tabs)/barcode-test");
-      },
-    },
-  ];
 
   // =============================================================================
   // HANDLERS
@@ -152,10 +124,6 @@ export function EnhancedTabBar({
   const handleFABPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push("/(tabs)/add");
-  };
-
-  const handleSpeedDialClose = () => {
-    setSpeedDialVisible(false);
   };
 
   // =============================================================================

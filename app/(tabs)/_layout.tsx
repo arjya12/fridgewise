@@ -108,18 +108,6 @@ export default function TabLayout() {
           }}
         />
 
-        {/* Barcode Scanner - Accessible via FAB Speed Dial */}
-        <Tabs.Screen
-          name="barcode-test"
-          options={{
-            title: "Barcode Scanner",
-            href: null, // Hide from tab bar - accessible via FAB
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="barcode-outline" color={color} size={24} />
-            ),
-          }}
-        />
-
         {/* ADMINISTRATIVE ROUTES - Accessible via More screen */}
 
         {/* Settings - Accessible via More menu */}

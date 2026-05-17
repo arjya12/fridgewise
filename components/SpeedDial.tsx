@@ -1,6 +1,6 @@
 /**
  * Speed Dial Component for Floating Action Button
- * Provides quick access to Manual Entry and Barcode Scanning
+ * Provides quick access to caller-provided actions.
  */
 
 import { Ionicons } from "@expo/vector-icons";
@@ -51,15 +51,10 @@ export function SpeedDial({ visible, onClose, actions }: SpeedDialProps) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const rotationAnim = useRef(new Animated.Value(0)).current;
 
-  // Track actions length to ensure proper reinitialization
-  const actionsLengthRef = useRef(actions.length);
-
   // Animation values for action buttons - recreate when actions change
   const actionAnims = React.useMemo(
     () => {
-      actionsLengthRef.current = actions.length;
-      // Force creation of exactly 2 animation sets for testing
-      return [0, 1].map(() => ({
+      return actions.map(() => ({
         translateY: new Animated.Value(0),
         scale: new Animated.Value(0),
         opacity: new Animated.Value(0),
@@ -200,109 +195,50 @@ export function SpeedDial({ visible, onClose, actions }: SpeedDialProps) {
 
       {/* Speed Dial Container */}
       <View style={styles.container} pointerEvents="box-none">
-        {/* Action Buttons - Test with hardcoded buttons */}
+        {actions.map((action, index) => {
+          const anim = actionAnims[index];
 
-        {/* First Button - Manual Entry (index 0) */}
-        <Animated.View
-          style={[
-            styles.actionButton,
-            {
-              backgroundColor: "#3B82F6",
-              marginBottom: 0, // Remove default marginBottom for proper positioning
-              transform: [
-                { translateY: -30 }, // Static position for first button
-                { scale: 1 },
-              ],
-              opacity: 1,
-            },
-          ]}
-        >
-          <Pressable
-            style={styles.actionButtonTouchable}
-            onPress={() =>
-              handleActionPress(
-                actions[0] || {
-                  id: "manual",
-                  label: "Manual Entry",
-                  icon: "create-outline",
-                  color: "#3B82F6",
-                  onPress: () => {},
-                }
-              )
-            }
-            android_ripple={{
-              color: "rgba(255, 255, 255, 0.2)",
-              borderless: true,
-            }}
-          >
-            <View style={styles.actionContent}>
-              <Ionicons name="create-outline" size={24} color="#FFFFFF" />
-            </View>
-          </Pressable>
-          <Animated.View
-            style={[
-              styles.actionLabel,
-              {
-                opacity: 1,
-                transform: [{ scale: 1 }],
-              },
-            ]}
-          >
-            <Text style={styles.actionLabelText}>Manual Entry</Text>
-          </Animated.View>
-        </Animated.View>
-
-        {/* Second Button - Scan Barcode (index 1) */}
-        <Animated.View
-          style={[
-            styles.actionButton,
-            {
-              backgroundColor: "#8B5CF6",
-              marginBottom: 0, // Remove default marginBottom for proper positioning
-              transform: [
-                { translateY: -160 }, // Static position for second button (higher up)
-                { scale: 1 },
-              ],
-              opacity: 1,
-            },
-          ]}
-        >
-          <Pressable
-            style={styles.actionButtonTouchable}
-            onPress={() =>
-              handleActionPress(
-                actions[1] || {
-                  id: "scan",
-                  label: "Scan Barcode",
-                  icon: "qr-code-outline",
-                  color: "#8B5CF6",
-                  onPress: () => {},
-                }
-              )
-            }
-            android_ripple={{
-              color: "rgba(255, 255, 255, 0.2)",
-              borderless: true,
-            }}
-          >
-            <View style={styles.actionContent}>
-              <Ionicons name="qr-code-outline" size={24} color="#FFFFFF" />
-            </View>
-          </Pressable>
-          <Animated.View
-            style={[
-              styles.actionLabel,
-              {
-                opacity: actionAnims[1]?.opacity || new Animated.Value(1),
-                transform: [
-                  { scale: actionAnims[1]?.scale || new Animated.Value(1) },
-                ],
-              },
-            ]}
-          >
-            <Text style={styles.actionLabelText}>Scan Barcode</Text>
-          </Animated.View>
-        </Animated.View>
+          return (
+            <Animated.View
+              key={action.id}
+              style={[
+                styles.actionButton,
+                {
+                  backgroundColor: action.color,
+                  transform: [
+                    { translateY: anim?.translateY ?? 0 },
+                    { scale: anim?.scale ?? 1 },
+                  ],
+                  opacity: anim?.opacity ?? 1,
+                },
+              ]}
+            >
+              <Pressable
+                style={styles.actionButtonTouchable}
+                onPress={() => handleActionPress(action)}
+                android_ripple={{
+                  color: "rgba(255, 255, 255, 0.2)",
+                  borderless: true,
+                }}
+              >
+                <View style={styles.actionContent}>
+                  <Ionicons name={action.icon as any} size={24} color="#FFFFFF" />
+                </View>
+              </Pressable>
+              <Animated.View
+                style={[
+                  styles.actionLabel,
+                  {
+                    opacity: anim?.opacity ?? 1,
+                    transform: [{ scale: anim?.scale ?? 1 }],
+                  },
+                ]}
+              >
+                <Text style={styles.actionLabelText}>{action.label}</Text>
+              </Animated.View>
+            </Animated.View>
+          );
+        })}
 
         {/* Main FAB */}
         <Animated.View

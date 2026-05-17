@@ -12,17 +12,13 @@
     "scheme": "fridgewise",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to scan barcodes on food products."
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/generated-app-icon/fridgewise_adaptive_foreground_1024.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["CAMERA"],
       "package": "com.aseef217.fridgewise"
     },
     "web": {
@@ -41,13 +37,7 @@
           "backgroundColor": "#ccf5c9"
         }
       ],
-      "expo-web-browser",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow FridgeWise to access your camera to scan barcodes."
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
