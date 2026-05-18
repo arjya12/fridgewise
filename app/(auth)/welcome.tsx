@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH } from "@/utils/authFieldLimits";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -30,6 +29,7 @@ export default function WelcomeScreen() {
   const params = useLocalSearchParams();
   const { signIn } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
+  const [loginSheetVisible, setLoginSheetVisible] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,6 +41,7 @@ export default function WelcomeScreen() {
   const waveAnim = useRef(new Animated.Value(0)).current;
   const logoAnim = useRef(new Animated.Value(1)).current;
   const loginButtonAnim = useRef(new Animated.Value(1)).current;
+  const suppressLoginParamOpen = useRef(false);
   const [loginError, setLoginError] = useState<{
     kind: "validation" | "auth" | "unknown" | "info";
     message: string;
@@ -60,95 +61,88 @@ export default function WelcomeScreen() {
     return () => clearInterval(id);
   }, [resetCooldownSeconds]);
 
-  // Open login modal if ?login=1 is present in params
+  // Open login modal once when ?login=1 (don’t re-open after user dismisses with X)
   useEffect(() => {
-    if (params?.login === "1" && !showLogin) {
-      handleLogin();
+    if (params?.login !== "1") {
+      suppressLoginParamOpen.current = false;
+      return;
     }
-  }, [params?.login]);
+    if (suppressLoginParamOpen.current || loginSheetVisible) return;
+    handleLogin();
+  }, [params?.login, loginSheetVisible]);
 
   function handleCreateAccount() {
     router.replace("/(auth)/signup");
   }
   function handleLogin() {
-    Animated.timing(loginButtonAnim, {
-      toValue: 0,
-      duration: 400,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => {
-      setShowLogin(true);
-      Animated.parallel([
-        Animated.timing(welcomeAnim, {
-          toValue: 0.85,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 1,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(waveAnim, {
-          toValue: 1,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoAnim, {
-          toValue: 0.7,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
-  }
-  function handleCloseLogin() {
-    // 1) Slide the login card down & restore welcome content
+    setShowLogin(true);
+    setLoginSheetVisible(true);
+    loginButtonAnim.setValue(0);
     Animated.parallel([
       Animated.timing(welcomeAnim, {
-        toValue: 1,
-        duration: 400,
+        toValue: 0.85,
+        duration: 500,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 500,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(waveAnim, {
+        toValue: 1,
+        duration: 500,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(logoAnim, {
+        toValue: 0.7,
+        duration: 500,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }
+  function handleCloseLogin() {
+    if (params?.login === "1") {
+      suppressLoginParamOpen.current = true;
+    }
+
+    setShowLogin(false);
+    welcomeAnim.setValue(1);
+    loginButtonAnim.setValue(1);
+
+    slideAnim.stopAnimation();
+    waveAnim.stopAnimation();
+    logoAnim.stopAnimation();
+
+    Animated.parallel([
+      Animated.timing(slideAnim, {
         toValue: 2,
-        duration: 400,
+        duration: 280,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      setShowLogin(false);
-      slideAnim.setValue(0);
-
-      // 2) Immediately bring back the Login button
-      Animated.timing(loginButtonAnim, {
-        toValue: 1,
-        duration: 120,
+      Animated.timing(waveAnim, {
+        toValue: 0,
+        duration: 280,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
-      }).start();
-
-      // 3) In parallel, gently drop the wave and logo together
-      Animated.parallel([
-        Animated.timing(waveAnim, {
-          toValue: 0,
-          duration: 400,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoAnim, {
-          toValue: 1,
-          duration: 400,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
+      }),
+      Animated.timing(logoAnim, {
+        toValue: 1,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (!finished) return;
+      slideAnim.setValue(0);
+      setLoginSheetVisible(false);
     });
+
     setLoginError(null);
     setEmail("");
     setPassword("");
@@ -490,6 +484,8 @@ export default function WelcomeScreen() {
               accessible
               accessibilityLabel="FridgeWise logo"
             />
+            {/* Fills the gap when the wave moves up so green doesn’t show beside the modal */}
+            <Animated.View style={[styles.waveGapFill, waveTranslate]} />
             <Animated.View style={[styles.wave, waveTranslate]}>
               <Svg width={width} height={260} viewBox={`0 0 ${width} 260`}>
                 <Path
@@ -502,12 +498,15 @@ export default function WelcomeScreen() {
             </Animated.View>
           </LinearGradient>
         </View>
+        {/* Covers green gradient seam when wave rises — header/wave stay visible above */}
+        {showLogin && (
+          <View style={styles.loginContentScrim} pointerEvents="none" />
+        )}
         {/* Content */}
         <Animated.View style={[styles.content, welcomeScale]}>
-          <Text style={styles.heading}>Welcome!</Text>
+          {!showLogin && <Text style={styles.heading}>Welcome!</Text>}
 
-          {/* Hide create-account / login CTA when in Reset Password mode */}
-          {!isResetMode && (
+          {!isResetMode && !showLogin && (
             <>
               <TouchableOpacity
                 style={styles.createButton}
@@ -523,7 +522,6 @@ export default function WelcomeScreen() {
                   <Text style={styles.createButtonText}>Create Account</Text>
                 </LinearGradient>
               </TouchableOpacity>
-              {/* Divider */}
               <View style={styles.dividerContainer}>
                 <View style={styles.divider} />
                 <View style={styles.dividerTextWrap}>
@@ -531,42 +529,35 @@ export default function WelcomeScreen() {
                 </View>
                 <View style={styles.divider} />
               </View>
-              {!showLogin && (
-                <Animated.View
-                  style={{
-                    opacity: loginButtonAnim,
-                    transform: [
-                      {
-                        translateY: loginButtonAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [16, 0],
-                        }),
-                      },
-                    ],
-                    width: "100%",
-                    alignItems: "center",
-                  }}
+              <Animated.View
+                style={{
+                  opacity: loginButtonAnim,
+                  transform: [
+                    {
+                      translateY: loginButtonAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [16, 0],
+                      }),
+                    },
+                  ],
+                  width: "100%",
+                  alignItems: "center",
+                }}
+              >
+                <TouchableOpacity
+                  style={styles.loginButton}
+                  onPress={handleLogin}
+                  accessibilityRole="button"
                 >
-                  <TouchableOpacity
-                    style={styles.loginButton}
-                    onPress={handleLogin}
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.loginButtonText}>Login</Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
+                  <Text style={styles.loginButtonText}>Login</Text>
+                </TouchableOpacity>
+              </Animated.View>
             </>
           )}
         </Animated.View>
         {/* Slide-down Login Modal */}
-        {showLogin && (
+        {loginSheetVisible && (
           <Animated.View style={[styles.loginModal, slideDown]}>
-            <BlurView
-              intensity={80}
-              tint="light"
-              style={StyleSheet.absoluteFill}
-            />
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : "height"}
               style={styles.loginModalInner}
@@ -891,6 +882,25 @@ const styles = StyleSheet.create({
     left: 0,
     zIndex: 1,
   },
+  loginContentScrim: {
+    position: "absolute",
+    top: 320,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#FFFFFF",
+    zIndex: 15,
+    elevation: 15,
+  },
+  waveGapFill: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: -120,
+    height: 100,
+    backgroundColor: "#FFFFFF",
+    zIndex: 0,
+  },
   content: {
     flex: 1,
     alignItems: "center",
@@ -974,16 +984,16 @@ const styles = StyleSheet.create({
   },
   loginModal: {
     position: "absolute",
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: "#FFFFFF",
     borderRadius: 22,
     padding: 14,
     paddingTop: 12,
     zIndex: 20,
-    shadowColor: "#197C47",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    elevation: 10,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
     overflow: "hidden",
   },
   loginModalInner: {

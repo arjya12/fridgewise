@@ -1174,7 +1174,7 @@ export default function AddItemScreen() {
                               fontSize: 14,
                               lineHeight: 14,
                               color: "#111827",
-                              fontWeight: "800",
+                              fontWeight: "500",
                             }}
                           >
                             −
@@ -1201,7 +1201,7 @@ export default function AddItemScreen() {
                             textAlign: "center",
                             fontSize: 15,
                             color: "#111",
-                            fontWeight: "800",
+                            fontWeight: "500",
                             fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                             paddingVertical: 0,
                             paddingHorizontal: 2,
@@ -1235,7 +1235,7 @@ export default function AddItemScreen() {
                               fontSize: 14,
                               lineHeight: 14,
                               color: "#111827",
-                              fontWeight: "800",
+                              fontWeight: "500",
                             }}
                           >
                             +
@@ -1299,7 +1299,7 @@ export default function AddItemScreen() {
                           <ThemedText
                             style={{
                               color: "#222",
-                              fontWeight: "700",
+                              fontWeight: "500",
                               fontSize: 11,
                               fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
                               textAlign: "center",
