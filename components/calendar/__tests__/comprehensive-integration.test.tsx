@@ -121,7 +121,7 @@ const AccessibilityAudit: React.FC<TestAccessibilityAuditProps> = ({
 
 // Import services and utilities
 import { enhancedCalendarService } from "../../../services/enhancedCalendarService";
-import { generateTestData } from "../../../test-utils";
+import { generateTestData } from "./test-utils";
 
 // Mock dependencies
 jest.mock("expo-constants", () => ({

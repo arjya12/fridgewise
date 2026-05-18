@@ -1,4 +1,4 @@
-import { FoodItem } from "./lib/supabase";
+import { FoodItem } from "../../../lib/supabase";
 
 export function generateTestData(count: number): FoodItem[] {
   return Array.from({ length: count }, (_, index) => {
