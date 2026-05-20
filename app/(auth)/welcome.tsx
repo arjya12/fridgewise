@@ -1,8 +1,10 @@
 import ScreenLayout from "@/components/ScreenLayout";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { SimpleInfoModal } from "@/components/SimpleInfoModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH } from "@/utils/authFieldLimits";
+import { isNetworkRequestFailed } from "@/utils/networkError";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Linking from "expo-linking";
@@ -50,6 +52,7 @@ export default function WelcomeScreen() {
   const [isResetMode, setIsResetMode] = useState(false);
   const [resetCooldownSeconds, setResetCooldownSeconds] = useState(0);
   const [resetEmailModalVisible, setResetEmailModalVisible] = useState(false);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
   // 60-second cooldown timer after requesting password reset
@@ -186,7 +189,12 @@ export default function WelcomeScreen() {
     try {
       await signIn(email, password, { rememberMe });
       router.replace("/(tabs)");
-    } catch {
+    } catch (error) {
+      if (isNetworkRequestFailed(error)) {
+        setLoginError(null);
+        setOfflineNoticeVisible(true);
+        return;
+      }
       setLoginError({
         kind: "auth",
         message: "That email or password doesn’t match. Try again.",
@@ -227,6 +235,12 @@ export default function WelcomeScreen() {
         setResetEmailModalVisible(true);
       });
     } catch (err: any) {
+      if (isNetworkRequestFailed(err)) {
+        setLoginError(null);
+        setOfflineNoticeVisible(true);
+        return;
+      }
+
       const msg = err?.message || "";
       const isRateLimit = /rate limit|limit reached|too many requests/i.test(msg);
       const isUserNotFound = /user.*not.*found|email.*not.*registered/i.test(msg);
@@ -843,6 +857,10 @@ export default function WelcomeScreen() {
         setResetEmailModalVisible(false);
         setIsResetMode(false);
       }}
+    />
+    <OfflineNoticeModal
+      visible={offlineNoticeVisible}
+      onDismiss={() => setOfflineNoticeVisible(false)}
     />
     </>
   );

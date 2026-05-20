@@ -2,9 +2,11 @@
  * Waste Report — all-time insights, red accent on white (parity with consumption report).
  */
 
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { getReportCategoryIcon } from "@/lib/reportCategoryIcons";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadWasteReportAllTime } from "@/services/insightsReportData";
+import { isOfflineLikeError } from "@/utils/networkError";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -51,6 +53,7 @@ export default function WasteReportScreen() {
     null
   );
   const [error, setError] = useState<string | null>(null);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   const [avgDaysInfoVisible, setAvgDaysInfoVisible] = useState(false);
 
   const load = useCallback(async () => {
@@ -61,8 +64,13 @@ export default function WasteReportScreen() {
       const d = await loadWasteReportAllTime(user.id);
       setData(d);
     } catch (e: unknown) {
-      console.warn("Waste report load failed", e);
-      setError("Could not load data. Pull to try again.");
+      if (isOfflineLikeError(e, { hasAuthenticatedUser: Boolean(user?.id) })) {
+        setOfflineNoticeVisible(true);
+        setError(null);
+      } else {
+        console.warn("Waste report load failed", e);
+        setError("Could not load data. Pull to try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -365,6 +373,10 @@ export default function WasteReportScreen() {
         </Pressable>
       </Modal>
 
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
+      />
     </View>
   );
 }

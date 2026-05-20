@@ -182,6 +182,7 @@ export function CalendarProvider({
           type: "MARK_ITEM_USED_ERROR",
           payload: { error },
         });
+        throw error;
       }
     },
     [foodItemsService]

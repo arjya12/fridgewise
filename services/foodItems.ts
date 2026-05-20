@@ -132,7 +132,8 @@ export const foodItemsService = {
   async addItem(
     item: Omit<FoodItem, "id" | "user_id" | "created_at" | "updated_at">
   ): Promise<FoodItemWithUrgency> {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
     if (!userData.user) throw new Error("User not authenticated");
 
     assertNewItemQuantity(item.quantity);
@@ -177,24 +178,32 @@ export const foodItemsService = {
 
   /**
    * Remove an inventory row without recording waste/consumption.
-   * Also deletes usage_logs for this item so lifetime insights (e.g. More → items in total)
-   * are not driven by a stray used/wasted row after the line is gone.
+   * Preserves usage_logs (consume / throw away) for History and reports.
+   * When history exists, sets quantity to 0 so food_items rows remain for joins.
    */
   async deleteItem(id: string): Promise<void> {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
     if (!userData.user) throw new Error("User not authenticated");
 
-    const { error: logsError } = await supabase
+    const { count, error: countError } = await supabase
       .from("usage_logs")
-      .delete()
+      .select("id", { count: "exact", head: true })
       .eq("item_id", id)
       .eq("user_id", userData.user.id);
 
-    if (logsError) throw logsError;
+    if (countError) throw countError;
 
-    const { error } = await supabase.from("food_items").delete().eq("id", id);
-
-    if (error) throw error;
+    if ((count ?? 0) > 0) {
+      const { error } = await supabase
+        .from("food_items")
+        .update({ quantity: 0 })
+        .eq("id", id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("food_items").delete().eq("id", id);
+      if (error) throw error;
+    }
 
     enqueueNotificationMaintenance("notification maintenance after deleteItem:", async () => {
       const {
@@ -214,7 +223,8 @@ export const foodItemsService = {
       .eq("id", itemId)
       .single();
 
-    if (itemError || !item) throw new Error("Item not found");
+    if (itemError) throw itemError;
+    if (!item) throw new Error("Item not found");
     const qty = quantity ?? (item as FoodItem).quantity;
     await this.logUsage(itemId, "used", qty);
   },
@@ -225,7 +235,8 @@ export const foodItemsService = {
     status: "used" | "expired" | "wasted",
     quantity: number
   ): Promise<void> {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
     if (!userData.user) throw new Error("User not authenticated");
 
     // First, get the current item

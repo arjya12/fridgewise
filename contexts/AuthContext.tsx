@@ -4,6 +4,7 @@ import {
   setRememberMePreference,
 } from "@/lib/authPreferences";
 import { supabase, UserProfile } from "@/lib/supabase";
+import { isNetworkRequestFailed } from "@/utils/networkError";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session, User } from "@supabase/supabase-js";
 import React, {
@@ -79,15 +80,15 @@ async function fetchUserProfileById(
       .maybeSingle();
 
     if (error) {
-      if (__DEV__) {
+      if (__DEV__ && !isNetworkRequestFailed(error)) {
         console.error("Error fetching user profile");
       }
       return null;
     }
 
     return (data ?? null) as UserProfile | null;
-  } catch {
-    if (__DEV__) {
+  } catch (error) {
+    if (__DEV__ && !isNetworkRequestFailed(error)) {
       console.error("Error in fetchUserProfileById");
     }
     return null;
@@ -140,20 +141,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        if (__DEV__) {
+        if (__DEV__ && !isNetworkRequestFailed(error)) {
           console.error("Error updating user profile");
         }
-        return null;
+        throw error;
       }
 
       // Update the local state
       setUserProfile(updatedProfile as UserProfile);
       return updatedProfile as UserProfile;
-    } catch {
-      if (__DEV__) {
+    } catch (error) {
+      if (__DEV__ && !isNetworkRequestFailed(error)) {
         console.error("Error in updateUserProfile");
       }
-      return null;
+      throw error;
     }
   };
 

@@ -1,8 +1,10 @@
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { SettingsConfirmModal } from "@/components/SettingsConfirmModal";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
+import { isNetworkRequestFailed } from "@/utils/networkError";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -20,6 +22,7 @@ export default function MenuScreen() {
   const [loading, setLoading] = useState(false);
   const [signOutModalVisible, setSignOutModalVisible] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   // Fixed light theme colors - no system detection
   const isDark = false;
   const cardBackgroundColor = "#FFFFFF";
@@ -35,7 +38,13 @@ export default function MenuScreen() {
       await signOut();
       setSignOutModalVisible(false);
       router.replace("/(auth)/welcome");
-    } catch {
+    } catch (error) {
+      if (isNetworkRequestFailed(error)) {
+        setSignOutModalVisible(false);
+        setOfflineNoticeVisible(true);
+        return;
+      }
+
       if (__DEV__) {
         console.error("Sign out error");
       }
@@ -282,6 +291,10 @@ export default function MenuScreen() {
         onSecondary={() => setSignOutModalVisible(false)}
         busy={signOutBusy}
         onRequestClose={signOutBusy ? () => {} : () => setSignOutModalVisible(false)}
+      />
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
       />
     </SafeAreaWrapper>
   );

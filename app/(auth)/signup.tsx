@@ -1,4 +1,5 @@
 // app/(auth)/signup.tsx
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
 import { SimpleInfoModal } from "@/components/SimpleInfoModal";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +9,7 @@ import {
   MAX_NAME_LENGTH,
   MAX_PASSWORD_LENGTH,
 } from "@/utils/authFieldLimits";
+import { isNetworkRequestFailed } from "@/utils/networkError";
 import {
   isValidPersonName,
   sanitizePersonNameInput,
@@ -178,6 +180,7 @@ export default function SignUpScreen() {
   const [keyboardInset, setKeyboardInset] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [verifyEmailModalVisible, setVerifyEmailModalVisible] = useState(false);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   const formErrorAnim = useRef(new Animated.Value(0)).current;
 
   const clearError = (key: string) => {
@@ -340,6 +343,12 @@ export default function SignUpScreen() {
         goToLogin();
       }
     } catch (error: any) {
+      if (isNetworkRequestFailed(error)) {
+        setFormError(null);
+        setOfflineNoticeVisible(true);
+        return;
+      }
+
       const message = (error?.message ?? "").toString();
       const lower = message.toLowerCase();
       if (
@@ -810,6 +819,10 @@ export default function SignUpScreen() {
           setVerifyEmailModalVisible(false);
           router.push("/(auth)/welcome?login=1");
         }}
+      />
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
       />
     </SafeAreaWrapper>
   );

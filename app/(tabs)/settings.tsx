@@ -230,7 +230,7 @@ export default function SettingsScreen() {
           <SettingsConfirmModal
             visible
             title="Delete account?"
-            message="Deletes your profile and data, then signs you out. Contact support to remove your login completely."
+            message="Permanently deletes your account, app data, and login. You will not be able to sign in again with this email."
             primaryLabel="Continue"
             primaryVariant="dangerOutline"
             onPrimary={() => setDataModal({ key: "delete2" })}
@@ -244,7 +244,7 @@ export default function SettingsScreen() {
             visible
             accent="destructive"
             title="Delete permanently?"
-            message="Your profile and app data will be removed. You can't undo this."
+            message="Your profile, app data, and login will be removed. You can't undo this."
             primaryLabel="Delete account"
             primaryVariant="danger"
             onPrimary={async () => {

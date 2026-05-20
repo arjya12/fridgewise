@@ -146,24 +146,6 @@ export default function TabLayout() {
           }}
         />
 
-        {/* UTILITY ROUTES - Keep existing functionality */}
-
-        {/* Item Details - Modal/overlay screen */}
-        <Tabs.Screen
-          name="item-details"
-          options={{
-            title: "Item Details",
-            href: null, // Hide from tab bar
-            tabBarIcon: ({ color }) => (
-              <Ionicons
-                name="information-circle-outline"
-                color={color}
-                size={24}
-              />
-            ),
-          }}
-        />
-
         {/* Legacy Menu - Keep for backward compatibility */}
         <Tabs.Screen
           name="menu"

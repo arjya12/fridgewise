@@ -1,5 +1,6 @@
 import { ThemedText } from "@/components/ThemedText";
 import ScreenLayout from "@/components/ScreenLayout";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { FoodItem } from "@/lib/supabase";
 import {
   MAX_INVENTORY_QUANTITY,
@@ -54,6 +55,12 @@ import {
   normalizeLegacyInventoryCategory,
 } from "@/lib/foodCategories";
 import { SimpleCalendar } from "./SimpleCalendar";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getErrorMessage,
+  isNetworkRequestFailed,
+  isOfflineLikeError,
+} from "@/utils/networkError";
 
 const commonUnits = [
   // most used (quick picks)
@@ -210,6 +217,7 @@ export default function AddItemScreen() {
     expiryDate?: string;
     notes?: string;
   }>();
+  const { user } = useAuth();
   const isEditing = params.edit === "true" && Boolean(params.id);
   const hasPrefill =
     !isEditing &&
@@ -258,6 +266,7 @@ export default function AddItemScreen() {
   // State for suggestions
   const [suggestions, setSuggestions] = useState<FoodItem[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
 
   const [calendarWeeks, setCalendarWeeks] = useState(5);
 
@@ -726,9 +735,23 @@ export default function AddItemScreen() {
       const existingItems = await foodItemsService.getItems();
       setSuggestions(existingItems);
     } catch (error) {
-      console.error("Failed to load suggestions:", error);
+      if (isNetworkRequestFailed(error)) {
+        setOfflineNoticeVisible(true);
+      }
     }
   };
+
+  const showSaveError = useCallback(
+    (error: unknown, fallback: string) => {
+      if (isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user) })) {
+        setOfflineNoticeVisible(true);
+        return;
+      }
+
+      Alert.alert("Error", getErrorMessage(error) || fallback);
+    },
+    [user]
+  );
 
   // Update the name input handler to show suggestions
   const handleNameChange = (text: string) => {
@@ -775,7 +798,7 @@ export default function AddItemScreen() {
         router.back();
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      showSaveError(error, "Failed to load item. Please try again.");
     }
   };
 
@@ -841,7 +864,7 @@ export default function AddItemScreen() {
       } catch {}
       runSuccessCelebrationAndExit();
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      showSaveError(error, "Failed to save item. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -2258,6 +2281,10 @@ export default function AddItemScreen() {
           </Animated.View>
         </>
       )}
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
+      />
     </ScreenLayout>
   );
 }

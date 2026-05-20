@@ -41,6 +41,7 @@ import {
   ItemCardPendingOverlay,
   type ItemCardPendingTone,
 } from "@/components/ItemCardPendingOverlay";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { ThrowAwayModal } from "@/components/ThrowAwayModal";
 import ScreenLayout from "@/components/ScreenLayout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,6 +57,10 @@ import { modalStackedCancelContainer, modalStackedCancelLabel } from "@/theme/mo
 import { enableAndroidLayoutAnimationExperimental } from "@/utils/enableAndroidLayoutAnimation";
 import { formatExpiry } from "@/utils/formatExpiry";
 import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
+import {
+  getErrorMessage,
+  isOfflineLikeError,
+} from "@/utils/networkError";
 import { firstNameForGreeting } from "@/utils/personNameInput";
 
 type LocationFilter = "all" | "fridge" | "shelf";
@@ -368,6 +373,7 @@ export default function HomeScreen() {
   const [consumeModalItem, setConsumeModalItem] = useState<FoodItem | null>(null);
   const [throwAwayModalItem, setThrowAwayModalItem] = useState<FoodItem | null>(null);
   const [removeModalItem, setRemoveModalItem] = useState<FoodItem | null>(null);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   /** Spinner on row: green = consume / use-all, red = throw away / delete */
   const [homeItemActionPending, setHomeItemActionPending] = useState<{
     id: string;
@@ -378,6 +384,15 @@ export default function HomeScreen() {
   const { width } = Dimensions.get("window");
   const pinnedStripInnerW = width - 36;
   const pinnedCardHalfW = Math.floor((pinnedStripInnerW - 8) / 2);
+
+  const showActionError = useCallback((error: unknown, fallback: string) => {
+    if (isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+      setOfflineNoticeVisible(true);
+      return;
+    }
+
+    Alert.alert("Error", getErrorMessage(error) || fallback);
+  }, [user?.id]);
 
   const loadHistoryTotals = useCallback(async (options?: { force?: boolean }) => {
     if (!user?.id) return;
@@ -504,11 +519,11 @@ export default function HomeScreen() {
       }
       await loadHomeMeta({ showLoading: showLoader, itemsSource: data as FoodItem[] });
     } catch (error: any) {
-      Alert.alert("Error", error?.message ?? "Failed to load items");
+      showActionError(error, "Failed to load items");
     } finally {
       if (showLoader) setLoading(false);
     }
-  }, [loadHomeMeta, user?.id]);
+  }, [loadHomeMeta, showActionError, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -632,8 +647,19 @@ export default function HomeScreen() {
     }
 
     router.push({
-      pathname: "/item-details",
-      params: { itemId: item.id },
+      pathname: "/(tabs)/add",
+      params: {
+        edit: "true",
+        nonce,
+        id: item.id,
+        name: item.name,
+        quantity: String(item.quantity),
+        unit: item.unit || "pcs",
+        location: item.location as "fridge" | "shelf",
+        category: item.category || "",
+        expiryDate: item.expiry_date || "",
+        notes: item.notes || "",
+      },
     });
   }, []);
 
@@ -779,7 +805,7 @@ export default function HomeScreen() {
         prev.map((i) => (i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i))
       );
     } catch (error: any) {
-      Alert.alert("Error", error?.message ?? "Failed to update item");
+      showActionError(error, "Failed to update item");
     }
   };
 
@@ -792,7 +818,7 @@ export default function HomeScreen() {
         prev.map((i) => (i.id === itemId ? { ...i, quantity: i.quantity + 1 } : i))
       );
     } catch (error: any) {
-      Alert.alert("Error", error?.message ?? "Failed to update item");
+      showActionError(error, "Failed to update item");
     }
   };
 
@@ -810,8 +836,10 @@ export default function HomeScreen() {
       await removePinnedItem(itemId);
       await loadHomeMeta({ showLoading: false });
     } catch (error: any) {
-      await loadItems({ showLoader: false });
-      Alert.alert("Error", error?.message ?? "Failed to mark used");
+      if (!isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+        await loadItems({ showLoader: false });
+      }
+      showActionError(error, "Failed to mark used");
     } finally {
       setHomeItemActionPending(null);
     }
@@ -879,17 +907,16 @@ export default function HomeScreen() {
           }
           await loadHomeMeta({ showLoading: false });
         } catch (error: any) {
-          await loadItems({ showLoader: false });
-          Alert.alert(
-            "Error",
-            error?.message ?? "Failed to throw away item. Please try again."
-          );
+          if (!isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+            await loadItems({ showLoader: false });
+          }
+          showActionError(error, "Failed to throw away item. Please try again.");
         } finally {
           setHomeItemActionPending(null);
         }
       })();
     },
-    [pinnedIds, user?.id, loadHomeMeta, loadItems]
+    [pinnedIds, user?.id, loadHomeMeta, loadItems, showActionError]
   );
 
   const openThrowAwayQuantityModal = useCallback(() => {
@@ -939,16 +966,15 @@ export default function HomeScreen() {
         await loadHomeMeta({ showLoading: false });
       } catch (error: any) {
         setPinnedIds(pinnedIdsSnapshot);
-        await loadItems({ showLoader: false });
-        Alert.alert(
-          "Error",
-          error?.message ?? "Failed to delete item. Please try again."
-        );
+        if (!isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+          await loadItems({ showLoader: false });
+        }
+        showActionError(error, "Failed to delete item. Please try again.");
       } finally {
         setHomeItemActionPending(null);
       }
     })();
-  }, [removeModalItem, pinnedIds, user?.id, loadHomeMeta, loadItems]);
+  }, [removeModalItem, pinnedIds, user?.id, loadHomeMeta, loadItems, showActionError]);
 
   const executeConsumeForItem = useCallback(
     (currentItem: FoodItem, quantity: number) => {
@@ -984,17 +1010,16 @@ export default function HomeScreen() {
           }
           await loadHomeMeta({ showLoading: false });
         } catch (error: any) {
-          await loadItems({ showLoader: false });
-          Alert.alert(
-            "Error",
-            error?.message ?? "Failed to log consumption. Please try again."
-          );
+          if (!isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+            await loadItems({ showLoader: false });
+          }
+          showActionError(error, "Failed to log consumption. Please try again.");
         } finally {
           setHomeItemActionPending(null);
         }
       })();
     },
-    [pinnedIds, user?.id, loadHomeMeta, loadItems]
+    [pinnedIds, user?.id, loadHomeMeta, loadItems, showActionError]
   );
 
   const requestConsumeModal = useCallback(
@@ -1825,7 +1850,7 @@ export default function HomeScreen() {
               <View style={styles.searchEmptyWrap}>
                 <Text style={styles.searchEmptyTitle}>Search inventory</Text>
                 <Text style={styles.searchEmptySubtitle}>
-                  Enter a keyword, or type "all" to view every item.
+                  Enter a keyword, or type &quot;all&quot; to view every item.
                 </Text>
               </View>
             )
@@ -2034,6 +2059,11 @@ export default function HomeScreen() {
         item={throwAwayModalItem}
         onConfirm={handleThrowAwayConfirm}
         onCancel={() => setThrowAwayModalItem(null)}
+      />
+
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
       />
 
       <Modal

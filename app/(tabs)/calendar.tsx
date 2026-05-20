@@ -1,6 +1,7 @@
 import { ConsumeModal } from "@/components/ConsumeModal";
 import type { ItemCardPendingTone } from "@/components/ItemCardPendingOverlay";
 import { EnhancedCalendarScreen } from "@/components/EnhancedCalendarScreen";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { ThrowAwayModal } from "@/components/ThrowAwayModal";
 import ScreenLayout from "@/components/ScreenLayout";
 import SkeletonBlock from "@/components/SkeletonBlock";
@@ -8,6 +9,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCalendar } from "@/contexts/CalendarContext";
 import { FoodItem } from "@/lib/supabase";
 import { foodItemsService } from "@/services/foodItems";
+import {
+  getErrorMessage,
+  isOfflineLikeError,
+} from "@/utils/networkError";
 import { router, useFocusEffect, useGlobalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
@@ -35,6 +40,7 @@ export default function CalendarScreen() {
   }, [state.loading]);
   const [consumeItem, setConsumeItem] = useState<FoodItem | null>(null);
   const [throwAwayItem, setThrowAwayItem] = useState<FoodItem | null>(null);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   const [itemActionPending, setItemActionPending] = useState<{
     id: string;
     tone: ItemCardPendingTone;
@@ -85,6 +91,15 @@ export default function CalendarScreen() {
 
   const backgroundColor = "#FFFFFF";
 
+  const showActionError = useCallback((error: unknown, fallback: string) => {
+    if (isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+      setOfflineNoticeVisible(true);
+      return;
+    }
+
+    Alert.alert("Error", getErrorMessage(error) || fallback);
+  }, [user?.id]);
+
   useFocusEffect(
     useCallback(() => {
       const now = Date.now();
@@ -99,8 +114,19 @@ export default function CalendarScreen() {
 
   const handleItemPress = useCallback((item: any) => {
     router.push({
-      pathname: "/item-details",
-      params: { itemId: item.id },
+      pathname: "/(tabs)/add",
+      params: {
+        edit: "true",
+        nonce: `${Date.now()}-${Math.random()}`,
+        id: item.id,
+        name: item.name,
+        quantity: String(item.quantity),
+        unit: item.unit || "pcs",
+        location: item.location,
+        category: item.category || "",
+        expiryDate: item.expiry_date || "",
+        notes: item.notes || "",
+      },
     });
   }, []);
 
@@ -130,13 +156,15 @@ export default function CalendarScreen() {
         await foodItemsService.deleteItem(item.id);
         await refresh();
       } catch (error: any) {
-        console.error("Failed to delete item:", error);
-        Alert.alert("Error", error?.message ?? "Failed to delete item. Please try again.");
+        if (!isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+          console.error("Failed to delete item:", error);
+        }
+        showActionError(error, "Failed to delete item. Please try again.");
       } finally {
         setItemActionPending(null);
       }
     },
-    [refresh]
+    [refresh, showActionError, user?.id]
   );
 
   const performConsume = useCallback(
@@ -147,13 +175,15 @@ export default function CalendarScreen() {
         await markItemUsed(id, quantity);
         await refresh();
       } catch (error: any) {
-        console.error("Failed to log consumption:", error);
-        Alert.alert("Error", error?.message ?? "Failed to log consumption. Please try again.");
+        if (!isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+          console.error("Failed to log consumption:", error);
+        }
+        showActionError(error, "Failed to log consumption. Please try again.");
       } finally {
         setItemActionPending(null);
       }
     },
-    [markItemUsed, refresh]
+    [markItemUsed, refresh, showActionError, user?.id]
   );
 
   const handleConsumeClick = useCallback(
@@ -191,13 +221,15 @@ export default function CalendarScreen() {
         await foodItemsService.logUsage(item.id, "wasted", quantity);
         await refresh();
       } catch (error: any) {
-        console.error("Failed to log throw away:", error);
-        Alert.alert("Error", error?.message ?? "Failed to throw away item. Please try again.");
+        if (!isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+          console.error("Failed to log throw away:", error);
+        }
+        showActionError(error, "Failed to throw away item. Please try again.");
       } finally {
         setItemActionPending(null);
       }
     },
-    [refresh]
+    [refresh, showActionError, user?.id]
   );
 
   const handleThrowAwayConfirm = useCallback(
@@ -277,6 +309,10 @@ export default function CalendarScreen() {
         item={throwAwayItem}
         onConfirm={handleThrowAwayConfirm}
         onCancel={() => setThrowAwayItem(null)}
+      />
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
       />
     </ScreenLayout>
   );

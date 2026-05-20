@@ -101,6 +101,8 @@ export default function RootLayout() {
   useEffect(() => {
     LogBox.ignoreLogs([
       "WebCrypto API is not supported. Code challenge method will default to use plain instead of sha256.",
+      "TypeError: Network request failed",
+      "Network request failed",
     ]);
   }, []);
 

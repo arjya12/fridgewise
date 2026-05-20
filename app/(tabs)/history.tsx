@@ -25,9 +25,11 @@ import { modalStackedCancelContainer, modalStackedCancelLabel } from "@/theme/mo
 import { getFoodCategoryIcon } from "@/lib/foodCategories";
 import { useAuth } from "@/contexts/AuthContext";
 import { ItemCardPendingOverlay } from "@/components/ItemCardPendingOverlay";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import SkeletonBlock from "@/components/SkeletonBlock";
 import { supabase, UsageLog } from "@/lib/supabase";
 import { formatQuantityWithUnit } from "@/utils/formatQuantityUnit";
+import { isOfflineLikeError } from "@/utils/networkError";
 
 const fridgeIconAsset = require("@/assets/images/icons/fridge_icon.png");
 const shelfIconAsset = require("@/assets/images/icons/shelf_icon.png");
@@ -135,6 +137,7 @@ export default function HistoryScreen() {
   const rowOffsetWastedRef = useRef<Record<string, number>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const insets = useSafeAreaInsets();
 
@@ -172,10 +175,16 @@ export default function HistoryScreen() {
       if (error) throw error;
       setLogs((data as any) ?? []);
       lastLoadedAtRef.current = Date.now();
+    } catch (error) {
+      if (isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+        setOfflineNoticeVisible(true);
+      } else {
+        Alert.alert("Couldn't load history", "Please try again.");
+      }
     } finally {
       setInitialLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -455,15 +464,23 @@ export default function HistoryScreen() {
     setDeletingId(id);
     setDeleteTarget(null);
     try {
-      const { error } = await supabase.from("usage_logs").delete().eq("id", id);
+      let deleteQuery = supabase.from("usage_logs").delete().eq("id", id);
+      if (user?.id) {
+        deleteQuery = deleteQuery.eq("user_id", user.id);
+      }
+      const { error } = await deleteQuery;
       if (error) throw error;
       setLogs((prev) => prev.filter((l) => l.id !== id));
-    } catch {
-      Alert.alert("Couldn't delete", "Please try again.");
+    } catch (error) {
+      if (isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user?.id) })) {
+        setOfflineNoticeVisible(true);
+      } else {
+        Alert.alert("Couldn't delete", "Please try again.");
+      }
     } finally {
       setDeletingId(null);
     }
-  }, [deleteTarget]);
+  }, [deleteTarget, user?.id]);
 
   return (
     <View style={styles.screenRoot}>
@@ -730,6 +747,10 @@ export default function HistoryScreen() {
           </View>
         </View>
       </Modal>
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
+      />
     </View>
   );
 }

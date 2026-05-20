@@ -5,9 +5,11 @@
  */
 
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { SettingsConfirmModal } from "@/components/SettingsConfirmModal";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
+import { isNetworkRequestFailed } from "@/utils/networkError";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -79,6 +81,7 @@ export default function MoreScreen() {
 
   const [signOutModalVisible, setSignOutModalVisible] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
   const frozenDisplayNameRef = useRef(liveDisplayName);
   const frozenInitialsRef = useRef(liveInitials);
   const frozenStatsRef = useRef({
@@ -159,7 +162,13 @@ export default function MoreScreen() {
       await signOut();
       setSignOutModalVisible(false);
       router.replace("/(auth)/welcome");
-    } catch {
+    } catch (error) {
+      if (isNetworkRequestFailed(error)) {
+        setSignOutModalVisible(false);
+        setOfflineNoticeVisible(true);
+        return;
+      }
+
       if (__DEV__) {
         console.error("Sign out error");
       }
@@ -517,6 +526,10 @@ export default function MoreScreen() {
         onSecondary={() => setSignOutModalVisible(false)}
         busy={signOutBusy}
         onRequestClose={signOutBusy ? () => {} : () => setSignOutModalVisible(false)}
+      />
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
       />
     </SafeAreaWrapper>
   );

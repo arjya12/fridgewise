@@ -2,9 +2,11 @@
  * Consumption Report — all-time insights, green accent on white.
  */
 
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { getReportCategoryIcon } from "@/lib/reportCategoryIcons";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadConsumptionReportAllTime } from "@/services/insightsReportData";
+import { isOfflineLikeError } from "@/utils/networkError";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -48,6 +50,7 @@ export default function ConsumptionReportScreen() {
     ReturnType<typeof loadConsumptionReportAllTime>
   > | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -57,8 +60,13 @@ export default function ConsumptionReportScreen() {
       const d = await loadConsumptionReportAllTime(user.id);
       setData(d);
     } catch (e: unknown) {
-      console.warn("Consumption report load failed", e);
-      setError("Could not load data. Pull to try again.");
+      if (isOfflineLikeError(e, { hasAuthenticatedUser: Boolean(user?.id) })) {
+        setOfflineNoticeVisible(true);
+        setError(null);
+      } else {
+        console.warn("Consumption report load failed", e);
+        setError("Could not load data. Pull to try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -212,6 +220,10 @@ export default function ConsumptionReportScreen() {
           </View>
         </ScrollView>
       )}
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
+      />
     </View>
   );
 }

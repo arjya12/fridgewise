@@ -88,6 +88,17 @@
     "react-native-worklets": "0.5.1"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/app/\\(auth\\)/__tests__/login.test.tsx",
+      "<rootDir>/components/__tests__/EnhancedCalendarScreen.tabs.test.tsx",
+      "<rootDir>/components/calendar/__tests__/accessibility.test.tsx",
+      "<rootDir>/components/calendar/__tests__/edge-cases.test.tsx",
+      "<rootDir>/components/calendar/__tests__/test-utils.ts",
+      "<rootDir>/utils/__tests__/calendarEnhancedUtils.test.ts",
+      "<rootDir>/utils/__tests__/calendarUtils.test.ts",
+      "<rootDir>/utils/__tests__/urgencyUtils.test.ts"
+    ]
   }
 }

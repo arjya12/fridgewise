@@ -144,68 +144,6 @@ export interface GesturePerformanceConfig {
   batchUpdates: boolean;
 }
 
-export function createOptimizedGestureHandler(
-  onGestureUpdate: (value: number) => void,
-  config: Partial<GesturePerformanceConfig> = {}
-) {
-  const finalConfig: GesturePerformanceConfig = {
-    enableNativeDriver: true,
-    throttleMs: 16, // 60fps
-    maxUpdateFrequency: 60,
-    useRAF: true,
-    batchUpdates: true,
-    ...config,
-  };
-
-  let lastUpdateTime = 0;
-  let pendingUpdate: number | null = null;
-  let rafId: number | null = null;
-
-  const throttledUpdate = useCallback(
-    (value: number) => {
-      const now = Date.now();
-      const timeSinceLastUpdate = now - lastUpdateTime;
-
-      if (timeSinceLastUpdate < finalConfig.throttleMs) {
-        // Store pending update
-        pendingUpdate = value;
-
-        if (finalConfig.useRAF && rafId === null) {
-          rafId = requestAnimationFrame(() => {
-            if (pendingUpdate !== null) {
-              onGestureUpdate(pendingUpdate);
-              pendingUpdate = null;
-              lastUpdateTime = Date.now();
-            }
-            rafId = null;
-          });
-        }
-        return;
-      }
-
-      // Execute immediately
-      onGestureUpdate(value);
-      lastUpdateTime = now;
-    },
-    [onGestureUpdate, finalConfig]
-  );
-
-  // Cleanup function
-  const cleanup = useCallback(() => {
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-    pendingUpdate = null;
-  }, []);
-
-  return { throttledUpdate, cleanup };
-}
-
-// =============================================================================
-// RENDERING PERFORMANCE UTILITIES
-// =============================================================================
-
 export function useOptimizedRender<T>(
   data: T,
   compareFn?: (prev: T, next: T) => boolean
@@ -561,7 +499,6 @@ export function useOptimizedGesture<T>(
 export default {
   createOptimizedAnimation,
   runOptimizedAnimation,
-  createOptimizedGestureHandler,
   useOptimizedRender,
   useInteractionComplete,
   useBatchedUpdates,

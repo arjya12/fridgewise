@@ -77,9 +77,32 @@ export async function clearAllAppData(userId: string): Promise<void> {
   await clearFridgewiseAsyncStorage();
 }
 
+/** Removes the Supabase Auth user so the email/password can no longer sign in. */
+async function deleteAuthLogin(): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("delete-account", {
+    method: "POST",
+  });
+
+  if (error) {
+    const hint =
+      " Deploy the delete-account Edge Function in Supabase (see supabase/functions/delete-account).";
+    throw new Error(
+      (error.message || "Could not remove your login.") +
+        (error.message?.includes("Function not found") ? hint : "")
+    );
+  }
+
+  const body = data as { ok?: boolean; error?: string } | null;
+  if (body?.error) {
+    throw new Error(body.error);
+  }
+  if (!body?.ok) {
+    throw new Error("Could not remove your login.");
+  }
+}
+
 /**
- * Full account teardown: remote data, local app storage, profile row, sign out.
- * Auth provider may still hold the email until removed in Supabase Dashboard / Edge Function.
+ * Full account teardown: app data, profile, auth login, local storage, sign out.
  */
 export async function deleteUserAccount(userId: string): Promise<void> {
   await purgeUserRemoteData(userId);
@@ -90,14 +113,19 @@ export async function deleteUserAccount(userId: string): Promise<void> {
   if (profileErr) {
     throw new Error(profileErr.message || "Failed to delete profile");
   }
+
+  await deleteAuthLogin();
+
   const { cancelAllScheduledLocalNotifications } = await import(
     "@/services/notificationService"
   );
   await cancelAllScheduledLocalNotifications();
   await clearFridgewiseAsyncStorage();
-  const { error: signErr } = await supabase.auth.signOut();
-  if (signErr) {
-    throw new Error(signErr.message || "Sign out failed");
+
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // Auth user may already be gone; still clear local session below.
   }
   await clearRememberMePreference();
 }

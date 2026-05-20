@@ -1,8 +1,10 @@
 import SafeAreaWrapper from "@/components/SafeAreaWrapper";
+import { OfflineNoticeModal } from "@/components/OfflineNoticeModal";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useAuth } from "@/contexts/AuthContext";
 import { MAX_FULL_NAME_LENGTH } from "@/utils/authFieldLimits";
+import { getErrorMessage, isOfflineLikeError } from "@/utils/networkError";
 import {
   isValidPersonName,
   sanitizePersonNameInput,
@@ -35,6 +37,7 @@ export default function ProfileScreen() {
   const [fullName, setFullName] = useState(userProfile?.full_name || "");
   const [nameError, setNameError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [offlineNoticeVisible, setOfflineNoticeVisible] = useState(false);
 
   // Fixed light theme colors
   const backgroundColor = "#FFFFFF";
@@ -94,7 +97,11 @@ export default function ProfileScreen() {
       setFullName(cleanedName);
       setIsEditing(false);
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to update profile");
+      if (isOfflineLikeError(error, { hasAuthenticatedUser: Boolean(user) })) {
+        setOfflineNoticeVisible(true);
+      } else {
+        Alert.alert("Error", getErrorMessage(error) || "Failed to update profile");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -261,6 +268,10 @@ export default function ProfileScreen() {
         </View>
         </ScrollView>
       </ThemedView>
+      <OfflineNoticeModal
+        visible={offlineNoticeVisible}
+        onDismiss={() => setOfflineNoticeVisible(false)}
+      />
     </SafeAreaWrapper>
   );
 }

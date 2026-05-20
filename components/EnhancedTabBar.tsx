@@ -72,7 +72,6 @@ const TAB_CONFIG: Record<string, TabConfig> = {
 // Hide these routes from tab bar
 const HIDDEN_ROUTES = [
   "add",
-  "item-details",
   "settings",
   "profile",
   "menu",
