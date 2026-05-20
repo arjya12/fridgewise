@@ -141,6 +141,13 @@ const fridgeIconAsset = require("@/assets/images/icons/fridge_icon.png");
 const shelfIconAsset = require("@/assets/images/icons/shelf_icon.png");
 const PINNED_ACTION_ROW_H = 44;
 const INVENTORY_ACTION_ROW_H = 44;
+const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
+const KEYBOARD_SCROLL_DELAY_MS = Platform.OS === "ios" ? 120 : 90;
+const KEYBOARD_PADDING_ANIM_MS = Platform.OS === "ios" ? 280 : 240;
+/** Floating tab bar + gap above keyboard */
+const TAB_BAR_KEYBOARD_CLEARANCE = 92;
+/** Extra scroll so search card sits a bit higher above the tab bar */
+const INVENTORY_KEYBOARD_EXTRA_LIFT = 52;
 
 const runSmoothLayout = () => {
   LayoutAnimation.configureNext({
@@ -287,8 +294,14 @@ export default function HomeScreen() {
   const [searchText, setSearchText] = useState("");
   const [keyboardInset, setKeyboardInset] = useState(0);
   const homeScrollRef = useRef<ScrollView>(null);
-  const inventorySectionYRef = useRef(0);
+  const scrollOffsetYRef = useRef(0);
+  const inventoryControlsRef = useRef<View>(null);
   const inventoryListYRef = useRef(0);
+  const keyboardScrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const baseScrollPaddingBottom = 28 + insets.bottom + 78;
+  const keyboardPaddingAnim = useRef(
+    new Animated.Value(baseScrollPaddingBottom)
+  ).current;
 
   const [thisWeekTab, setThisWeekTab] = useState<"upcoming" | "recent" | "expired">(
     "upcoming"
@@ -315,37 +328,118 @@ export default function HomeScreen() {
       useNativeDriver: true,
     }).start();
   }, [locationFilter, inventoryToggleAnim]);
-  const scrollInventoryIntoView = useCallback(() => {
-    const hasSearchQuery = searchText.trim().length > 0;
-    const targetY = hasSearchQuery
-      ? inventoryListYRef.current
-      : inventorySectionYRef.current;
-    const extraTopOffset = keyboardInset > 0 ? (hasSearchQuery ? 245 : 170) : 8;
-    requestAnimationFrame(() => {
-      homeScrollRef.current?.scrollTo({
-        y: Math.max(targetY - extraTopOffset, 0),
-        animated: true,
-      });
-    });
-  }, [keyboardInset, searchText]);
   useEffect(() => {
-    const onShow = Keyboard.addListener("keyboardDidShow", (e) => {
-      setKeyboardInset(e.endCoordinates?.height ?? 0);
-      scrollInventoryIntoView();
+    keyboardPaddingAnim.setValue(baseScrollPaddingBottom);
+  }, [baseScrollPaddingBottom, keyboardPaddingAnim]);
+
+  const keyboardOpenPadding = useCallback(
+    (keyboardHeight: number) =>
+      Platform.OS === "android"
+        ? baseScrollPaddingBottom + 20
+        : keyboardHeight + TAB_BAR_KEYBOARD_CLEARANCE + insets.bottom,
+    [baseScrollPaddingBottom, insets.bottom]
+  );
+
+  const animateKeyboardPadding = useCallback(
+    (toValue: number, durationMs: number, easing = Easing.out(Easing.cubic)) => {
+      keyboardPaddingAnim.stopAnimation();
+      Animated.timing(keyboardPaddingAnim, {
+        toValue,
+        duration: durationMs,
+        easing,
+        useNativeDriver: false,
+      }).start();
+    },
+    [keyboardPaddingAnim]
+  );
+
+  const clearKeyboardScrollTimers = useCallback(() => {
+    for (const id of keyboardScrollTimersRef.current) {
+      clearTimeout(id);
+    }
+    keyboardScrollTimersRef.current = [];
+  }, []);
+
+  const scrollSearchFieldIntoView = useCallback((keyboardHeight: number) => {
+    const anchor = inventoryControlsRef.current;
+    if (!anchor || keyboardHeight <= 0) return;
+
+    const run = () => {
+      const windowH = Dimensions.get("window").height;
+      const keyboardTop = windowH - keyboardHeight;
+      anchor.measureInWindow((_x, ay, _w, ah) => {
+        const bottom = ay + ah;
+        const clearance =
+          keyboardTop - TAB_BAR_KEYBOARD_CLEARANCE - INVENTORY_KEYBOARD_EXTRA_LIFT;
+        const need = bottom - clearance;
+        if (need > 4) {
+          homeScrollRef.current?.scrollTo({
+            y: scrollOffsetYRef.current + need,
+            animated: true,
+          });
+        }
+      });
+    };
+
+    requestAnimationFrame(() => {
+      run();
+      keyboardScrollTimersRef.current.push(
+        setTimeout(run, KEYBOARD_SCROLL_DELAY_MS)
+      );
     });
-    const onHide = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardInset(0);
-    });
+  }, []);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const onShow = Keyboard.addListener(
+      showEvent,
+      (e: { endCoordinates?: { height?: number }; duration?: number }) => {
+        const height = e.endCoordinates?.height ?? 0;
+        const durationMs =
+          Platform.OS === "ios"
+            ? e.duration ?? KEYBOARD_PADDING_ANIM_MS
+            : KEYBOARD_PADDING_ANIM_MS;
+        setKeyboardInset(height);
+        animateKeyboardPadding(keyboardOpenPadding(height), durationMs);
+        clearKeyboardScrollTimers();
+        scrollSearchFieldIntoView(height);
+      }
+    );
+
+    const onHide = Keyboard.addListener(
+      hideEvent,
+      (e?: { duration?: number }) => {
+        clearKeyboardScrollTimers();
+        const durationMs =
+          Platform.OS === "ios"
+            ? e?.duration ?? 260
+            : 260;
+        setKeyboardInset(0);
+        runSmoothLayout();
+        animateKeyboardPadding(
+          baseScrollPaddingBottom,
+          durationMs,
+          Easing.inOut(Easing.cubic)
+        );
+      }
+    );
+
     return () => {
       onShow.remove();
       onHide.remove();
+      clearKeyboardScrollTimers();
     };
-  }, [scrollInventoryIntoView]);
-  useEffect(() => {
-    if (keyboardInset <= 0) return;
-    if (!searchText.trim()) return;
-    scrollInventoryIntoView();
-  }, [keyboardInset, searchText, scrollInventoryIntoView]);
+  }, [
+    animateKeyboardPadding,
+    baseScrollPaddingBottom,
+    clearKeyboardScrollTimers,
+    keyboardOpenPadding,
+    scrollSearchFieldIntoView,
+  ]);
   const [thisWeekExpiring, setThisWeekExpiring] = useState<FoodItem[]>([]);
   const [thisWeekExpired, setThisWeekExpired] = useState<FoodItem[]>([]);
   const [thisWeekLogs, setThisWeekLogs] = useState<
@@ -1184,21 +1278,20 @@ export default function HomeScreen() {
       }
       backgroundColor="#FFFFFF"
     >
-      <ScrollView
+      <AnimatedScrollView
         ref={homeScrollRef}
         contentContainerStyle={[
           styles.content,
-          {
-            paddingBottom:
-              keyboardInset > 0
-                ? keyboardInset + 80
-                : 28 + insets.bottom + 78,
-          },
+          { paddingBottom: keyboardPaddingAnim },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         removeClippedSubviews={false}
+        onScroll={(e) => {
+          scrollOffsetYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1703,15 +1796,11 @@ export default function HomeScreen() {
           <View style={styles.sectionGap} />
         )}
 
-        <View
-          onLayout={(e) => {
-            inventorySectionYRef.current = e.nativeEvent.layout.y;
-          }}
-        >
+        <View>
           <Text style={styles.inventorySectionTitle}>Inventory</Text>
         </View>
 
-        <View style={styles.inventoryControlsCard}>
+        <View ref={inventoryControlsRef} style={styles.inventoryControlsCard}>
           <View style={styles.inventoryToggleWrap}>
             <View
               style={styles.inventoryToggleOuter}
@@ -1816,7 +1905,6 @@ export default function HomeScreen() {
               placeholderTextColor="#94A3B8"
               style={styles.searchInput}
               returnKeyType="search"
-              onFocus={scrollInventoryIntoView}
             />
           </View>
         </View>
@@ -2045,7 +2133,7 @@ export default function HomeScreen() {
         <View style={styles.sectionGap} />
 
         <View style={{ height: 0 }} />
-      </ScrollView>
+      </AnimatedScrollView>
 
       <ConsumeModal
         visible={consumeModalItem !== null}

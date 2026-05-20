@@ -25,6 +25,7 @@ import {
 import Svg, { Circle, Path } from "react-native-svg";
 
 const { width, height: screenHeight } = Dimensions.get("window");
+const HEADER_HEIGHT = 320;
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -278,7 +279,7 @@ export default function WelcomeScreen() {
   const { width: screenWidth } = Dimensions.get("window");
   const modalWidth = 300;
   const slideDown: any = {
-    top: screenHeight * 0.5 - 20,
+    top: screenHeight * 0.26 - 12,
     left: screenWidth * 0.5,
     width: modalWidth,
     transform: [
@@ -286,7 +287,7 @@ export default function WelcomeScreen() {
       {
         translateY: slideAnim.interpolate({
           inputRange: [0, 1, 2],
-          outputRange: [350, -165, 350],
+          outputRange: [350, -288, 350],
         }),
       },
     ],
@@ -498,7 +499,6 @@ export default function WelcomeScreen() {
               accessible
               accessibilityLabel="FridgeWise logo"
             />
-            {/* Fills the gap when the wave moves up so green doesn’t show beside the modal */}
             <Animated.View style={[styles.waveGapFill, waveTranslate]} />
             <Animated.View style={[styles.wave, waveTranslate]}>
               <Svg width={width} height={260} viewBox={`0 0 ${width} 260`}>
@@ -512,10 +512,9 @@ export default function WelcomeScreen() {
             </Animated.View>
           </LinearGradient>
         </View>
-        {/* Covers green gradient seam when wave rises — header/wave stay visible above */}
-        {showLogin && (
-          <View style={styles.loginContentScrim} pointerEvents="none" />
-        )}
+        <View
+          style={[styles.mainArea, showLogin && styles.mainAreaLoginOpen]}
+        >
         {/* Content */}
         <Animated.View style={[styles.content, welcomeScale]}>
           {!showLogin && <Text style={styles.heading}>Welcome!</Text>}
@@ -571,7 +570,10 @@ export default function WelcomeScreen() {
         </Animated.View>
         {/* Slide-down Login Modal */}
         {loginSheetVisible && (
-          <Animated.View style={[styles.loginModal, slideDown]}>
+          <Animated.View
+            style={[styles.loginModal, slideDown]}
+            collapsable={false}
+          >
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : "height"}
               style={styles.loginModalInner}
@@ -845,6 +847,7 @@ export default function WelcomeScreen() {
             </KeyboardAvoidingView>
           </Animated.View>
         )}
+        </View>
       </View>
     </ScreenLayout>
     <SimpleInfoModal
@@ -873,14 +876,15 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     width: "100%",
-    height: 320,
+    height: HEADER_HEIGHT,
     position: "relative",
     padding: 0,
     margin: 0,
+    zIndex: 2,
   },
   gradient: {
     width: "100%",
-    height: 320,
+    height: HEADER_HEIGHT,
     alignItems: "center",
     justifyContent: "flex-start",
     overflow: "hidden",
@@ -900,15 +904,12 @@ const styles = StyleSheet.create({
     left: 0,
     zIndex: 1,
   },
-  loginContentScrim: {
-    position: "absolute",
-    top: 320,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  mainArea: {
+    flex: 1,
+    position: "relative",
+  },
+  mainAreaLoginOpen: {
     backgroundColor: "#FFFFFF",
-    zIndex: 15,
-    elevation: 15,
   },
   waveGapFill: {
     position: "absolute",
